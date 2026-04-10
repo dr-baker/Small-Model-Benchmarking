@@ -1,0 +1,24 @@
+{
+  "snapshot_id": "swift-docs-2026-04-10",
+  "snapshot_date": "2026-04-10",
+  "root": "swiftui-macos-corpus/",
+  "file_count": 29127,
+  "markdown_file_count": 5824,
+  "total_bytes": 321173342,
+  "hash_algorithm": "sha256",
+  "per_file_manifest": "manifest.txt",
+  "per_file_manifest_sha256": "d71285e01dbc5bec5758dd318a0061be1ababad1b63a4a7ef3ccd616448a876e",
+  "per_file_manifest_format": "sha256 lines sorted by path, two-space separator, POSIX shasum format",
+  "excluded_patterns": [
+    ".DS_Store"
+  ],
+  "subdirectories": {
+    "pages/": "rendered markdown documentation pages (primary content for read/grep tool sets)",
+    "raw/": "raw HTML the crawler pulled down",
+    "sqlite/": "SQLite/FTS index for deterministic lookup and semantic retrieval",
+    "manifest/": "upstream crawler's own manifest files (assets, pages, chunks)",
+    "logs/": "crawler telemetry logs",
+    "crawl-state.json": "crawler state file at the time of snapshot"
+  },
+  "verify_command": "cd swiftui-macos-corpus && find . -type f -not -name .DS_Store -print0 | xargs -0 shasum -a 256 | sort -k2 | diff - ../manifest.txt"
+}

@@ -1,0 +1,23 @@
+{
+  "snapshot_id": "swift-docs-2026-04-10",
+  "snapshot_date": "2026-04-10",
+  "upstream": {
+    "repo_path": "/Users/daniel/Developer/Swift Docs",
+    "description": "Local SwiftUI/macOS documentation crawler and retrieval layer.",
+    "git_commit": "76240323111f1c66ef96116e0a8d50495eac8d78",
+    "git_commit_date": "2026-03-28T13:12:15-07:00",
+    "git_commit_subject": "updated the plan to match what shipped",
+    "working_tree_untracked_at_copy_time": [
+      "SKILL.md",
+      "corpus_summary.md"
+    ],
+    "working_tree_untracked_note": "Untracked files were outside swiftui-macos-corpus/ and are not part of this snapshot."
+  },
+  "copied_subtree": "swiftui-macos-corpus/",
+  "copied_on": "2026-04-10",
+  "copy_method": "cp -R",
+  "notes": [
+    "Truth for integrity verification lives in manifest.txt (per-file sha256) and manifest.json (summary + aggregate hash).",
+    "The upstream git commit is a pointer for provenance only — re-cloning upstream at that commit does NOT reproduce this snapshot verbatim, because the commit does not track the crawled corpus files. Use manifest.txt to verify a local copy."
+  ]
+}

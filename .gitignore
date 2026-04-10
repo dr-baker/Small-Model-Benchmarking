@@ -1,0 +1,27 @@
+# macOS
+.DS_Store
+
+# Frozen corpus blobs — too large for git.
+# The snapshot's source.json, manifest.json, and manifest.txt are tracked;
+# the raw data itself is not. Anyone cloning the repo can recreate the blob
+# from the upstream commit recorded in source.json and verify integrity
+# against manifest.txt.
+corpus/*/swiftui-macos-corpus/
+
+# Benchmark run outputs are written to immutable per-run directories.
+# Each run directory will decide its own tracking rules via a nested
+# .gitignore when we start producing traces; until then, stay out of git.
+benchmark-results/*/
+
+# Node / TS tooling (for when the harness starts taking shape)
+node_modules/
+dist/
+*.log
+.env
+.env.*
+!.env.example
+
+# Python tooling (if any stage ends up in Python)
+__pycache__/
+*.pyc
+.venv/
