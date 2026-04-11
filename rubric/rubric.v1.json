@@ -1,0 +1,29 @@
+{
+  "version": "rubric.v1",
+  "description": "Initial grading rubric scaffold. Question-specific must-mention and groundedness rules will be curated separately from the dataset.",
+  "failureTaxonomy": [
+    "no_relevant_doc_found",
+    "relevant_doc_found_wrong_synthesis",
+    "correct_without_support",
+    "outdated_doc_preferred",
+    "excessive_search_cost",
+    "schema_parse_failure",
+    "run_error"
+  ],
+  "questions": [
+    {
+      "questionId": "q01-tab-definition",
+      "mustMention": ["Tab(", "systemImage"],
+      "mustNotMention": ["tabItem("]
+    },
+    {
+      "questionId": "q02-programmatic-tab-selection",
+      "mustMention": ["selection:", "enum", "$selectedTab"],
+      "mustNotMention": ["Int", "tag("]
+    }
+  ],
+  "notes": [
+    "This file versions the rubric module independently from the dataset.",
+    "Question-level grading rules are intentionally not embedded in the dataset artifact."
+  ]
+}
