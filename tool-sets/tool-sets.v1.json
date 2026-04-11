@@ -1,0 +1,29 @@
+{
+  "version": "tool-sets.v1",
+  "toolSets": [
+    {
+      "name": "none",
+      "version": "1.0.0",
+      "description": "Closed-book mode. No documentation search tools are available.",
+      "toolNames": []
+    },
+    {
+      "name": "read_only",
+      "version": "1.0.0",
+      "description": "Allows reading known file paths only. No search or directory discovery helpers.",
+      "toolNames": ["read"]
+    },
+    {
+      "name": "read_grep",
+      "version": "1.0.0",
+      "description": "Allows direct file reads and corpus text search with grep.",
+      "toolNames": ["read", "grep"]
+    },
+    {
+      "name": "read_grep_glob",
+      "version": "1.0.0",
+      "description": "Allows file reads, text search, and file discovery across the frozen corpus.",
+      "toolNames": ["read", "grep", "find", "ls"]
+    }
+  ]
+}
