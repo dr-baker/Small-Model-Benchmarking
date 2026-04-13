@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, resolve } from "node:path";
 import {
   JUDGE_VERDICT_SCHEMA_VERSION,
   type BenchmarkAnswerResponse,
@@ -12,7 +11,6 @@ import {
   type JudgeQualitativeScore,
   type JudgeVerdictLabel,
   type ModelRef,
-  type PromptSnapshot,
   type RunManifest,
 } from "../shared/contracts.js";
 import { serializeJson, readJsonFile, writeJsonFile } from "../shared/io.js";
@@ -22,10 +20,7 @@ import { runLlmClient } from "../shared/llm-client.js";
 import { buildJudgeVerdictResponseFormat } from "../shared/response-schemas.js";
 import { resolveModelApiKey } from "../shared/api-key.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const REPO_ROOT = resolve(__dirname, "../..");
-const JUDGE_PROMPT_TEMPLATE_PATHS = { "judge-answer-v1": resolve(REPO_ROOT, "prompts", "judge-answer-v1.md") } as const;
+const REPO_ROOT = resolve(import.meta.dirname ?? ".", "../..");
 
 interface ParsedJudgeResponse {
   recommendsCorrectPattern: boolean;
@@ -41,6 +36,9 @@ export interface JudgeRunOptions {
   datasetPath: string;
   judgeProfilePath: string;
   judgeProfileId: string;
+  promptTemplatePath: string;
+  systemPrompt: string;
+  toolSetCatalogPath: string;
   judgeModelOverride?: ModelRef;
 }
 
@@ -84,8 +82,8 @@ async function loadJudgeProfile(path: string, id: string): Promise<JudgeProfile>
   return profile;
 }
 
-async function renderJudgePrompt(question: DatasetQuestion, answer: BenchmarkAnswerResponse, profile: JudgeProfile): Promise<string> {
-  const template = await readFile(JUDGE_PROMPT_TEMPLATE_PATHS[profile.promptTemplateId], "utf8");
+async function renderJudgePrompt(question: DatasetQuestion, answer: BenchmarkAnswerResponse, profile: JudgeProfile, promptTemplatePath: string): Promise<string> {
+  const template = await readFile(promptTemplatePath, "utf8");
   const evidenceBlock = answer.mode === "open_book"
     ? `\n## Candidate answer evidence metadata\n- answer included ${answer.citations.length} citation(s)\n- answer evidence summary: ${answer.evidenceSummary}\n`
     : "";
@@ -95,7 +93,7 @@ async function renderJudgePrompt(question: DatasetQuestion, answer: BenchmarkAns
 function createSkippedArtifact(params: {
   runId: string; questionId: string; judgedAt: string;
   judgeProfile: JudgeProfile; judgeModel: ModelRef; answerSha256: string;
-  skipReason: string; notes: string[]; elapsedMs: number; toolSet: RunManifest["toolSet"];
+  skipReason: string; notes: string[]; elapsedMs: number; toolSet: RunManifest["toolSet"]; systemPrompt: string;
 }): JudgeArtifact {
   return {
     schemaVersion: JUDGE_VERDICT_SCHEMA_VERSION, runId: params.runId, questionId: params.questionId,
@@ -104,7 +102,7 @@ function createSkippedArtifact(params: {
     judgeModel: params.judgeModel, toolSet: params.toolSet,
     promptTemplateId: params.judgeProfile.promptTemplateId, promptTemplateVersion: params.judgeProfile.promptTemplateVersion,
     answerSha256: params.answerSha256,
-    prompt: { systemPrompt: "You are a benchmark judge.", userPrompt: "", availableTools: [] },
+    prompt: { systemPrompt: params.systemPrompt, userPrompt: "", availableTools: [] },
     toolInvocations: [], skipReason: params.skipReason, elapsedMs: params.elapsedMs, notes: params.notes,
   };
 }
@@ -122,19 +120,19 @@ export async function judgeRun(options: JudgeRunOptions): Promise<JudgeRunOutput
   const question = dataset.questions.find((c) => c.id === questionId);
   const judgeProfile = await loadJudgeProfile(options.judgeProfilePath, options.judgeProfileId);
   const effectiveJudgeModel = options.judgeModelOverride ?? judgeProfile.model;
-  const systemPrompt = "You are a benchmark judge. Follow the response schema exactly.";
+  const systemPrompt = options.systemPrompt;
   const answerSha256 = sha256(serializeJson(normalizedAnswer));
-  const judgeToolSet = await loadToolSetDefinition(judgeProfile.toolSetName);
+  const judgeToolSet = await loadToolSetDefinition(options.toolSetCatalogPath, judgeProfile.toolSetName);
 
   const skip = (reason: string, notes: string[]) => createSkippedArtifact({
     runId, questionId, judgedAt, judgeProfile, judgeModel: effectiveJudgeModel,
-    answerSha256, skipReason: reason, notes, elapsedMs: Date.now() - startedAt, toolSet: judgeToolSet,
+    answerSha256, skipReason: reason, notes, elapsedMs: Date.now() - startedAt, toolSet: judgeToolSet, systemPrompt,
   });
 
   if (!question) { const a = skip("question_not_found_in_dataset", ["Judge skipped: question missing from dataset."]); await writeJsonFile(judgePath, a); return { judgePath, artifact: a }; }
   if ("parseError" in normalizedAnswer) { const a = skip("answer_parse_error", ["Judge skipped: answer has parse error."]); await writeJsonFile(judgePath, a); return { judgePath, artifact: a }; }
 
-  const userPrompt = await renderJudgePrompt(question, normalizedAnswer, judgeProfile);
+  const userPrompt = await renderJudgePrompt(question, normalizedAnswer, judgeProfile, options.promptTemplatePath);
   const corpusRoot = resolve(REPO_ROOT, manifest.corpus.rootDir);
   const tools = createToolsForToolSet(judgeToolSet, corpusRoot);
   const apiKey = await resolveModelApiKey(effectiveJudgeModel);

@@ -75,8 +75,8 @@ export async function runCollect(input: CollectRunInput): Promise<CollectRunOutp
   const manifestPath = join(runDirectory, "manifest.json");
 
   const corpusRoot = resolve(REPO_ROOT, input.corpus.rootDir);
-  const userPrompt = await renderPrompt(input.promptTemplateId, input.mode, input.question);
-  const systemPrompt = "You are a benchmark runner. Follow the response schema exactly.";
+  const userPrompt = await renderPrompt(input.promptTemplatePath, input.mode, input.question);
+  const systemPrompt = input.systemPrompt;
   const tools = createToolsForToolSet(input.toolSet, corpusRoot);
   const apiKey = await resolveModelApiKey(input.model);
 

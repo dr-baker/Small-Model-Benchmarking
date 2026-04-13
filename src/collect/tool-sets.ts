@@ -1,5 +1,4 @@
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { createFindTool, createGrepTool, createLsTool, createReadTool } from "@mariozechner/pi-coding-agent";
 import type { ToolSetDefinition, ToolSetName } from "../shared/contracts.js";
 
@@ -8,15 +7,15 @@ interface ToolSetCatalogFile {
   toolSets: ToolSetDefinition[];
 }
 
-const TOOL_SET_CATALOG_PATH = resolve("tool-sets/tool-sets.v1.json");
 
-export async function loadToolSetCatalog(): Promise<Map<ToolSetName, ToolSetDefinition>> {
-  const parsed = JSON.parse(await readFile(TOOL_SET_CATALOG_PATH, "utf8")) as ToolSetCatalogFile;
+
+export async function loadToolSetCatalog(catalogPath: string): Promise<Map<ToolSetName, ToolSetDefinition>> {
+  const parsed = JSON.parse(await readFile(catalogPath, "utf8")) as ToolSetCatalogFile;
   return new Map(parsed.toolSets.map((toolSet) => [toolSet.name, toolSet]));
 }
 
-export async function loadToolSetDefinition(name: ToolSetName): Promise<ToolSetDefinition> {
-  const catalog = await loadToolSetCatalog();
+export async function loadToolSetDefinition(catalogPath: string, name: ToolSetName): Promise<ToolSetDefinition> {
+  const catalog = await loadToolSetCatalog(catalogPath);
   const toolSet = catalog.get(name);
   if (!toolSet) {
     throw new Error(`Unknown tool set: ${name}`);
