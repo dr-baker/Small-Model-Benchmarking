@@ -266,6 +266,18 @@ export interface GradeArtifact {
   failures: FailureTaxonomyId[];
 }
 
+export interface AggregateJudgeMetrics {
+  judgeRuns: number;
+  judgeCorrectCount: number;
+  judgePartiallyCorrectCount: number;
+  judgeIncorrectCount: number;
+  meanCompleteness: number;
+  meanCodeExample: number;
+  meanExplanation: number;
+  recommendsCorrectPatternRate: number;
+  recommendsDeprecatedPatternRate: number;
+}
+
 export interface AggregateModelSummary {
   model: ModelRef;
   mode: BenchmarkMode;
@@ -274,6 +286,7 @@ export interface AggregateModelSummary {
   meanAnswerScore: number;
   groundedRate?: number;
   meanRetrievalMrr?: number;
+  judge?: AggregateJudgeMetrics;
 }
 
 export interface AggregateArtifact {

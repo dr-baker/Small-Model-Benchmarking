@@ -1,5 +1,7 @@
+import { constants as fsConstants } from "node:fs";
+import { access } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { AggregateArtifact, AggregateModelSummary, BenchmarkMode, GradeArtifact, RunManifest, ToolSetDefinition } from "../shared/contracts.js";
+import type { AggregateArtifact, AggregateJudgeMetrics, AggregateModelSummary, BenchmarkMode, GradeArtifact, JudgeArtifact, RunManifest, ToolSetDefinition } from "../shared/contracts.js";
 import { readJsonFile, writeJsonFile } from "../shared/io.js";
 
 export interface AggregateRunOptions {
@@ -18,6 +20,15 @@ interface SummaryAccumulator {
   groundedTrue: number;
   retrievalCount: number;
   retrievalMrrTotal: number;
+  judgeRuns: number;
+  judgeCorrectCount: number;
+  judgePartiallyCorrectCount: number;
+  judgeIncorrectCount: number;
+  judgeCompletenessTotal: number;
+  judgeCodeExampleTotal: number;
+  judgeExplanationTotal: number;
+  judgeRecommendsCorrectCount: number;
+  judgeRecommendsDeprecatedCount: number;
 }
 
 function summaryKey(manifest: RunManifest): string {
@@ -32,12 +43,22 @@ function getSharedBenchmarkDirectory(runDirectories: string[]): string {
   return parents[0];
 }
 
+async function readOptionalJsonFile<T>(path: string): Promise<T | undefined> {
+  try {
+    await access(path, fsConstants.F_OK);
+  } catch {
+    return undefined;
+  }
+  return readJsonFile<T>(path);
+}
+
 export async function aggregateRuns(options: AggregateRunOptions): Promise<AggregateArtifact> {
   const accumulators = new Map<string, SummaryAccumulator>();
 
   for (const runDirectory of options.runDirectories) {
     const manifest = await readJsonFile<RunManifest>(join(runDirectory, "manifest.json"));
     const grade = await readJsonFile<GradeArtifact>(join(runDirectory, "grade.json"));
+    const judge = await readOptionalJsonFile<JudgeArtifact>(join(runDirectory, "judge.json"));
     const key = summaryKey(manifest);
     const existing = accumulators.get(key) ?? {
       model: manifest.model,
@@ -49,6 +70,15 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
       groundedTrue: 0,
       retrievalCount: 0,
       retrievalMrrTotal: 0,
+      judgeRuns: 0,
+      judgeCorrectCount: 0,
+      judgePartiallyCorrectCount: 0,
+      judgeIncorrectCount: 0,
+      judgeCompletenessTotal: 0,
+      judgeCodeExampleTotal: 0,
+      judgeExplanationTotal: 0,
+      judgeRecommendsCorrectCount: 0,
+      judgeRecommendsDeprecatedCount: 0,
     };
 
     existing.runs += 1;
@@ -66,22 +96,53 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
       existing.retrievalMrrTotal += grade.retrieval.mrr;
     }
 
+    if (judge?.status === "scored") {
+      existing.judgeRuns += 1;
+      if (judge.verdict === "correct") existing.judgeCorrectCount += 1;
+      else if (judge.verdict === "partially_correct") existing.judgePartiallyCorrectCount += 1;
+      else if (judge.verdict === "incorrect") existing.judgeIncorrectCount += 1;
+      if (judge.completeness !== undefined) existing.judgeCompletenessTotal += judge.completeness;
+      if (judge.codeExample !== undefined) existing.judgeCodeExampleTotal += judge.codeExample;
+      if (judge.explanation !== undefined) existing.judgeExplanationTotal += judge.explanation;
+      if (judge.recommendsCorrectPattern) existing.judgeRecommendsCorrectCount += 1;
+      if (judge.recommendsDeprecatedPattern) existing.judgeRecommendsDeprecatedCount += 1;
+    }
+
     accumulators.set(key, existing);
   }
 
-  const summaries: AggregateModelSummary[] = [...accumulators.values()].map((accumulator) => ({
-    model: accumulator.model,
-    mode: accumulator.mode,
-    toolSet: accumulator.toolSet,
-    runs: accumulator.runs,
-    meanAnswerScore: accumulator.runs === 0 ? 0 : accumulator.answerScoreTotal / accumulator.runs,
-    ...(accumulator.groundedRuns === 0
-      ? {}
-      : { groundedRate: accumulator.groundedTrue / accumulator.groundedRuns }),
-    ...(accumulator.retrievalCount === 0
-      ? {}
-      : { meanRetrievalMrr: accumulator.retrievalMrrTotal / accumulator.retrievalCount }),
-  }));
+  const summaries: AggregateModelSummary[] = [...accumulators.values()].map((accumulator) => {
+    const base: AggregateModelSummary = {
+      model: accumulator.model,
+      mode: accumulator.mode,
+      toolSet: accumulator.toolSet,
+      runs: accumulator.runs,
+      meanAnswerScore: accumulator.runs === 0 ? 0 : accumulator.answerScoreTotal / accumulator.runs,
+      ...(accumulator.groundedRuns === 0
+        ? {}
+        : { groundedRate: accumulator.groundedTrue / accumulator.groundedRuns }),
+      ...(accumulator.retrievalCount === 0
+        ? {}
+        : { meanRetrievalMrr: accumulator.retrievalMrrTotal / accumulator.retrievalCount }),
+    };
+
+    if (accumulator.judgeRuns > 0) {
+      const judgeMetrics: AggregateJudgeMetrics = {
+        judgeRuns: accumulator.judgeRuns,
+        judgeCorrectCount: accumulator.judgeCorrectCount,
+        judgePartiallyCorrectCount: accumulator.judgePartiallyCorrectCount,
+        judgeIncorrectCount: accumulator.judgeIncorrectCount,
+        meanCompleteness: accumulator.judgeCompletenessTotal / accumulator.judgeRuns,
+        meanCodeExample: accumulator.judgeCodeExampleTotal / accumulator.judgeRuns,
+        meanExplanation: accumulator.judgeExplanationTotal / accumulator.judgeRuns,
+        recommendsCorrectPatternRate: accumulator.judgeRecommendsCorrectCount / accumulator.judgeRuns,
+        recommendsDeprecatedPatternRate: accumulator.judgeRecommendsDeprecatedCount / accumulator.judgeRuns,
+      };
+      base.judge = judgeMetrics;
+    }
+
+    return base;
+  });
 
   const artifact: AggregateArtifact = {
     benchmarkName: options.benchmarkName,

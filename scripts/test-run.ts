@@ -99,7 +99,17 @@ async function main() {
 
   console.log("\n==> RESULTS COMPARISON:");
   for (const summary of aggregateOutput.summaries) {
-    console.log(`- Mode: ${summary.mode} | Score: ${summary.meanAnswerScore.toFixed(2)} ${summary.meanRetrievalMrr ? `| MRR: ${summary.meanRetrievalMrr.toFixed(2)}` : ""}`);
+    const gradeLine = `Grade: ${summary.meanAnswerScore.toFixed(2)}`;
+    const groundedLine = summary.groundedRate !== undefined ? ` | Grounded: ${(summary.groundedRate * 100).toFixed(0)}%` : "";
+    const mrrLine = summary.meanRetrievalMrr !== undefined ? ` | MRR: ${summary.meanRetrievalMrr.toFixed(2)}` : "";
+    const judgeLine = summary.judge
+      ? ` | Judge: ${summary.judge.judgeCorrectCount}/${summary.judge.judgeRuns} correct, ${summary.judge.judgePartiallyCorrectCount} partial, ${summary.judge.judgeIncorrectCount} incorrect` +
+        ` | Completeness: ${summary.judge.meanCompleteness.toFixed(1)}` +
+        ` | Code: ${summary.judge.meanCodeExample.toFixed(1)}` +
+        ` | Explanation: ${summary.judge.meanExplanation.toFixed(1)}` +
+        ` | DeprecatedRate: ${(summary.judge.recommendsDeprecatedPatternRate * 100).toFixed(0)}%`
+      : " | Judge: (no scored runs)";
+    console.log(`- ${summary.mode} | ${gradeLine}${groundedLine}${mrrLine}${judgeLine}`);
   }
 }
 
