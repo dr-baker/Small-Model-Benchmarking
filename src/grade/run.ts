@@ -1,5 +1,13 @@
 import { join } from "node:path";
-import type { BenchmarkAnswerResponse, CollectTrace, FailureTaxonomyId, GradeArtifact, RetrievalMetrics, RubricDefinition, DatasetQuestion } from "../shared/contracts.js";
+import type {
+  BenchmarkAnswerResponse,
+  CollectTrace,
+  DatasetQuestion,
+  FailureTaxonomyId,
+  GradeArtifact,
+  RetrievalMetrics,
+  RubricDefinition,
+} from "../shared/contracts.js";
 import { readJsonFile, writeJsonFile } from "../shared/io.js";
 
 interface GradeRunOptions {
@@ -36,7 +44,7 @@ function calculateRetrievalMetrics(trace: CollectTrace, question: DatasetQuestio
 
   for (const tool of trace.toolInvocations) {
     if (tool.toolName === "read") {
-      readCount++;
+      readCount += 1;
       const args = tool.args as { path?: string };
       const content = JSON.stringify(tool.result ?? "");
       bytesRead += content.length;
@@ -48,10 +56,8 @@ function calculateRetrievalMetrics(trace: CollectTrace, question: DatasetQuestio
         if (timeToFirstRelevantDocMs === undefined && tool.finishedAt && trace.events[0]?.observedAt) {
           timeToFirstRelevantDocMs = new Date(tool.finishedAt).getTime() - new Date(trace.events[0].observedAt).getTime();
         }
-      } else {
-        if (!hitAtK) {
-          filesReadBeforeFirstRelevantDoc++;
-        }
+      } else if (!hitAtK) {
+        filesReadBeforeFirstRelevantDoc += 1;
       }
     } else if (tool.toolName === "grep") {
       const resultStr = typeof tool.result === "string" ? tool.result : JSON.stringify(tool.result ?? "");
@@ -76,23 +82,22 @@ export async function gradeRun(options: GradeRunOptions): Promise<GradeArtifact>
 
   const rubric = await readJsonFile<RubricDefinition>(options.rubricPath);
   const dataset = await readJsonFile<{ questions: DatasetQuestion[] }>(options.datasetPath);
-  
+
   const questionId = manifest.questionId ?? "unknown";
   const question = dataset.questions.find((q) => q.id === questionId);
   const questionRubric = rubric.questions.find((q) => q.questionId === questionId);
-
   const failures = deriveFailures(answer, trace);
-  
+
   const mustMentionPassed: string[] = [];
   const mustMentionFailed: string[] = [];
   const mustNotMentionViolated: string[] = [];
   let correct = false;
   let score = 0;
-  let grounded: boolean | undefined = undefined;
+  let grounded: boolean | undefined;
 
   if (!("parseError" in answer) && questionRubric) {
     const finalAnswer = answer.finalAnswer.toLowerCase();
-    
+
     for (const phrase of questionRubric.mustMention) {
       if (finalAnswer.includes(phrase.toLowerCase())) {
         mustMentionPassed.push(phrase);
@@ -100,7 +105,7 @@ export async function gradeRun(options: GradeRunOptions): Promise<GradeArtifact>
         mustMentionFailed.push(phrase);
       }
     }
-    
+
     for (const phrase of questionRubric.mustNotMention) {
       if (finalAnswer.includes(phrase.toLowerCase())) {
         mustNotMentionViolated.push(phrase);
@@ -113,12 +118,12 @@ export async function gradeRun(options: GradeRunOptions): Promise<GradeArtifact>
     if (answer.mode === "open_book") {
       const readPaths = new Set(
         trace.toolInvocations
-          .filter(t => t.toolName === "read")
-          .map(t => (t.args as { path?: string }).path)
-          .filter(Boolean)
+          .filter((tool) => tool.toolName === "read")
+          .map((tool) => (tool.args as { path?: string }).path)
+          .filter((path): path is string => typeof path === "string" && path.length > 0),
       );
-      
-      const citationsValid = answer.citations.length > 0 && answer.citations.every(c => readPaths.has(c.filePath));
+
+      const citationsValid = answer.citations.length > 0 && answer.citations.every((citation) => readPaths.has(citation.filePath));
       grounded = citationsValid;
       if (!grounded) {
         failures.push("correct_without_support");
@@ -136,15 +141,17 @@ export async function gradeRun(options: GradeRunOptions): Promise<GradeArtifact>
       score,
       correct,
       ...(grounded !== undefined ? { grounded } : {}),
+      gradingMethod: "deterministic",
       mustMentionPassed,
       mustMentionFailed,
       mustNotMentionViolated,
       notes: [
-        "Answer graded via automated text matching over final text.",
+        "Answer graded via deterministic text matching over final text.",
+        "This artifact intentionally does not consume judge.json; LLM judging is a separate stage for later comparison.",
       ],
     },
     ...(retrieval ? { retrieval } : {}),
-    failures,
+    failures: [...new Set(failures)],
   };
 
   await writeJsonFile(join(options.runDirectory, "grade.json"), artifact);
