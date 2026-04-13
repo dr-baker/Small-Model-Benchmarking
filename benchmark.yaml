@@ -1,0 +1,48 @@
+# Benchmark configuration — single source of truth
+# All paths relative to repo root
+
+benchmarkName: swiftui-docs-chatbot-benchmark
+runId: auto                      # "auto" = timestamp-based, or explicit string
+
+# Models (CLI --model / --judge-model override these)
+defaultModel: openrouter/openai/gpt-oss-120b:nitro
+judgeModel: null                 # null = use judge profile's model
+
+# Paths
+paths:
+  dataset: dataset/swiftui-docs-chatbot-benchmark.v1.json
+  toolSets: tool-sets/tool-sets.v1.json
+  judgeProfiles: judges/judge-profiles.v1.json
+  rubric: rubric/rubric.v1.json
+  promptTemplates:
+    benchmark-answer-v1: prompts/benchmark-answer-v1.md
+    judge-answer-v1: prompts/judge-answer-v1.md
+
+# Corpus
+corpus:
+  snapshotId: swift-docs-2026-04-10
+  rootDir: corpus/swift-docs-2026-04-10/swiftui-macos-corpus
+  manifestPath: corpus/swift-docs-2026-04-10/manifest.json
+  manifestSha256: d71285e0
+
+# Judge
+judgeProfileId: semantic-judge-v1
+
+# Pi session behavior
+session:
+  compaction: false
+  retry: false
+  maxRetries: 0
+
+# System prompts
+systemPrompts:
+  collect: "You are a benchmark runner. Follow the response schema exactly."
+  judge: "You are a benchmark judge. Follow the response schema exactly."
+
+# Run matrix: which modes to run + default toolSet per mode
+modes:
+  open_book: read_grep
+  closed_book: none
+
+# Question selection: "all" or list of question IDs
+questions: all

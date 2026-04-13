@@ -69,12 +69,14 @@ export interface CollectRunInput {
   mode: BenchmarkMode;
   toolSet: ToolSetDefinition;
   promptTemplateId: PromptTemplateId;
+  promptTemplatePath: string;
   promptTemplateVersion: string;
   responseSchemaVersion: typeof ANSWER_RESPONSE_SCHEMA_VERSION;
   rubricVersion: string;
   corpus: CorpusSnapshotRef;
   question: DatasetQuestion;
   sampling: SamplingConfig;
+  systemPrompt: string;
 }
 
 export interface PromptSnapshot {
