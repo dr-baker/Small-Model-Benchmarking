@@ -2,10 +2,16 @@ import type { JsonValue } from "./json.js";
 
 export const PIPELINE_CONTRACT_VERSION = "benchmark-contract.v1" as const;
 export const ANSWER_RESPONSE_SCHEMA_VERSION = "answer-response.v1" as const;
+export const JUDGE_VERDICT_SCHEMA_VERSION = "judge-verdict.v1" as const;
 
 export type BenchmarkMode = "closed_book" | "open_book";
 export type ToolSetName = "none" | "read_only" | "read_grep" | "read_grep_glob";
 export type PromptTemplateId = "benchmark-answer-v1";
+export type JudgePromptTemplateId = "judge-answer-v1";
+export type JudgeVerdictLabel = "correct" | "partially_correct" | "incorrect";
+export type JudgeQualitativeScore = 0 | 1 | 2;
+export type GradingMethod = "deterministic";
+export type JudgeArtifactStatus = "scored" | "skipped" | "error";
 
 export interface ModelRef {
   provider: string;
@@ -106,6 +112,22 @@ export interface OpenBookAnswerResponse {
 
 export type BenchmarkAnswerResponse = ClosedBookAnswerResponse | OpenBookAnswerResponse;
 
+export interface JudgeProfile {
+  id: string;
+  version: string;
+  description: string;
+  model: ModelRef;
+  toolSetName: ToolSetName;
+  promptTemplateId: JudgePromptTemplateId;
+  promptTemplateVersion: string;
+  responseSchemaVersion: typeof JUDGE_VERDICT_SCHEMA_VERSION;
+}
+
+export interface JudgeProfileCatalog {
+  version: string;
+  profiles: JudgeProfile[];
+}
+
 export interface TraceEventRecord {
   observedAt: string;
   eventType: string;
@@ -155,6 +177,7 @@ export interface RunManifest {
   artifactPaths: {
     trace: string;
     normalizedAnswer: string;
+    judge?: string;
     grade?: string;
     aggregate?: string;
   };
@@ -192,10 +215,42 @@ export interface RetrievalMetrics {
   bytesRead?: number;
 }
 
+export interface JudgeArtifact {
+  schemaVersion: typeof JUDGE_VERDICT_SCHEMA_VERSION;
+  runId: string;
+  questionId: string;
+  recommendsCorrectPattern?: boolean;
+  recommendsDeprecatedPattern?: boolean;
+  completeness?: JudgeQualitativeScore;
+  codeExample?: JudgeQualitativeScore;
+  explanation?: JudgeQualitativeScore;
+  verdict?: JudgeVerdictLabel;
+  reasoning?: string;
+  status: JudgeArtifactStatus;
+  judgedAt: string;
+  judgeProfileId: string;
+  judgeProfileVersion: string;
+  judgeModel: ModelRef;
+  toolSet: ToolSetDefinition;
+  promptTemplateId: JudgePromptTemplateId;
+  promptTemplateVersion: string;
+  answerSha256: string;
+  prompt: PromptSnapshot;
+  toolInvocations: ToolInvocationTrace[];
+  skipReason?: string;
+  rawResponseText?: string;
+  usage?: JsonValue;
+  costUsd?: number;
+  error?: JsonValue;
+  elapsedMs: number;
+  notes: string[];
+}
+
 export interface AnswerGrade {
   score: number;
   correct: boolean;
   grounded?: boolean;
+  gradingMethod: GradingMethod;
   mustMentionPassed: string[];
   mustMentionFailed: string[];
   mustNotMentionViolated: string[];

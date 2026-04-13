@@ -1,0 +1,18 @@
+{
+  "version": "judge-profiles.v1",
+  "profiles": [
+    {
+      "id": "semantic-judge-v1",
+      "version": "1.0.0",
+      "description": "Corpus-assisted semantic answer judge that evaluates the candidate answer against the benchmark question.",
+      "model": {
+        "provider": "openrouter",
+        "modelId": "openai/gpt-oss-120b:nitro"
+      },
+      "toolSetName": "read_grep_glob",
+      "promptTemplateId": "judge-answer-v1",
+      "promptTemplateVersion": "v1",
+      "responseSchemaVersion": "judge-verdict.v1"
+    }
+  ]
+}
