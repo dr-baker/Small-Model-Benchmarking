@@ -144,6 +144,9 @@ export async function runCollect(input: CollectRunInput): Promise<CollectRunOutp
   const runDirectory = join(benchmarkExecutionDirectory, input.runId);
   const tracePath = join(runDirectory, "trace.json");
   const normalizedAnswerPath = join(runDirectory, "normalized-answer.json");
+  const judgePath = join(runDirectory, "judge.json");
+  const gradePath = join(runDirectory, "grade.json");
+  const aggregatePath = join(benchmarkExecutionDirectory, "aggregate.json");
   const manifestPath = join(runDirectory, "manifest.json");
 
   const corpusRoot = resolve(REPO_ROOT, input.corpus.rootDir);
@@ -273,6 +276,9 @@ export async function runCollect(input: CollectRunInput): Promise<CollectRunOutp
       artifactPaths: {
         trace: tracePath,
         normalizedAnswer: normalizedAnswerPath,
+        judge: judgePath,
+        grade: gradePath,
+        aggregate: aggregatePath,
       },
     };
 
