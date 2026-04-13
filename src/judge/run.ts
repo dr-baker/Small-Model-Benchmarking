@@ -27,6 +27,7 @@ import { serializeJson, readJsonFile, writeJsonFile } from "../shared/io.js";
 import { toJsonValue } from "../shared/json.js";
 import { createMinimalResourceLoader } from "../collect/minimal-resource-loader.js";
 import { createToolsForToolSet, loadToolSetDefinition } from "../collect/tool-sets.js";
+import { applyEnvApiKeyOverrides } from "../shared/env-api-keys.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -250,6 +251,7 @@ export async function judgeRun(options: JudgeRunOptions): Promise<JudgeRunOutput
   );
   const resourceLoader = createMinimalResourceLoader(responseSystemPrompt);
   const authStorage = AuthStorage.create();
+  applyEnvApiKeyOverrides(authStorage);
   const modelRegistry = ModelRegistry.create(authStorage);
   const model = modelRegistry.find(effectiveJudgeModel.provider, effectiveJudgeModel.modelId);
 

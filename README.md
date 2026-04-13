@@ -1,5 +1,27 @@
 # SwiftUI Docs Chatbot Benchmark: Model Analysis
 
+## Setup
+
+Copy `.env.example` to `.env` and fill in API keys for the providers you want to use:
+
+```bash
+cp .env.example .env
+```
+
+Keys set in `.env` take priority over `~/.config/pi/auth.json`, so you can use a separate key for benchmark cost tracking. Supported variables:
+
+| Variable | Provider |
+|---|---|
+| `OPENROUTER_API_KEY` | OpenRouter |
+| `ANTHROPIC_API_KEY` | Anthropic |
+| `OPENAI_API_KEY` | OpenAI |
+| `GOOGLE_API_KEY` | Google |
+| `MISTRAL_API_KEY` | Mistral |
+| `DEEPSEEK_API_KEY` | DeepSeek |
+| `XAI_API_KEY` | xAI |
+
+Keys can also be set as regular environment variables (`.env` values win if both exist).
+
 ## Overview
 
 Four models were given the same prompt: generate QA pairs for a SwiftUI documentation chatbot benchmark. The benchmark (`swiftui-benchmark-scenarios.md`) defines 70 questions across 42 scenarios, each targeting a specific outdated or incorrect SwiftUI pattern. A good QA response should steer developers toward modern, correct alternatives.

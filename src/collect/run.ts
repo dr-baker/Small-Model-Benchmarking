@@ -15,6 +15,7 @@ import { toJsonValue } from "../shared/json.js";
 import { createMinimalResourceLoader } from "./minimal-resource-loader.js";
 import { renderPrompt } from "./prompt-template.js";
 import { createToolsForToolSet } from "./tool-sets.js";
+import { applyEnvApiKeyOverrides } from "../shared/env-api-keys.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -155,6 +156,7 @@ export async function runCollect(input: CollectRunInput): Promise<CollectRunOutp
   const resourceLoader = createMinimalResourceLoader(responseSystemPrompt);
   const tools = createToolsForToolSet(input.toolSet, corpusRoot);
   const authStorage = AuthStorage.create();
+  applyEnvApiKeyOverrides(authStorage);
   const modelRegistry = ModelRegistry.create(authStorage);
   const model = modelRegistry.find(input.model.provider, input.model.modelId);
 
