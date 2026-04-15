@@ -4,22 +4,30 @@
 benchmarkName: swiftui-docs-chatbot-benchmark
 runId: auto                      # Supported execution id location. Set an explicit value for resumable / idempotent runs.
 
-# Model execution path: direct OpenRouter HTTP or pi SDK sessions
+# Candidate model execution path: direct OpenRouter HTTP or pi SDK sessions
 transport:
   kind: openrouter               # openrouter | pi
   session:
     compaction: false
     retry: false
     maxRetries: 0
+    thinkingLevel: off
 
 # Candidate benchmark models
 models:
   candidates:
-    - openrouter/openai/gpt-oss-120b:nitro
+    - openrouter/inception/mercury-2
 
 # Judge configuration
 judge:
-  model: openrouter/openai/gpt-oss-120b:nitro
+  model: openai-codex/gpt-5.4
+  transport:
+    kind: pi
+    session:
+      compaction: false
+      retry: false
+      maxRetries: 0
+      thinkingLevel: medium
   profile:
     id: semantic-judge-v1
     version: 1.0.0
@@ -47,12 +55,12 @@ corpus:
 
 # Execution controls
 execution:
-  resume: false                  # true = skip completed runs and continue partial executions when runId is explicit
+  resume: true                   # true = skip completed runs and continue partial executions when runId is explicit
   stopOnError: false             # false = keep going and record failures instead of aborting the whole matrix
 
 # Batch controls
 batch:
-  size: null                     # null = all selected questions, or a positive integer batch size
+  size: 10                       # null = all selected questions, or a positive integer batch size
   number: auto                   # 1-based batch number, or auto to pick the next incomplete batch from artifacts
 
 # System prompts
