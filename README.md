@@ -28,9 +28,11 @@ Use `benchmark.yaml` as the supported place to configure models and execution be
 
 ### Main config knobs
 
-- `transport.kind` — execution path: `openrouter` for direct OpenRouter HTTP, or `pi` for pi SDK sessions
+- `transport.kind` — candidate execution path: `openrouter` for direct OpenRouter HTTP, or `pi` for pi SDK sessions
+- `transport.session.thinkingLevel` — optional pi SDK thinking level (`off`, `minimal`, `low`, `medium`, `high`, `xhigh`)
 - `models.candidates` — benchmark model(s) to run
 - `judge.model` — judge model
+- `judge.transport` — optional judge-specific transport override when you want collect and judge to use different execution paths
 - `judge.profile` — inline judge behavior config
 - `runId` — set an explicit value for resumable / idempotent executions
 - `execution.resume` — skip completed runs and continue incomplete executions
@@ -57,6 +59,13 @@ models:
 
 judge:
   model: openrouter/openai/gpt-4.1-mini
+  transport:
+    kind: pi
+    session:
+      compaction: false
+      retry: false
+      maxRetries: 0
+      thinkingLevel: medium
   profile:
     id: semantic-judge-v1
     version: 1.0.0

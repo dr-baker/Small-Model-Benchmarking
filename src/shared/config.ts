@@ -12,6 +12,7 @@ import type {
   JudgeProfile,
   ModelTransportConfig,
   SessionConfig,
+  ThinkingLevel,
 } from "./contracts.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -43,6 +44,7 @@ export interface BenchmarkConfig {
   models: BenchmarkModelConfig;
   judge: {
     model: string;
+    transport?: ModelTransportConfig;
     profile: JudgeProfile;
   };
   paths: {
@@ -79,6 +81,32 @@ function isPositiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
 }
 
+const VALID_THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
+
+function validateTransportConfig(raw: unknown, label: string): asserts raw is ModelTransportConfig {
+  if (!raw || typeof raw !== "object") throw new Error(`Missing ${label}`);
+  const transport = raw as Record<string, unknown>;
+
+  if (transport.kind !== "openrouter" && transport.kind !== "pi") {
+    throw new Error(`${label}.kind must be 'openrouter' or 'pi'`);
+  }
+
+  if (transport.kind === "pi") {
+    if (!transport.session || typeof transport.session !== "object") {
+      throw new Error(`${label}.session must be provided for ${label}.kind='pi'`);
+    }
+    const session = transport.session as Record<string, unknown>;
+    if (typeof session.compaction !== "boolean") throw new Error(`${label}.session.compaction must be boolean`);
+    if (typeof session.retry !== "boolean") throw new Error(`${label}.session.retry must be boolean`);
+    if (!isPositiveInteger(session.maxRetries) && session.maxRetries !== 0) {
+      throw new Error(`${label}.session.maxRetries must be a non-negative integer`);
+    }
+    if (session.thinkingLevel !== undefined && !VALID_THINKING_LEVELS.includes(session.thinkingLevel as ThinkingLevel)) {
+      throw new Error(`${label}.session.thinkingLevel must be one of ${VALID_THINKING_LEVELS.join(", ")}`);
+    }
+  }
+}
+
 function validateConfig(raw: unknown): asserts raw is BenchmarkConfig {
   if (!raw || typeof raw !== "object") throw new Error("Config is not an object");
   const c = raw as Record<string, unknown>;
@@ -88,22 +116,7 @@ function validateConfig(raw: unknown): asserts raw is BenchmarkConfig {
 
   if (!c.models || typeof c.models !== "object") throw new Error("Missing models");
   const models = c.models as Record<string, unknown>;
-  if (!c.transport || typeof c.transport !== "object") throw new Error("Missing transport");
-  const transport = c.transport as Record<string, unknown>;
-  if (transport.kind !== "openrouter" && transport.kind !== "pi") {
-    throw new Error("transport.kind must be 'openrouter' or 'pi'");
-  }
-  if (transport.kind === "pi") {
-    if (!transport.session || typeof transport.session !== "object") {
-      throw new Error("transport.session must be provided for transport.kind='pi'");
-    }
-    const session = transport.session as Record<string, unknown>;
-    if (typeof session.compaction !== "boolean") throw new Error("transport.session.compaction must be boolean");
-    if (typeof session.retry !== "boolean") throw new Error("transport.session.retry must be boolean");
-    if (!isPositiveInteger(session.maxRetries) && session.maxRetries !== 0) {
-      throw new Error("transport.session.maxRetries must be a non-negative integer");
-    }
-  }
+  validateTransportConfig(c.transport, "transport");
 
   if (!isStringArray(models.candidates) || models.candidates.length === 0) {
     throw new Error("models.candidates must be a non-empty array of provider/model strings");
@@ -112,6 +125,9 @@ function validateConfig(raw: unknown): asserts raw is BenchmarkConfig {
   if (!c.judge || typeof c.judge !== "object") throw new Error("Missing judge");
   const judge = c.judge as Record<string, unknown>;
   if (typeof judge.model !== "string") throw new Error("judge.model must be a provider/model string");
+  if (judge.transport !== undefined) {
+    validateTransportConfig(judge.transport, "judge.transport");
+  }
   if (!judge.profile || typeof judge.profile !== "object") throw new Error("Missing judge.profile");
   const profile = judge.profile as Record<string, unknown>;
   if (typeof profile.id !== "string") throw new Error("judge.profile.id must be a string");
@@ -198,4 +214,8 @@ export function getCandidateModelRefs(config: BenchmarkConfig): ModelRef[] {
 
 export function getJudgeModelRef(config: BenchmarkConfig): ModelRef {
   return parseModelRef(config.judge.model);
+}
+
+export function getJudgeTransportConfig(config: BenchmarkConfig): ModelTransportConfig {
+  return config.judge.transport ?? config.transport;
 }

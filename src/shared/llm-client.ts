@@ -206,7 +206,7 @@ function buildPiUsageSummary(message: unknown): JsonValue | undefined {
 }
 
 function buildPiSettingsManager(transport: ModelTransportConfig): SettingsManager {
-  const session = transport.session ?? { compaction: false, retry: false, maxRetries: 0 };
+  const session = transport.session ?? { compaction: false, retry: false, maxRetries: 0, thinkingLevel: "off" };
   return SettingsManager.inMemory({
     compaction: { enabled: session.compaction },
     retry: { enabled: session.retry, maxRetries: session.maxRetries },
@@ -420,7 +420,7 @@ async function runPiSessionClient(config: LlmClientConfig, deps: LlmClientDeps =
     const { session } = await createSession({
       cwd: process.cwd(),
       model: model as never,
-      thinkingLevel: "off",
+      thinkingLevel: config.transport.session?.thinkingLevel ?? "off",
       authStorage,
       modelRegistry,
       resourceLoader,

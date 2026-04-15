@@ -11,6 +11,7 @@ import { readJsonFile } from "../src/shared/io.js";
 import {
   getCandidateModelRefs,
   getJudgeModelRef,
+  getJudgeTransportConfig,
   getPromptTemplatePath,
   loadBenchmarkConfig,
   parseModelRefFromString,
@@ -211,6 +212,7 @@ async function main() {
     ? parseModelRefFromString(cli.judgeModel)
     : getJudgeModelRef(config);
   const transport = cli.transport ? { ...config.transport, kind: cli.transport } : config.transport;
+  const judgeTransport = cli.transport ? { ...getJudgeTransportConfig(config), kind: cli.transport } : getJudgeTransportConfig(config);
 
   if (executionResume && effectiveRunId === "auto") {
     console.warn("Warning: execution.resume=true with runId=auto only resumes within this invocation. Set an explicit runId for resumable/idempotent batches across invocations.");
@@ -313,7 +315,7 @@ async function main() {
             promptTemplatePath: getPromptTemplatePath(config, "judge-answer-v1"),
             systemPrompt: config.systemPrompts.judge,
             toolSetCatalogPath: config.paths.toolSets,
-            transport,
+            transport: judgeTransport,
             judgeModelOverride: judgeModelRef,
           });
           judgeHadError = judgeOutput.artifact.status === "error";

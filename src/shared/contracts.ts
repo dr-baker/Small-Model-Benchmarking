@@ -19,10 +19,13 @@ export interface ModelRef {
   snapshot?: string;
 }
 
+export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+
 export interface SessionConfig {
   compaction: boolean;
   retry: boolean;
   maxRetries: number;
+  thinkingLevel?: ThinkingLevel;
 }
 
 export type TransportKind = "openrouter" | "pi";
