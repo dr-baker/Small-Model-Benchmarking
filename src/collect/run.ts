@@ -2,10 +2,19 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { ANSWER_RESPONSE_SCHEMA_VERSION, PIPELINE_CONTRACT_VERSION, type BenchmarkAnswerResponse, type CollectRunInput, type CollectTrace, type PromptSnapshot, type RunManifest } from "../shared/contracts.js";
+import {
+  ANSWER_RESPONSE_SCHEMA_VERSION,
+  PIPELINE_CONTRACT_VERSION,
+  type BenchmarkAnswerResponse,
+  type CollectRunInput,
+  type CollectTrace,
+  type PromptMessageSnapshot,
+  type PromptSnapshot,
+  type RunManifest,
+} from "../shared/contracts.js";
 import { serializeJson, writeJsonFile } from "../shared/io.js";
-import { toJsonValue, extractJsonObject } from "../shared/json.js";
-import { renderPrompt } from "./prompt-template.js";
+import { extractJsonObject } from "../shared/json.js";
+import { renderPrompt, renderPromptMessages } from "./prompt-template.js";
 import { createToolsForToolSet } from "./tool-sets.js";
 import { runLlmClient } from "../shared/llm-client.js";
 import { buildAnswerResponseFormat } from "../shared/response-schemas.js";
@@ -20,14 +29,7 @@ export interface CollectRunOutput {
   manifest: RunManifest;
   trace: CollectTrace;
   normalizedAnswer: BenchmarkAnswerResponse | { parseError: string; rawText?: string };
-}
-
-function slugify(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").replace(/-{2,}/g, "-");
-}
-
-function createBenchmarkExecutionDirectoryName(benchmarkName: string): string {
-  return `${new Date().toISOString().slice(0, 10)}-${slugify(benchmarkName)}`;
+  hasError: boolean;
 }
 
 function validateInput(input: CollectRunInput): void {
@@ -41,16 +43,24 @@ function validateParsedAnswer(value: unknown): value is BenchmarkAnswerResponse 
   const c = value as Record<string, unknown>;
   if (c.schemaVersion !== ANSWER_RESPONSE_SCHEMA_VERSION) return false;
   if (c.mode !== "closed_book" && c.mode !== "open_book") return false;
-  if (typeof c.finalAnswer !== "string" || typeof c.confidence !== "number") return false;
+  if (typeof c.finalAnswer !== "string" || c.finalAnswer.trim().length === 0) return false;
+  if (typeof c.confidence !== "number") return false;
   if (!Array.isArray(c.citations)) return false;
-  return c.mode === "closed_book" ? c.citations.length === 0 : typeof c.evidenceSummary === "string";
+
+  if (c.mode === "closed_book") {
+    return c.citations.length === 0;
+  }
+
+  return typeof c.evidenceSummary === "string" && c.evidenceSummary.trim().length > 0;
 }
 
 function parseAnswer(rawText: string | undefined): BenchmarkAnswerResponse | { parseError: string; rawText?: string } {
   if (!rawText) return { parseError: "Assistant produced no final text." };
   try {
     const parsed = extractJsonObject(rawText);
-    return validateParsedAnswer(parsed) ? parsed : { parseError: "Assistant JSON did not match answer-response.v1 schema.", rawText };
+    return validateParsedAnswer(parsed)
+      ? parsed
+      : { parseError: "Assistant JSON did not match answer-response.v1 schema or contained an empty answer.", rawText };
   } catch (error) {
     return { parseError: error instanceof Error ? error.message : String(error), rawText };
   }
@@ -65,35 +75,46 @@ export async function runCollect(input: CollectRunInput): Promise<CollectRunOutp
 
   const startedAt = Date.now();
   const createdAt = new Date().toISOString();
-  const benchmarkExecutionDirectory = resolve(REPO_ROOT, "benchmark-results", createBenchmarkExecutionDirectoryName(input.benchmarkName));
-  const runDirectory = join(benchmarkExecutionDirectory, input.runId);
+  const runDirectory = join(input.executionDirectory, input.runId);
   const tracePath = join(runDirectory, "trace.json");
   const normalizedAnswerPath = join(runDirectory, "normalized-answer.json");
   const judgePath = join(runDirectory, "judge.json");
   const gradePath = join(runDirectory, "grade.json");
-  const aggregatePath = join(benchmarkExecutionDirectory, "aggregate.json");
+  const aggregatePath = join(input.executionDirectory, "aggregate.json");
   const manifestPath = join(runDirectory, "manifest.json");
 
   const corpusRoot = resolve(REPO_ROOT, input.corpus.rootDir);
+  const userMessages = await renderPromptMessages(input.promptTemplatePath, input.mode, input.question);
   const userPrompt = await renderPrompt(input.promptTemplatePath, input.mode, input.question);
   const systemPrompt = input.systemPrompt;
+  const promptMessages: PromptMessageSnapshot[] = [
+    { role: "system", content: systemPrompt },
+    ...userMessages,
+  ];
   const tools = createToolsForToolSet(input.toolSet, corpusRoot);
   const apiKey = await resolveModelApiKey(input.model);
 
   const llmResult = await runLlmClient({
-    model: input.model, systemPrompt, userPrompt, tools,
-    responseFormat: buildAnswerResponseFormat(), apiKey,
+    model: input.model,
+    messages: promptMessages,
+    tools,
+    responseFormat: buildAnswerResponseFormat(),
+    apiKey,
   });
 
   const normalizedAnswer = parseAnswer(llmResult.finalText);
   const promptSnapshot: PromptSnapshot = {
-    systemPrompt, userPrompt,
-    availableTools: tools.map((t) => ({ name: t.name, description: t.description })),
+    systemPrompt,
+    userPrompt,
+    messages: promptMessages,
+    availableTools: tools.map((tool) => ({ name: tool.name, description: tool.description })),
   };
 
   const trace: CollectTrace = {
-    runId: input.runId, prompt: promptSnapshot,
-    events: llmResult.events, toolInvocations: llmResult.toolInvocations,
+    runId: input.runId,
+    prompt: promptSnapshot,
+    events: llmResult.events,
+    toolInvocations: llmResult.toolInvocations,
     ...(llmResult.finalText !== undefined ? { finalAssistantText: llmResult.finalText } : {}),
     ...(llmResult.finalAssistantMessage !== undefined ? { finalAssistantMessage: llmResult.finalAssistantMessage } : {}),
     ...(llmResult.usage !== undefined ? { usage: llmResult.usage } : {}),
@@ -105,20 +126,39 @@ export async function runCollect(input: CollectRunInput): Promise<CollectRunOutp
   const piSdkVersion = (JSON.parse(await readFile(resolve(REPO_ROOT, "package.json"), "utf8")) as { dependencies?: Record<string, string> }).dependencies?.["@mariozechner/pi-coding-agent"] ?? "unknown";
 
   const manifest: RunManifest = {
-    contractVersion: PIPELINE_CONTRACT_VERSION, runId: input.runId, benchmarkName: input.benchmarkName, createdAt,
-    piSdkVersion, model: input.model, mode: input.mode, toolSet: input.toolSet,
-    promptTemplateId: input.promptTemplateId, promptTemplateVersion: input.promptTemplateVersion,
-    responseSchemaVersion: input.responseSchemaVersion, rubricVersion: input.rubricVersion,
-    corpus: input.corpus, questionId: input.question.id, sampling: input.sampling,
+    contractVersion: PIPELINE_CONTRACT_VERSION,
+    runId: input.runId,
+    benchmarkName: input.benchmarkName,
+    createdAt,
+    piSdkVersion,
+    model: input.model,
+    mode: input.mode,
+    toolSet: input.toolSet,
+    promptTemplateId: input.promptTemplateId,
+    promptTemplateVersion: input.promptTemplateVersion,
+    responseSchemaVersion: input.responseSchemaVersion,
+    rubricVersion: input.rubricVersion,
+    corpus: input.corpus,
+    questionId: input.question.id,
+    sampling: input.sampling,
     artifactPaths: { trace: tracePath, normalizedAnswer: normalizedAnswerPath, judge: judgePath, grade: gradePath, aggregate: aggregatePath },
   };
 
-  const manifestWithHashes = { ...manifest, traceSha256: sha256(serializeJson(trace)), normalizedAnswerSha256: sha256(serializeJson(normalizedAnswer)) };
+  const manifestWithHashes = {
+    ...manifest,
+    traceSha256: sha256(serializeJson(trace)),
+    normalizedAnswerSha256: sha256(serializeJson(normalizedAnswer)),
+  };
+
   await writeJsonFile(tracePath, trace);
   await writeJsonFile(normalizedAnswerPath, normalizedAnswer);
   await writeJsonFile(manifestPath, manifestWithHashes);
 
-  if (llmResult.error !== undefined) throw new Error(`Collect stage LLM error: ${JSON.stringify(llmResult.error)}`);
-
-  return { runDirectory, manifest, trace, normalizedAnswer };
+  return {
+    runDirectory,
+    manifest,
+    trace,
+    normalizedAnswer,
+    hasError: llmResult.error !== undefined || "parseError" in normalizedAnswer,
+  };
 }

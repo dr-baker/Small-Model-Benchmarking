@@ -11,6 +11,7 @@ import {
   type JudgeQualitativeScore,
   type JudgeVerdictLabel,
   type ModelRef,
+  type PromptMessageSnapshot,
   type RunManifest,
 } from "../shared/contracts.js";
 import { serializeJson, readJsonFile, writeJsonFile } from "../shared/io.js";
@@ -82,12 +83,32 @@ async function loadJudgeProfile(path: string, id: string): Promise<JudgeProfile>
   return profile;
 }
 
-async function renderJudgePrompt(question: DatasetQuestion, answer: BenchmarkAnswerResponse, profile: JudgeProfile, promptTemplatePath: string): Promise<string> {
+async function renderJudgePromptMessages(question: DatasetQuestion, answer: BenchmarkAnswerResponse, promptTemplatePath: string): Promise<PromptMessageSnapshot[]> {
   const template = await readFile(promptTemplatePath, "utf8");
   const evidenceBlock = answer.mode === "open_book"
-    ? `\n## Candidate answer evidence metadata\n- answer included ${answer.citations.length} citation(s)\n- answer evidence summary: ${answer.evidenceSummary}\n`
+    ? `\n## Candidate answer evidence metadata\n- answer included ${answer.citations.length} citation(s)\n- answer evidence summary: ${answer.evidenceSummary}`
     : "";
-  return `${template.trim()}\n\n## Benchmark question\n${question.question}\n\n## Reference answer\n${question.referenceAnswer}\n\n## Candidate answer metadata\n- mode: ${answer.mode}\n- answerConfidence: ${answer.confidence}${evidenceBlock}\n\n## Candidate answer\n${answer.finalAnswer}\n`;
+
+  return [
+    { role: "user", content: template.trim() },
+    {
+      role: "user",
+      content: `## Benchmark question\n${question.question}\n\n## Reference answer\n${question.referenceAnswer}`,
+    },
+    {
+      role: "user",
+      content: `## Candidate answer metadata\n- mode: ${answer.mode}\n- answerConfidence: ${answer.confidence}${evidenceBlock}`,
+    },
+    {
+      role: "user",
+      content: `## Candidate answer\n${answer.finalAnswer}`,
+    },
+  ];
+}
+
+async function renderJudgePrompt(question: DatasetQuestion, answer: BenchmarkAnswerResponse, promptTemplatePath: string): Promise<string> {
+  const messages = await renderJudgePromptMessages(question, answer, promptTemplatePath);
+  return messages.map((message) => message.content).join("\n\n").trimEnd() + "\n";
 }
 
 function createSkippedArtifact(params: {
@@ -132,14 +153,22 @@ export async function judgeRun(options: JudgeRunOptions): Promise<JudgeRunOutput
   if (!question) { const a = skip("question_not_found_in_dataset", ["Judge skipped: question missing from dataset."]); await writeJsonFile(judgePath, a); return { judgePath, artifact: a }; }
   if ("parseError" in normalizedAnswer) { const a = skip("answer_parse_error", ["Judge skipped: answer has parse error."]); await writeJsonFile(judgePath, a); return { judgePath, artifact: a }; }
 
-  const userPrompt = await renderJudgePrompt(question, normalizedAnswer, judgeProfile, options.promptTemplatePath);
+  const userMessages = await renderJudgePromptMessages(question, normalizedAnswer, options.promptTemplatePath);
+  const userPrompt = await renderJudgePrompt(question, normalizedAnswer, options.promptTemplatePath);
+  const promptMessages: PromptMessageSnapshot[] = [
+    { role: "system", content: systemPrompt },
+    ...userMessages,
+  ];
   const corpusRoot = resolve(REPO_ROOT, manifest.corpus.rootDir);
   const tools = createToolsForToolSet(judgeToolSet, corpusRoot);
   const apiKey = await resolveModelApiKey(effectiveJudgeModel);
 
   const llmResult = await runLlmClient({
-    model: effectiveJudgeModel, systemPrompt, userPrompt, tools,
-    responseFormat: buildJudgeVerdictResponseFormat(), apiKey,
+    model: effectiveJudgeModel,
+    messages: promptMessages,
+    tools,
+    responseFormat: buildJudgeVerdictResponseFormat(),
+    apiKey,
   });
 
   const parsed = parseJudgeResponse(llmResult.finalText);
@@ -160,7 +189,7 @@ export async function judgeRun(options: JudgeRunOptions): Promise<JudgeRunOutput
     judgeModel: effectiveJudgeModel, toolSet: judgeToolSet,
     promptTemplateId: judgeProfile.promptTemplateId, promptTemplateVersion: judgeProfile.promptTemplateVersion,
     answerSha256,
-    prompt: { systemPrompt, userPrompt, availableTools: tools.map((t) => ({ name: t.name, description: t.description })) },
+    prompt: { systemPrompt, userPrompt, messages: promptMessages, availableTools: tools.map((t) => ({ name: t.name, description: t.description })) },
     toolInvocations: llmResult.toolInvocations,
     ...(llmResult.finalText !== undefined ? { rawResponseText: llmResult.finalText } : {}),
     ...(llmResult.usage !== undefined ? { usage: llmResult.usage } : {}),
@@ -175,6 +204,5 @@ export async function judgeRun(options: JudgeRunOptions): Promise<JudgeRunOutput
   };
 
   await writeJsonFile(judgePath, artifact);
-  if (hasError) throw new Error(`Judge stage LLM error: ${JSON.stringify(llmResult.error)}`);
   return { judgePath, artifact };
 }

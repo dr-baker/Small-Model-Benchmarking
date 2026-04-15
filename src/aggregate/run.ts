@@ -1,7 +1,18 @@
 import { constants as fsConstants } from "node:fs";
 import { access } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { AggregateArtifact, AggregateJudgeMetrics, AggregateModelSummary, BenchmarkMode, GradeArtifact, JudgeArtifact, RunManifest, ToolSetDefinition } from "../shared/contracts.js";
+import type {
+  AggregateArtifact,
+  AggregateCostMetrics,
+  AggregateJudgeMetrics,
+  AggregateModelSummary,
+  BenchmarkMode,
+  CollectTrace,
+  GradeArtifact,
+  JudgeArtifact,
+  RunManifest,
+  ToolSetDefinition,
+} from "../shared/contracts.js";
 import { readJsonFile, writeJsonFile } from "../shared/io.js";
 
 export interface AggregateRunOptions {
@@ -20,6 +31,10 @@ interface SummaryAccumulator {
   groundedTrue: number;
   retrievalCount: number;
   retrievalMrrTotal: number;
+  collectTrackedRuns: number;
+  judgeTrackedRuns: number;
+  collectCostUsdTotal: number;
+  judgeCostUsdTotal: number;
   judgeRuns: number;
   judgeCorrectCount: number;
   judgePartiallyCorrectCount: number;
@@ -57,6 +72,7 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
 
   for (const runDirectory of options.runDirectories) {
     const manifest = await readJsonFile<RunManifest>(join(runDirectory, "manifest.json"));
+    const trace = await readJsonFile<CollectTrace>(join(runDirectory, "trace.json"));
     const grade = await readJsonFile<GradeArtifact>(join(runDirectory, "grade.json"));
     const judge = await readOptionalJsonFile<JudgeArtifact>(join(runDirectory, "judge.json"));
     const key = summaryKey(manifest);
@@ -70,6 +86,10 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
       groundedTrue: 0,
       retrievalCount: 0,
       retrievalMrrTotal: 0,
+      collectTrackedRuns: 0,
+      judgeTrackedRuns: 0,
+      collectCostUsdTotal: 0,
+      judgeCostUsdTotal: 0,
       judgeRuns: 0,
       judgeCorrectCount: 0,
       judgePartiallyCorrectCount: 0,
@@ -84,6 +104,11 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
     existing.runs += 1;
     existing.answerScoreTotal += grade.answer.score;
 
+    if (typeof trace.costUsd === "number") {
+      existing.collectTrackedRuns += 1;
+      existing.collectCostUsdTotal += trace.costUsd;
+    }
+
     if (grade.answer.grounded !== undefined) {
       existing.groundedRuns += 1;
       if (grade.answer.grounded) {
@@ -94,6 +119,11 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
     if (grade.retrieval?.mrr !== undefined) {
       existing.retrievalCount += 1;
       existing.retrievalMrrTotal += grade.retrieval.mrr;
+    }
+
+    if (typeof judge?.costUsd === "number") {
+      existing.judgeTrackedRuns += 1;
+      existing.judgeCostUsdTotal += judge.costUsd;
     }
 
     if (judge?.status === "scored") {
@@ -125,6 +155,22 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
         ? {}
         : { meanRetrievalMrr: accumulator.retrievalMrrTotal / accumulator.retrievalCount }),
     };
+
+    if (accumulator.collectTrackedRuns > 0 || accumulator.judgeTrackedRuns > 0) {
+      const totalTrackedRuns = Math.max(accumulator.collectTrackedRuns, accumulator.judgeTrackedRuns);
+      const totalCostUsd = accumulator.collectCostUsdTotal + accumulator.judgeCostUsdTotal;
+      const costMetrics: AggregateCostMetrics = {
+        collectTrackedRuns: accumulator.collectTrackedRuns,
+        judgeTrackedRuns: accumulator.judgeTrackedRuns,
+        totalCollectCostUsd: accumulator.collectCostUsdTotal,
+        totalJudgeCostUsd: accumulator.judgeCostUsdTotal,
+        totalCostUsd,
+        meanCollectCostUsdPerRun: accumulator.collectTrackedRuns === 0 ? 0 : accumulator.collectCostUsdTotal / accumulator.collectTrackedRuns,
+        meanJudgeCostUsdPerRun: accumulator.judgeTrackedRuns === 0 ? 0 : accumulator.judgeCostUsdTotal / accumulator.judgeTrackedRuns,
+        meanTotalCostUsdPerRun: totalTrackedRuns === 0 ? 0 : totalCostUsd / totalTrackedRuns,
+      };
+      base.cost = costMetrics;
+    }
 
     if (accumulator.judgeRuns > 0) {
       const judgeMetrics: AggregateJudgeMetrics = {

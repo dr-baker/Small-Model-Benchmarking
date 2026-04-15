@@ -64,6 +64,7 @@ export interface ToolSetDefinition {
 export interface CollectRunInput {
   contractVersion: typeof PIPELINE_CONTRACT_VERSION;
   runId: string;
+  executionDirectory: string;
   benchmarkName: string;
   model: ModelRef;
   mode: BenchmarkMode;
@@ -79,9 +80,15 @@ export interface CollectRunInput {
   systemPrompt: string;
 }
 
+export interface PromptMessageSnapshot {
+  role: "system" | "user";
+  content: string;
+}
+
 export interface PromptSnapshot {
   systemPrompt: string;
   userPrompt: string;
+  messages?: PromptMessageSnapshot[];
   availableTools: Array<{
     name: string;
     description: string;
@@ -280,6 +287,17 @@ export interface AggregateJudgeMetrics {
   recommendsDeprecatedPatternRate: number;
 }
 
+export interface AggregateCostMetrics {
+  collectTrackedRuns: number;
+  judgeTrackedRuns: number;
+  totalCollectCostUsd: number;
+  totalJudgeCostUsd: number;
+  totalCostUsd: number;
+  meanCollectCostUsdPerRun: number;
+  meanJudgeCostUsdPerRun: number;
+  meanTotalCostUsdPerRun: number;
+}
+
 export interface AggregateModelSummary {
   model: ModelRef;
   mode: BenchmarkMode;
@@ -288,6 +306,7 @@ export interface AggregateModelSummary {
   meanAnswerScore: number;
   groundedRate?: number;
   meanRetrievalMrr?: number;
+  cost?: AggregateCostMetrics;
   judge?: AggregateJudgeMetrics;
 }
 

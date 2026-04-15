@@ -1,9 +1,7 @@
-import type { ModelRef, ToolInvocationTrace, TraceEventRecord } from "./contracts.js";
+import type { ModelRef, PromptMessageSnapshot, ToolInvocationTrace, TraceEventRecord } from "./contracts.js";
 import type { JsonValue } from "./json.js";
 import type { OpenRouterResponseFormat } from "./response-schemas.js";
 import { toJsonValue } from "./json.js";
-
-// ── Structural tool interface (avoids typebox generic complexity) ────────
 
 interface ToolLike {
   name: string;
@@ -13,12 +11,13 @@ interface ToolLike {
   execute: (toolCallId: string, params: unknown, signal?: AbortSignal, onUpdate?: (partialResult: unknown) => void) => Promise<{ content: Array<{ type: string; text?: string }> }>;
 }
 
-// ── Config & Result ──────────────────────────────────────────────────────
+export interface LlmClientMessage extends PromptMessageSnapshot {}
 
 export interface LlmClientConfig {
   model: ModelRef;
-  systemPrompt: string;
-  userPrompt: string;
+  systemPrompt?: string;
+  userPrompt?: string;
+  messages?: LlmClientMessage[];
   tools: readonly unknown[];
   responseFormat?: OpenRouterResponseFormat;
   maxRounds?: number;
@@ -36,7 +35,20 @@ export interface LlmClientResult {
   elapsedMs: number;
 }
 
-// ── Provider URL map ─────────────────────────────────────────────────────
+function resolveMessages(config: LlmClientConfig): ChatMessage[] {
+  if (config.messages && config.messages.length > 0) {
+    return config.messages.map((message) => ({ role: message.role, content: message.content }));
+  }
+
+  if (typeof config.systemPrompt === "string" && typeof config.userPrompt === "string") {
+    return [
+      { role: "system", content: config.systemPrompt },
+      { role: "user", content: config.userPrompt },
+    ];
+  }
+
+  throw new Error("LlmClientConfig requires either messages or both systemPrompt and userPrompt.");
+}
 
 const PROVIDER_BASE_URLS: Record<string, string> = {
   openrouter: "https://openrouter.ai/api/v1",
@@ -44,8 +56,6 @@ const PROVIDER_BASE_URLS: Record<string, string> = {
   anthropic: "https://api.anthropic.com/v1",
   google: "https://generativelanguage.googleapis.com/v1beta",
 };
-
-// ── Tool schema conversion ──────────────────────────────────────────────
 
 function agentToolsToOpenAITools(tools: readonly unknown[]) {
   return tools.map((raw) => {
@@ -61,8 +71,6 @@ function agentToolsToOpenAITools(tools: readonly unknown[]) {
   });
 }
 
-// ── OpenAI chat completion types (subset) ────────────────────────────────
-
 interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool";
   content?: string | null;
@@ -70,12 +78,46 @@ interface ChatMessage {
   tool_call_id?: string;
 }
 
-interface ChatCompletionResponse {
-  choices: Array<{ message: ChatMessage; finish_reason: string }>;
-  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+interface ChatCompletionUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+  cost?: number;
+  total_cost?: number;
+  cost_details?: {
+    upstream_inference_cost?: number;
+  };
+  [key: string]: unknown;
 }
 
-// ── Tool error helper ────────────────────────────────────────────────────
+interface ChatCompletionResponse {
+  choices: Array<{ message: ChatMessage; finish_reason: string }>;
+  usage?: ChatCompletionUsage;
+}
+
+function extractCostUsd(usage: ChatCompletionUsage | undefined): number | undefined {
+  if (!usage) return undefined;
+  const directCost = typeof usage.cost === "number" ? usage.cost : undefined;
+  if (directCost !== undefined) return directCost;
+  const totalCost = typeof usage.total_cost === "number" ? usage.total_cost : undefined;
+  if (totalCost !== undefined) return totalCost;
+  const upstreamCost = typeof usage.cost_details?.upstream_inference_cost === "number"
+    ? usage.cost_details.upstream_inference_cost
+    : undefined;
+  return upstreamCost;
+}
+
+function buildUsageSummary(promptTokens: number, completionTokens: number, totalCostUsd: number | undefined): JsonValue | undefined {
+  const hasTokens = promptTokens > 0 || completionTokens > 0;
+  const hasCost = typeof totalCostUsd === "number";
+  if (!hasTokens && !hasCost) return undefined;
+  return toJsonValue({
+    prompt_tokens: promptTokens,
+    completion_tokens: completionTokens,
+    total_tokens: promptTokens + completionTokens,
+    ...(hasCost ? { cost: totalCostUsd } : {}),
+  });
+}
 
 function failTool(
   invocation: ToolInvocationTrace,
@@ -97,8 +139,6 @@ function failTool(
   });
 }
 
-// ── Main client ──────────────────────────────────────────────────────────
-
 export async function runLlmClient(config: LlmClientConfig): Promise<LlmClientResult> {
   const startedAt = Date.now();
   const maxRounds = config.maxRounds ?? 30;
@@ -106,11 +146,17 @@ export async function runLlmClient(config: LlmClientConfig): Promise<LlmClientRe
   const toolInvocations: ToolInvocationTrace[] = [];
   let promptTokens = 0;
   let completionTokens = 0;
+  let totalCostUsd = 0;
+  let hasTrackedCost = false;
 
   if (!config.apiKey) {
     return {
-      finalText: undefined, finalAssistantMessage: undefined, usage: undefined, costUsd: undefined,
-      toolInvocations: [], events: [],
+      finalText: undefined,
+      finalAssistantMessage: undefined,
+      usage: undefined,
+      costUsd: undefined,
+      toolInvocations: [],
+      events: [],
       error: toJsonValue(new Error(`No API key for provider: ${config.model.provider}`)),
       elapsedMs: Date.now() - startedAt,
     };
@@ -125,10 +171,7 @@ export async function runLlmClient(config: LlmClientConfig): Promise<LlmClientRe
     "X-Title": "LLM Benchmarking",
   };
 
-  const messages: ChatMessage[] = [
-    { role: "system", content: config.systemPrompt },
-    { role: "user", content: config.userPrompt },
-  ];
+  const messages: ChatMessage[] = resolveMessages(config);
 
   const openaiTools = config.tools.length > 0 ? agentToolsToOpenAITools(config.tools) : undefined;
   const toolMap = new Map<string, unknown>(config.tools.map((r) => [(r as ToolLike).name, r]));
@@ -155,6 +198,11 @@ export async function runLlmClient(config: LlmClientConfig): Promise<LlmClientRe
       if (data.usage) {
         promptTokens += data.usage.prompt_tokens ?? 0;
         completionTokens += data.usage.completion_tokens ?? 0;
+        const roundCostUsd = extractCostUsd(data.usage);
+        if (typeof roundCostUsd === "number") {
+          totalCostUsd += roundCostUsd;
+          hasTrackedCost = true;
+        }
       }
 
       events.push({
@@ -168,13 +216,11 @@ export async function runLlmClient(config: LlmClientConfig): Promise<LlmClientRe
 
       const toolCalls = assistantMessage.tool_calls;
       if (!toolCalls || toolCalls.length === 0) {
-        // Final response — no tool calls
-        const usage = promptTokens > 0 ? toJsonValue({ prompt_tokens: promptTokens, completion_tokens: completionTokens, total_tokens: promptTokens + completionTokens }) : undefined;
         return {
           finalText: assistantMessage.content ?? undefined,
           finalAssistantMessage: toJsonValue(assistantMessage),
-          usage,
-          costUsd: undefined,
+          usage: buildUsageSummary(promptTokens, completionTokens, hasTrackedCost ? totalCostUsd : undefined),
+          costUsd: hasTrackedCost ? totalCostUsd : undefined,
           toolInvocations,
           events,
           error: undefined,
@@ -182,7 +228,6 @@ export async function runLlmClient(config: LlmClientConfig): Promise<LlmClientRe
         };
       }
 
-      // Process tool calls
       messages.push(assistantMessage);
 
       for (const toolCall of toolCalls) {
@@ -199,7 +244,8 @@ export async function runLlmClient(config: LlmClientConfig): Promise<LlmClientRe
         });
 
         const invocation: ToolInvocationTrace = {
-          toolCallId, toolName,
+          toolCallId,
+          toolName,
           args: toJsonValue(args),
           startedAt: new Date().toISOString(),
           updates: [],
@@ -212,19 +258,18 @@ export async function runLlmClient(config: LlmClientConfig): Promise<LlmClientRe
           continue;
         }
 
-        const typedTool = tool;
         let resolvedArgs: unknown = args;
-        if (typedTool.prepareArguments) {
-          try { resolvedArgs = typedTool.prepareArguments(args); } catch { /* use raw args */ }
+        if (tool.prepareArguments) {
+          try { resolvedArgs = tool.prepareArguments(args); } catch { /* use raw args */ }
         }
 
         try {
-          const result = await typedTool.execute(toolCallId, resolvedArgs, undefined, (partial) => {
+          const result = await tool.execute(toolCallId, resolvedArgs, undefined, (partial) => {
             invocation.updates.push(toJsonValue(partial));
           });
           const resultText = result.content
-            .filter((b): b is { type: "text"; text: string } => b.type === "text")
-            .map((b) => b.text)
+            .filter((block): block is { type: "text"; text: string } => block.type === "text")
+            .map((block) => block.text)
             .join("\n");
           failTool(invocation, messages, events, toolCallId, toolName, resultText, false);
         } catch (execError) {
@@ -232,16 +277,17 @@ export async function runLlmClient(config: LlmClientConfig): Promise<LlmClientRe
           failTool(invocation, messages, events, toolCallId, toolName, `Error: ${msg}`, true);
         }
       }
-      // Continue loop — next API call sees tool results
     }
 
     throw new Error(`Exceeded max tool-call rounds (${maxRounds})`);
   } catch (error) {
-    const usage = promptTokens > 0 ? toJsonValue({ prompt_tokens: promptTokens, completion_tokens: completionTokens, total_tokens: promptTokens + completionTokens }) : undefined;
     return {
-      finalText: undefined, finalAssistantMessage: undefined,
-      usage, costUsd: undefined,
-      toolInvocations, events,
+      finalText: undefined,
+      finalAssistantMessage: undefined,
+      usage: buildUsageSummary(promptTokens, completionTokens, hasTrackedCost ? totalCostUsd : undefined),
+      costUsd: hasTrackedCost ? totalCostUsd : undefined,
+      toolInvocations,
+      events,
       error: toJsonValue(error),
       elapsedMs: Date.now() - startedAt,
     };
