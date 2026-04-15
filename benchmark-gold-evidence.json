@@ -1,0 +1,117 @@
+[
+  {
+    "questionId": "q46-thread-safe-shared-cache",
+    "goldEvidence": []
+  },
+  {
+    "questionId": "q47-getting-the-user-s-documents-directory",
+    "goldEvidence": [
+      {
+        "filePath": "pages/documentation/swiftui/understanding-the-navigation-stack.md",
+        "quote": ".documentsDirectory.appending(path: \"NavigationPath.json\") - Used to store navigation path data in the Documents directory."
+      }
+    ]
+  },
+  {
+    "questionId": "q48-replacing-substrings-in-a-string",
+    "goldEvidence": []
+  },
+  {
+    "questionId": "q49-foreach-with-index-and-item",
+    "goldEvidence": [
+      {
+        "filePath": "pages/documentation/swiftui/foreach.chunks.json",
+        "quote": "Use `ForEach` to provide views based on a RandomAccessCollection of some data type. Either the collection's elements must conform to Identifiable or you need to provide an `id` parameter to the `ForEach` initializer."
+      }
+    ]
+  },
+  {
+    "questionId": "q50-avoiding-repeated-id-parameters",
+    "goldEvidence": [
+      {
+        "filePath": "pages/documentation/swiftui/foreach.chunks.json",
+        "quote": "Either the collection's elements must conform to Identifiable or you need to provide an `id` parameter to the `ForEach` initializer."
+      }
+    ]
+  },
+  {
+    "questionId": "q51-displaying-a-web-page-in-swiftui",
+    "goldEvidence": [
+      {
+        "filePath": "pages/documentation/webkit/webview-swift.struct.md",
+        "quote": "Present HTML, CSS, and JavaScript content alongside your app's native views with WebView. Specify web content with a URL when using the init(url:) initializer, or with a WebPage when using the init(_:) initializer."
+      }
+    ]
+  },
+  {
+    "questionId": "q52-storing-sensitive-data-across-launches",
+    "goldEvidence": []
+  },
+  {
+    "questionId": "q53-displaying-an-icon-next-to-a-label",
+    "goldEvidence": [
+      {
+        "filePath": "pages/documentation/swiftui/label.md",
+        "quote": "A standard label for user interface items, consisting of an icon with a title. You create a label, in its simplest form, by providing a title and the name of an image, such as an icon from the SF Symbols collection: Label(\"Lightning\", systemImage: \"bolt.fill\")"
+      }
+    ]
+  },
+  {
+    "questionId": "q54-large-animations-and-user-sensitivity",
+    "goldEvidence": [
+      {
+        "filePath": "pages/documentation/swiftui/environmentvalues/accessibilityreducemotion.md",
+        "quote": "Whether the system preference for Reduce Motion is enabled. If this property's value is true, UI should avoid large animations, especially those that simulate the third dimension."
+      }
+    ]
+  },
+  {
+    "questionId": "q55-counting-items-that-match-a-condition",
+    "goldEvidence": []
+  },
+  {
+    "questionId": "q56-capturing-a-swiftui-view-as-a-bitmap",
+    "goldEvidence": [
+      {
+        "filePath": "pages/documentation/swiftui/imagerenderer.md",
+        "quote": "Use `ImageRenderer` to export bitmap image data from a SwiftUI view. You initialize the renderer with a view, then render images on demand, either by calling the render(rasterizationScale:renderer:) method, or by using the renderer's properties to create a CGImage, NSImage, or UIImage."
+      }
+    ]
+  },
+  {
+    "questionId": "q57-unique-constraints-in-swiftdata-with-cloudkit",
+    "goldEvidence": [
+      {
+        "filePath": "pages/documentation/swiftui/backyard-birds-sample.md",
+        "quote": "Using the Attribute macro with the unique option ensures that the `id` property is unique: @Attribute(.unique) public var id: String"
+      }
+    ]
+  },
+  {
+    "questionId": "q58-swiftdata-relationships-with-cloudkit",
+    "goldEvidence": [
+      {
+        "filePath": "pages/documentation/swiftui/building-a-document-based-app-using-swiftdata.md",
+        "quote": "Learn how to use @Query, @Bindable, .modelContainer, the .modelContext environment variable, and DocumentGroup to integrate with the SwiftData framework."
+      }
+    ]
+  },
+  {
+    "questionId": "q59-displaying-a-person-s-full-name",
+    "goldEvidence": [
+      {
+        "filePath": "pages/documentation/swiftui/textfield.md",
+        "quote": "By using a PersonNameComponents/FormatStyle, you can bind the text field to a nonstring type, using the format style to convert the typed text into an instance of the bound type. The following example uses a PersonNameComponents/FormatStyle to convert the name typed in the text field to a PersonNameComponents instance."
+      }
+    ]
+  },
+  {
+    "questionId": "q60-overlaying-a-badge-on-an-image",
+    "goldEvidence": [
+      {
+        "filePath": "pages/documentation/swiftui/view/overlay(alignment:content:).md",
+        "quote": "Layers the views that you specify in front of this view. Use this modifier to place one or more views in front of another view. For example, you can place a group of stars on a RoundedRectangle using overlay(alignment:content:)."
+      }
+    ]
+  }
+]

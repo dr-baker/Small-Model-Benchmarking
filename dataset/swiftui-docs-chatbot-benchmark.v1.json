@@ -9,7 +9,7 @@
     "questionCount": 75
   },
   "goldEvidenceCurationRequired": true,
-  "notes": "goldEvidence is intentionally empty in this version. Follow-up curation is required to add frozen-corpus passage anchors before open-book retrieval grading can use this dataset for evidence matching.",
+  "notes": "goldEvidence populated for 60/75 questions from rubric/gold-evidence.v1.json. Questions without corpus docs (Swift language features, Foundation APIs) have empty evidence.",
   "questions": [
     {
       "id": "q01-tab-definition",
@@ -24,12 +24,7 @@
       ],
       "goldEvidence": [
         {
-          "filePath": "pages/documentation/swiftui/tabview.md",
-          "quote": "To build tabs with the modern API, use Tab in the content builder of the TabView."
-        },
-        {
-          "filePath": "pages/documentation/swiftui/tab.md",
-          "quote": "A tab in a tab view."
+          "filePath": "pages/documentation/swiftui/tabview.md"
         }
       ],
       "source": {
@@ -52,8 +47,7 @@
       ],
       "goldEvidence": [
         {
-          "filePath": "pages/documentation/swiftui/tabview.md",
-          "quote": "You can perform programmatic selection by passing a binding to the selection parameter."
+          "filePath": "pages/documentation/swiftui/tabview.md"
         }
       ],
       "source": {
@@ -72,7 +66,11 @@
         "navigation",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/navigationstack.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 3
@@ -90,7 +88,11 @@
         "swiftui",
         "toolbars"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/toolbaritemplacement.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 4
@@ -109,7 +111,11 @@
         "styling",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/foregroundstyle(_:).md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 5
@@ -126,7 +132,11 @@
         "strings",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/text.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 6
@@ -142,7 +152,11 @@
         "layout",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/clipshape(_:style:).md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 7
@@ -157,7 +171,11 @@
       "taxonomyTags": [
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/shape.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 8
@@ -172,7 +190,11 @@
       "taxonomyTags": [
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/roundedrectangle.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 9
@@ -190,7 +212,11 @@
         "state-management",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/observation/observable().md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 10
@@ -231,7 +257,11 @@
         "strings",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/appstorage.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 12
@@ -251,7 +281,11 @@
         "strings",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/onchange(of:perform:).md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 13
@@ -271,7 +305,11 @@
         "strings",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/textfield.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 14
@@ -292,7 +330,11 @@
         "strings",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/adding-a-search-interface-to-your-app.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 15
@@ -313,7 +355,11 @@
         "strings",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/contentunavailableview/search.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 16
@@ -330,7 +376,11 @@
         "strings",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/text/init(_:format:).md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 17
@@ -347,7 +397,11 @@
         "strings",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/text/init(_:format:).md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 18
@@ -364,7 +418,11 @@
         "strings",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/text/init(_:format:).md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 19
@@ -382,7 +440,11 @@
         "state-management",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/onchange(of:perform:).md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 20
@@ -398,7 +460,11 @@
         "animation",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/animation(_:value:).md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 21
@@ -416,7 +482,11 @@
         "swiftui",
         "thread-safety"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/withanimation(_:_:).md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 22
@@ -434,7 +504,11 @@
         "state-management",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/animatable().md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 23
@@ -450,7 +524,11 @@
         "layout",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/containerrelativeframe(_:alignment:).md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 24
@@ -466,7 +544,14 @@
         "layout",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/containerrelativeframe(_:alignment:).md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/view/visualeffect(_:).md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 25
@@ -486,7 +571,11 @@
         "styling",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/button/init(_:systemimage:action:).md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 26
@@ -503,7 +592,14 @@
         "styling",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/button.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/view/ontapgesture(count:perform:).md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 27
@@ -522,7 +618,11 @@
         "styling",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/scaledmetric.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 28
@@ -542,7 +642,11 @@
         "styling",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/labeledcontent.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 29
@@ -560,7 +664,11 @@
         "strings",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/textfield.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 30
@@ -576,7 +684,11 @@
         "presentation",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/sheet(item:ondismiss:content:).md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 31
@@ -595,7 +707,11 @@
         "presentation",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/confirmationdialog(_:ispresented:titlevisibility:actions:).md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 32
@@ -613,7 +729,11 @@
         "scrolling",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/lazyvstack.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 33
@@ -630,7 +750,11 @@
         "scrolling",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/scrollindicators(_:axes:).md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 34
@@ -647,7 +771,11 @@
         "scrolling",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/scrollcontentbackground(_:).md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 35
@@ -663,7 +791,11 @@
         "concurrency",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/task(name:priority:file:line:_:).md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 36
@@ -679,7 +811,11 @@
         "performance",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/task(name:priority:file:line:_:).md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 37
@@ -710,7 +846,11 @@
         "performance",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/viewbuilder.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 39
@@ -759,7 +899,11 @@
         "state-management",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/entry().md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 42
@@ -776,7 +920,11 @@
         "interop",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/sensoryfeedback(_:trigger:).md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 43
@@ -879,7 +1027,11 @@
         "collections",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/foreach.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 49
@@ -897,7 +1049,11 @@
         "strings",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/foreach.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 50
@@ -914,7 +1070,11 @@
         "swiftui",
         "web"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/webkit/webview-swift.struct.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 51
@@ -952,7 +1112,11 @@
         "styling",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/label.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 53
@@ -969,7 +1133,11 @@
         "security",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/environmentvalues/accessibilityreducemotion.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 54
@@ -1003,7 +1171,11 @@
         "styling",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/imagerenderer.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 56
@@ -1070,7 +1242,11 @@
         "styling",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/overlay(alignment:content:).md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 60
@@ -1087,7 +1263,11 @@
         "state-management",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/binding.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 61
@@ -1103,7 +1283,11 @@
         "previews",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/previews-in-xcode.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 62
@@ -1120,7 +1304,11 @@
         "styling",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/menu.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 63
@@ -1136,7 +1324,11 @@
         "styling",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/environmentvalues/accessibilitydifferentiatewithoutcolor.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 64
@@ -1155,7 +1347,14 @@
         "styling",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/image/init(_:).md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/images.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 65
@@ -1171,7 +1370,11 @@
         "composition",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/viewbuilder.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 66
@@ -1203,7 +1406,11 @@
       "taxonomyTags": [
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/alert(_:ispresented:presenting:actions:message:).md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 68
@@ -1221,7 +1428,11 @@
         "state-management",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/combine/observableobject.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 69
@@ -1239,7 +1450,11 @@
         "styling",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/hierarchicalshapestyle.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 70
@@ -1257,7 +1472,11 @@
         "styling",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/accessibilitylabel(_:).md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 71
@@ -1274,7 +1493,11 @@
         "interaction",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/accessibilityhidden(_:).md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 72
@@ -1290,7 +1513,11 @@
         "navigation",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/navigationstack.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 73
@@ -1309,7 +1536,11 @@
         "state-management",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/task(id:name:priority:file:line:_:).md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 74
@@ -1326,7 +1557,11 @@
         "interaction",
         "swiftui"
       ],
-      "goldEvidence": [],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/button.md"
+        }
+      ],
       "source": {
         "file": "final-qa-bank.md",
         "questionNumber": 75

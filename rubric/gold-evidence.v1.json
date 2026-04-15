@@ -1,0 +1,315 @@
+{
+  "version": "gold-evidence.v1",
+  "description": "Corpus file paths backing each benchmark question. Merged into the dataset at build time.",
+  "evidence": {
+    "q01-tab-definition": [
+      {
+        "filePath": "pages/documentation/swiftui/tabview.md"
+      }
+    ],
+    "q02-programmatic-tab-selection": [
+      {
+        "filePath": "pages/documentation/swiftui/tabview.md"
+      }
+    ],
+    "q03-hierarchical-navigation-setup": [
+      {
+        "filePath": "pages/documentation/swiftui/navigationstack.md"
+      }
+    ],
+    "q04-toolbar-button-in-top-right-corner": [
+      {
+        "filePath": "pages/documentation/swiftui/toolbaritemplacement.md"
+      }
+    ],
+    "q05-styling-text-with-a-custom-color": [
+      {
+        "filePath": "pages/documentation/swiftui/view/foregroundstyle(_:).md"
+      }
+    ],
+    "q06-differently-styled-text-on-one-line": [
+      {
+        "filePath": "pages/documentation/swiftui/text.md"
+      }
+    ],
+    "q07-rounding-corners-on-a-container": [
+      {
+        "filePath": "pages/documentation/swiftui/view/clipshape(_:style:).md"
+      }
+    ],
+    "q08-adding-a-border-to-a-filled-shape": [
+      {
+        "filePath": "pages/documentation/swiftui/shape.md"
+      }
+    ],
+    "q09-smooth-apple-style-rounded-corners": [
+      {
+        "filePath": "pages/documentation/swiftui/roundedrectangle.md"
+      }
+    ],
+    "q10-shared-data-model-for-multiple-views": [
+      {
+        "filePath": "pages/documentation/observation/observable().md"
+      }
+    ],
+    "q12-persisting-userdefaults-in-an-observable-class": [
+      {
+        "filePath": "pages/documentation/swiftui/appstorage.md"
+      }
+    ],
+    "q13-saving-on-every-keystroke": [
+      {
+        "filePath": "pages/documentation/swiftui/view/onchange(of:perform:).md"
+      }
+    ],
+    "q14-numeric-input-field": [
+      {
+        "filePath": "pages/documentation/swiftui/textfield.md"
+      }
+    ],
+    "q15-user-facing-search-text-matching": [
+      {
+        "filePath": "pages/documentation/swiftui/adding-a-search-interface-to-your-app.md"
+      }
+    ],
+    "q16-empty-search-state": [
+      {
+        "filePath": "pages/documentation/swiftui/contentunavailableview/search.md"
+      }
+    ],
+    "q17-displaying-prices-and-currency": [
+      {
+        "filePath": "pages/documentation/swiftui/text/init(_:format:).md"
+      }
+    ],
+    "q18-formatting-dates-for-display": [
+      {
+        "filePath": "pages/documentation/swiftui/text/init(_:format:).md"
+      }
+    ],
+    "q19-locale-safe-date-display": [
+      {
+        "filePath": "pages/documentation/swiftui/text/init(_:format:).md"
+      }
+    ],
+    "q20-reacting-to-state-changes": [
+      {
+        "filePath": "pages/documentation/swiftui/view/onchange(of:perform:).md"
+      }
+    ],
+    "q21-animating-a-specific-value-change": [
+      {
+        "filePath": "pages/documentation/swiftui/view/animation(_:value:).md"
+      }
+    ],
+    "q22-chaining-sequential-animations": [
+      {
+        "filePath": "pages/documentation/swiftui/withanimation(_:_:).md"
+      }
+    ],
+    "q23-making-a-custom-shape-animatable": [
+      {
+        "filePath": "pages/documentation/swiftui/animatable().md"
+      }
+    ],
+    "q24-sizing-a-view-to-half-the-available-width": [
+      {
+        "filePath": "pages/documentation/swiftui/view/containerrelativeframe(_:alignment:).md"
+      }
+    ],
+    "q25-reading-a-parent-view-s-size": [
+      {
+        "filePath": "pages/documentation/swiftui/view/containerrelativeframe(_:alignment:).md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/view/visualeffect(_:).md"
+      }
+    ],
+    "q26-accessibility-of-an-icon-only-button": [
+      {
+        "filePath": "pages/documentation/swiftui/button/init(_:systemimage:action:).md"
+      }
+    ],
+    "q27-making-an-image-interactive": [
+      {
+        "filePath": "pages/documentation/swiftui/button.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/view/ontapgesture(count:perform:).md"
+      }
+    ],
+    "q28-custom-font-size-that-respects-user-preferences": [
+      {
+        "filePath": "pages/documentation/swiftui/scaledmetric.md"
+      }
+    ],
+    "q29-slider-layout-in-a-form": [
+      {
+        "filePath": "pages/documentation/swiftui/labeledcontent.md"
+      }
+    ],
+    "q30-multiline-text-input-with-placeholder": [
+      {
+        "filePath": "pages/documentation/swiftui/textfield.md"
+      }
+    ],
+    "q31-presenting-a-detail-sheet-from-an-optional": [
+      {
+        "filePath": "pages/documentation/swiftui/view/sheet(item:ondismiss:content:).md"
+      }
+    ],
+    "q32-where-to-attach-a-confirmation-dialog": [
+      {
+        "filePath": "pages/documentation/swiftui/view/confirmationdialog(_:ispresented:titlevisibility:actions:).md"
+      }
+    ],
+    "q33-slow-loading-scrollview-with-many-items": [
+      {
+        "filePath": "pages/documentation/swiftui/lazyvstack.md"
+      }
+    ],
+    "q34-controlling-scroll-indicator-visibility": [
+      {
+        "filePath": "pages/documentation/swiftui/view/scrollindicators(_:axes:).md"
+      }
+    ],
+    "q35-optimizing-scroll-edge-rendering": [
+      {
+        "filePath": "pages/documentation/swiftui/view/scrollcontentbackground(_:).md"
+      }
+    ],
+    "q36-loading-data-when-a-view-appears": [
+      {
+        "filePath": "pages/documentation/swiftui/view/task(name:priority:file:line:_:).md"
+      }
+    ],
+    "q37-expensive-work-in-a-view-initializer": [
+      {
+        "filePath": "pages/documentation/swiftui/view/task(name:priority:file:line:_:).md"
+      }
+    ],
+    "q39-returning-different-view-types-from-a-function": [
+      {
+        "filePath": "pages/documentation/swiftui/viewbuilder.md"
+      }
+    ],
+    "q42-defining-a-custom-environment-value": [
+      {
+        "filePath": "pages/documentation/swiftui/entry().md"
+      }
+    ],
+    "q43-triggering-haptic-feedback": [
+      {
+        "filePath": "pages/documentation/swiftui/view/sensoryfeedback(_:trigger:).md"
+      }
+    ],
+    "q49-foreach-with-index-and-item": [
+      {
+        "filePath": "pages/documentation/swiftui/foreach.md"
+      }
+    ],
+    "q50-avoiding-repeated-id-parameters": [
+      {
+        "filePath": "pages/documentation/swiftui/foreach.md"
+      }
+    ],
+    "q51-displaying-a-web-page-in-swiftui": [
+      {
+        "filePath": "pages/documentation/webkit/webview-swift.struct.md"
+      }
+    ],
+    "q53-displaying-an-icon-next-to-a-label": [
+      {
+        "filePath": "pages/documentation/swiftui/label.md"
+      }
+    ],
+    "q54-large-animations-and-user-sensitivity": [
+      {
+        "filePath": "pages/documentation/swiftui/environmentvalues/accessibilityreducemotion.md"
+      }
+    ],
+    "q56-capturing-a-swiftui-view-as-a-bitmap": [
+      {
+        "filePath": "pages/documentation/swiftui/imagerenderer.md"
+      }
+    ],
+    "q60-overlaying-a-badge-on-an-image": [
+      {
+        "filePath": "pages/documentation/swiftui/view/overlay(alignment:content:).md"
+      }
+    ],
+    "q61-sharing-mutable-state-with-a-child-view": [
+      {
+        "filePath": "pages/documentation/swiftui/binding.md"
+      }
+    ],
+    "q62-setting-up-swiftui-previews": [
+      {
+        "filePath": "pages/documentation/swiftui/previews-in-xcode.md"
+      }
+    ],
+    "q63-menu-with-only-an-icon-label": [
+      {
+        "filePath": "pages/documentation/swiftui/menu.md"
+      }
+    ],
+    "q64-color-only-status-indicators": [
+      {
+        "filePath": "pages/documentation/swiftui/environmentvalues/accessibilitydifferentiatewithoutcolor.md"
+      }
+    ],
+    "q65-type-safe-asset-catalog-references": [
+      {
+        "filePath": "pages/documentation/swiftui/image/init(_:).md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/images.md"
+      }
+    ],
+    "q66-accepting-child-content-in-a-custom-view": [
+      {
+        "filePath": "pages/documentation/swiftui/viewbuilder.md"
+      }
+    ],
+    "q68-handling-errors-from-user-actions": [
+      {
+        "filePath": "pages/documentation/swiftui/view/alert(_:ispresented:presenting:actions:message:).md"
+      }
+    ],
+    "q69-missing-combine-at-runtime": [
+      {
+        "filePath": "pages/documentation/combine/observableobject.md"
+      }
+    ],
+    "q70-subtle-text-hierarchy-with-transparency": [
+      {
+        "filePath": "pages/documentation/swiftui/hierarchicalshapestyle.md"
+      }
+    ],
+    "q71-where-to-attach-an-accessibility-label": [
+      {
+        "filePath": "pages/documentation/swiftui/view/accessibilitylabel(_:).md"
+      }
+    ],
+    "q72-hiding-an-interactive-element-from-voiceover": [
+      {
+        "filePath": "pages/documentation/swiftui/view/accessibilityhidden(_:).md"
+      }
+    ],
+    "q73-mixing-old-and-new-navigation-apis": [
+      {
+        "filePath": "pages/documentation/swiftui/navigationstack.md"
+      }
+    ],
+    "q74-heavy-computation-in-a-view-body": [
+      {
+        "filePath": "pages/documentation/swiftui/view/task(id:name:priority:file:line:_:).md"
+      }
+    ],
+    "q75-calling-async-code-from-a-button": [
+      {
+        "filePath": "pages/documentation/swiftui/button.md"
+      }
+    ]
+  }
+}

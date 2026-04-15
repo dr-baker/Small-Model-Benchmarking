@@ -1,4 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +8,7 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
 const DEFAULT_SOURCE = path.join(REPO_ROOT, 'final-qa-bank.md');
 const DEFAULT_OUTPUT = path.join(REPO_ROOT, 'dataset', 'swiftui-docs-chatbot-benchmark.v1.json');
+const DEFAULT_GOLD_EVIDENCE = path.join(REPO_ROOT, 'rubric', 'gold-evidence.v1.json');
 
 function parseArgs(argv) {
   const args = { source: DEFAULT_SOURCE, out: DEFAULT_OUTPUT, check: false };
@@ -156,7 +158,24 @@ function parseQuestions(markdown) {
   return questions;
 }
 
-function buildDataset(markdown) {
+function mergeGoldEvidence(questions, goldEvidencePath) {
+  let evidenceMap = {};
+  try {
+    const raw = JSON.parse(readFileSync(goldEvidencePath, 'utf8'));
+    evidenceMap = raw.evidence ?? {};
+  } catch {
+    // No gold evidence file — leave all entries empty.
+  }
+
+  for (const question of questions) {
+    question.goldEvidence = evidenceMap[question.id] ?? [];
+  }
+
+  const covered = questions.filter((q) => q.goldEvidence.length > 0).length;
+  return { covered, total: questions.length };
+}
+
+function buildDataset(markdown, goldEvidencePath) {
   const questions = parseQuestions(markdown);
   const questionNumbers = questions.map((question) => question.source.questionNumber);
   const expected = Array.from({ length: questions.length }, (_, index) => index + 1);
@@ -164,6 +183,8 @@ function buildDataset(markdown) {
   if (questionNumbers.some((number, index) => number !== expected[index])) {
     throw new Error('Question numbers are not contiguous starting from 1');
   }
+
+  const { covered, total } = mergeGoldEvidence(questions, goldEvidencePath);
 
   return {
     schemaVersion: 'dataset.v1',
@@ -175,9 +196,9 @@ function buildDataset(markdown) {
       format: 'markdown',
       questionCount: questions.length,
     },
-    goldEvidenceCurationRequired: true,
+    goldEvidenceCurationRequired: covered < total,
     notes:
-      'goldEvidence is intentionally empty in this version. Follow-up curation is required to add frozen-corpus passage anchors before open-book retrieval grading can use this dataset for evidence matching.',
+      `goldEvidence populated for ${covered}/${total} questions from rubric/gold-evidence.v1.json. Questions without corpus docs (Swift language features, Foundation APIs) have empty evidence.`,
     questions,
   };
 }
@@ -185,7 +206,7 @@ function buildDataset(markdown) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const markdown = await readFile(args.source, 'utf8');
-  const dataset = buildDataset(markdown);
+  const dataset = buildDataset(markdown, DEFAULT_GOLD_EVIDENCE);
   const output = `${JSON.stringify(dataset, null, 2)}\n`;
 
   if (args.check) {
