@@ -22,6 +22,96 @@ Keys set in `.env` take priority over `~/.config/pi/auth.json`, so you can use a
 
 Keys can also be set as regular environment variables (`.env` values win if both exist).
 
+## Running the benchmark
+
+Use `benchmark.yaml` as the supported place to configure models and execution behavior.
+
+### Main config knobs
+
+- `transport.kind` — execution path: `openrouter` for direct OpenRouter HTTP, or `pi` for pi SDK sessions
+- `models.candidates` — benchmark model(s) to run
+- `judge.model` — judge model
+- `judge.profile` — inline judge behavior config
+- `runId` — set an explicit value for resumable / idempotent executions
+- `execution.resume` — skip completed runs and continue incomplete executions
+- `execution.stopOnError` — stop on the first recorded run failure, or keep going
+- `batch.size` — number of questions per batch
+- `batch.number` — 1-based batch number, or `auto` to pick the next incomplete batch from existing artifacts
+
+Example:
+
+```yaml
+runId: pilot-v1
+
+transport:
+  kind: openrouter
+  session:
+    compaction: false
+    retry: false
+    maxRetries: 0
+
+models:
+  candidates:
+    - openrouter/anthropic/claude-3.7-sonnet
+    - openrouter/openai/gpt-4.1
+
+judge:
+  model: openrouter/openai/gpt-4.1-mini
+  profile:
+    id: semantic-judge-v1
+    version: 1.0.0
+    description: Corpus-assisted semantic answer judge.
+    toolSetName: read_grep_glob
+    promptTemplateId: judge-answer-v1
+    promptTemplateVersion: v1
+    responseSchemaVersion: judge-verdict.v1
+
+execution:
+  resume: true
+  stopOnError: false
+
+batch:
+  size: 10
+  number: auto
+```
+
+### CLI overrides
+
+CLI flags override config for one-off runs:
+
+```bash
+npm run test:run -- --transport=openrouter --model=openrouter/<candidate-model> --judge-model=openrouter/<judge-model>
+npm run test:run -- --transport=pi
+npm run test:run -- --run-id=pilot-v1 --resume=true --batch-size=10 --batch-number=auto
+npm run test:run -- --run-id=pilot-v1 --resume=true --batch-size=10 --batch-number=2
+npm run test:run -- --question=q01-tab-definition,q03-hierarchical-navigation-setup --mode=open_book
+```
+
+### Resuming and auto batch selection
+
+Each execution writes artifacts under `benchmark-results/` in a stable execution directory derived from `benchmarkName` + `runId`.
+
+- Use an explicit `runId` for resumable/idempotent runs across separate invocations.
+- `runId: auto` is fine for ad-hoc runs, but it creates a fresh execution directory each time.
+- With `--resume=true`, the runner skips runs that already have `grade.json`.
+- If `batch.number` is `auto`, the runner scans the existing artifacts for the current execution directory and selects the first batch that is not fully complete for the current model/mode/question selection.
+
+Typical repeatable command:
+
+```bash
+npm run test:run -- --run-id=pilot-v1 --resume=true --batch-size=10 --batch-number=auto
+```
+
+You can keep rerunning that command and it will advance to the next incomplete batch.
+
+### Costs and failure handling
+
+- Collect and judge stage costs are captured when the upstream provider returns cost metadata.
+- Aggregate summaries roll up collect cost, judge cost, and total cost per model/mode.
+- Providers that do not expose cost metadata still run cleanly; summaries will show cost as unavailable.
+- Empty structured answers are treated as failures instead of silently grading as blank answers.
+- If `execution.stopOnError` is `false`, the runner records failures in artifacts and continues with the rest of the matrix.
+
 ## Overview
 
 Four models were given the same prompt: generate QA pairs for a SwiftUI documentation chatbot benchmark. The benchmark (`swiftui-benchmark-scenarios.md`) defines 70 questions across 42 scenarios, each targeting a specific outdated or incorrect SwiftUI pattern. A good QA response should steer developers toward modern, correct alternatives.
