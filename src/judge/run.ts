@@ -7,10 +7,10 @@ import {
   type DatasetQuestion,
   type JudgeArtifact,
   type JudgeProfile,
-  type JudgeProfileCatalog,
   type JudgeQualitativeScore,
   type JudgeVerdictLabel,
   type ModelRef,
+  type ModelTransportConfig,
   type PromptMessageSnapshot,
   type RunManifest,
 } from "../shared/contracts.js";
@@ -35,12 +35,12 @@ interface ParsedJudgeResponse {
 export interface JudgeRunOptions {
   runDirectory: string;
   datasetPath: string;
-  judgeProfilePath: string;
-  judgeProfileId: string;
+  judgeProfile: JudgeProfile;
   promptTemplatePath: string;
   systemPrompt: string;
   toolSetCatalogPath: string;
-  judgeModelOverride?: ModelRef;
+  transport: ModelTransportConfig;
+  judgeModelOverride: ModelRef;
 }
 
 export interface JudgeRunOutput {
@@ -76,13 +76,6 @@ function rollUpVerdict(r: ParsedJudgeResponse): JudgeVerdictLabel {
   return "partially_correct";
 }
 
-async function loadJudgeProfile(path: string, id: string): Promise<JudgeProfile> {
-  const catalog = await readJsonFile<JudgeProfileCatalog>(path);
-  const profile = catalog.profiles.find((c) => c.id === id);
-  if (!profile) throw new Error(`Unknown judge profile: ${id}`);
-  return profile;
-}
-
 async function renderJudgePromptMessages(question: DatasetQuestion, answer: BenchmarkAnswerResponse, promptTemplatePath: string): Promise<PromptMessageSnapshot[]> {
   const template = await readFile(promptTemplatePath, "utf8");
   const evidenceBlock = answer.mode === "open_book"
@@ -113,14 +106,14 @@ async function renderJudgePrompt(question: DatasetQuestion, answer: BenchmarkAns
 
 function createSkippedArtifact(params: {
   runId: string; questionId: string; judgedAt: string;
-  judgeProfile: JudgeProfile; judgeModel: ModelRef; answerSha256: string;
+  judgeProfile: JudgeProfile; judgeModel: ModelRef; judgeTransport: ModelTransportConfig; answerSha256: string;
   skipReason: string; notes: string[]; elapsedMs: number; toolSet: RunManifest["toolSet"]; systemPrompt: string;
 }): JudgeArtifact {
   return {
     schemaVersion: JUDGE_VERDICT_SCHEMA_VERSION, runId: params.runId, questionId: params.questionId,
     status: "skipped", judgedAt: params.judgedAt,
     judgeProfileId: params.judgeProfile.id, judgeProfileVersion: params.judgeProfile.version,
-    judgeModel: params.judgeModel, toolSet: params.toolSet,
+    judgeModel: params.judgeModel, judgeTransport: params.judgeTransport, toolSet: params.toolSet,
     promptTemplateId: params.judgeProfile.promptTemplateId, promptTemplateVersion: params.judgeProfile.promptTemplateVersion,
     answerSha256: params.answerSha256,
     prompt: { systemPrompt: params.systemPrompt, userPrompt: "", availableTools: [] },
@@ -139,14 +132,14 @@ export async function judgeRun(options: JudgeRunOptions): Promise<JudgeRunOutput
   const questionId = manifest.questionId ?? "unknown";
   const runId = manifest.runId ?? "unknown";
   const question = dataset.questions.find((c) => c.id === questionId);
-  const judgeProfile = await loadJudgeProfile(options.judgeProfilePath, options.judgeProfileId);
-  const effectiveJudgeModel = options.judgeModelOverride ?? judgeProfile.model;
+  const judgeProfile = options.judgeProfile;
+  const effectiveJudgeModel = options.judgeModelOverride;
   const systemPrompt = options.systemPrompt;
   const answerSha256 = sha256(serializeJson(normalizedAnswer));
   const judgeToolSet = await loadToolSetDefinition(options.toolSetCatalogPath, judgeProfile.toolSetName);
 
   const skip = (reason: string, notes: string[]) => createSkippedArtifact({
-    runId, questionId, judgedAt, judgeProfile, judgeModel: effectiveJudgeModel,
+    runId, questionId, judgedAt, judgeProfile, judgeModel: effectiveJudgeModel, judgeTransport: options.transport,
     answerSha256, skipReason: reason, notes, elapsedMs: Date.now() - startedAt, toolSet: judgeToolSet, systemPrompt,
   });
 
@@ -165,6 +158,7 @@ export async function judgeRun(options: JudgeRunOptions): Promise<JudgeRunOutput
 
   const llmResult = await runLlmClient({
     model: effectiveJudgeModel,
+    transport: options.transport,
     messages: promptMessages,
     tools,
     responseFormat: buildJudgeVerdictResponseFormat(),
@@ -186,7 +180,7 @@ export async function judgeRun(options: JudgeRunOptions): Promise<JudgeRunOutput
     status: !hasError && scored ? "scored" : "error",
     judgedAt,
     judgeProfileId: judgeProfile.id, judgeProfileVersion: judgeProfile.version,
-    judgeModel: effectiveJudgeModel, toolSet: judgeToolSet,
+    judgeModel: effectiveJudgeModel, judgeTransport: options.transport, toolSet: judgeToolSet,
     promptTemplateId: judgeProfile.promptTemplateId, promptTemplateVersion: judgeProfile.promptTemplateVersion,
     answerSha256,
     prompt: { systemPrompt, userPrompt, messages: promptMessages, availableTools: tools.map((t) => ({ name: t.name, description: t.description })) },
@@ -197,7 +191,10 @@ export async function judgeRun(options: JudgeRunOptions): Promise<JudgeRunOutput
     ...(!scored || hasError ? { error: llmResult.error ?? toJsonValue(parsed) } : {}),
     elapsedMs: Date.now() - startedAt,
     notes: [
-      "Corpus-assisted qualitative judgment.", "Structured output enforced via response_format.",
+      "Corpus-assisted qualitative judgment.",
+      options.transport.kind === "openrouter"
+        ? "Structured output enforced via response_format."
+        : "Pi SDK transport used prompt-level schema enforcement (no response_format support).",
       ...(hasError ? ["Judge model call failed."] : []),
       ...(scored ? [] : [`Judge output parse failure: ${(parsed as { parseError: string }).parseError}`]),
     ],

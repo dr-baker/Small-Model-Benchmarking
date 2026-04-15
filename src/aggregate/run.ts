@@ -25,6 +25,7 @@ interface SummaryAccumulator {
   model: RunManifest["model"];
   mode: BenchmarkMode;
   toolSet: ToolSetDefinition;
+  transport: RunManifest["transport"];
   runs: number;
   answerScoreTotal: number;
   groundedRuns: number;
@@ -47,7 +48,7 @@ interface SummaryAccumulator {
 }
 
 function summaryKey(manifest: RunManifest): string {
-  return [manifest.model.provider, manifest.model.modelId, manifest.mode, manifest.toolSet.name, manifest.toolSet.version].join("::");
+  return [manifest.model.provider, manifest.model.modelId, manifest.transport.kind, manifest.mode, manifest.toolSet.name, manifest.toolSet.version].join("::");
 }
 
 function getSharedBenchmarkDirectory(runDirectories: string[]): string {
@@ -80,6 +81,7 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
       model: manifest.model,
       mode: manifest.mode,
       toolSet: manifest.toolSet,
+      transport: manifest.transport,
       runs: 0,
       answerScoreTotal: 0,
       groundedRuns: 0,
@@ -146,6 +148,7 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
       model: accumulator.model,
       mode: accumulator.mode,
       toolSet: accumulator.toolSet,
+      transport: accumulator.transport,
       runs: accumulator.runs,
       meanAnswerScore: accumulator.runs === 0 ? 0 : accumulator.answerScoreTotal / accumulator.runs,
       ...(accumulator.groundedRuns === 0

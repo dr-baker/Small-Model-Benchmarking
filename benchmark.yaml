@@ -4,17 +4,35 @@
 benchmarkName: swiftui-docs-chatbot-benchmark
 runId: auto                      # Supported execution id location. Set an explicit value for resumable / idempotent runs.
 
-# Supported model configuration location (CLI --model / --judge-model override these)
+# Model execution path: direct OpenRouter HTTP or pi SDK sessions
+transport:
+  kind: openrouter               # openrouter | pi
+  session:
+    compaction: false
+    retry: false
+    maxRetries: 0
+
+# Candidate benchmark models
 models:
   candidates:
     - openrouter/openai/gpt-oss-120b:nitro
-  judge: null                    # null = use judge profile's model
+
+# Judge configuration
+judge:
+  model: openrouter/openai/gpt-oss-120b:nitro
+  profile:
+    id: semantic-judge-v1
+    version: 1.0.0
+    description: Corpus-assisted semantic answer judge that evaluates the candidate answer against the benchmark question.
+    toolSetName: read_grep_glob
+    promptTemplateId: judge-answer-v1
+    promptTemplateVersion: v1
+    responseSchemaVersion: judge-verdict.v1
 
 # Paths
 paths:
   dataset: dataset/swiftui-docs-chatbot-benchmark.v1.json
   toolSets: tool-sets/tool-sets.v1.json
-  judgeProfiles: judges/judge-profiles.v1.json
   rubric: rubric/rubric.v1.json
   promptTemplates:
     benchmark-answer-v1: prompts/benchmark-answer-v1.md
@@ -26,15 +44,6 @@ corpus:
   rootDir: corpus/swift-docs-2026-04-10/swiftui-macos-corpus
   manifestPath: corpus/swift-docs-2026-04-10/manifest.json
   manifestSha256: d71285e0
-
-# Judge
-judgeProfileId: semantic-judge-v1
-
-# Pi session behavior
-session:
-  compaction: false
-  retry: false
-  maxRetries: 0
 
 # Execution controls
 execution:

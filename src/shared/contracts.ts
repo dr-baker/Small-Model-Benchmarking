@@ -19,6 +19,19 @@ export interface ModelRef {
   snapshot?: string;
 }
 
+export interface SessionConfig {
+  compaction: boolean;
+  retry: boolean;
+  maxRetries: number;
+}
+
+export type TransportKind = "openrouter" | "pi";
+
+export interface ModelTransportConfig {
+  kind: TransportKind;
+  session?: SessionConfig;
+}
+
 export interface CorpusSnapshotRef {
   snapshotId: string;
   rootDir: string;
@@ -67,6 +80,7 @@ export interface CollectRunInput {
   executionDirectory: string;
   benchmarkName: string;
   model: ModelRef;
+  transport: ModelTransportConfig;
   mode: BenchmarkMode;
   toolSet: ToolSetDefinition;
   promptTemplateId: PromptTemplateId;
@@ -125,16 +139,10 @@ export interface JudgeProfile {
   id: string;
   version: string;
   description: string;
-  model: ModelRef;
   toolSetName: ToolSetName;
   promptTemplateId: JudgePromptTemplateId;
   promptTemplateVersion: string;
   responseSchemaVersion: typeof JUDGE_VERDICT_SCHEMA_VERSION;
-}
-
-export interface JudgeProfileCatalog {
-  version: string;
-  profiles: JudgeProfile[];
 }
 
 export interface TraceEventRecord {
@@ -174,6 +182,7 @@ export interface RunManifest {
   createdAt: string;
   piSdkVersion: string;
   model: ModelRef;
+  transport: ModelTransportConfig;
   mode: BenchmarkMode;
   toolSet: ToolSetDefinition;
   promptTemplateId: PromptTemplateId;
@@ -240,6 +249,7 @@ export interface JudgeArtifact {
   judgeProfileId: string;
   judgeProfileVersion: string;
   judgeModel: ModelRef;
+  judgeTransport: ModelTransportConfig;
   toolSet: ToolSetDefinition;
   promptTemplateId: JudgePromptTemplateId;
   promptTemplateVersion: string;
@@ -302,6 +312,7 @@ export interface AggregateModelSummary {
   model: ModelRef;
   mode: BenchmarkMode;
   toolSet: ToolSetDefinition;
+  transport: ModelTransportConfig;
   runs: number;
   meanAnswerScore: number;
   groundedRate?: number;

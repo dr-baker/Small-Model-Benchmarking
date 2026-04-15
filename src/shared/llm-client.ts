@@ -1,7 +1,18 @@
-import type { ModelRef, PromptMessageSnapshot, ToolInvocationTrace, TraceEventRecord } from "./contracts.js";
+import type { ModelRef, ModelTransportConfig, PromptMessageSnapshot, ToolInvocationTrace, TraceEventRecord } from "./contracts.js";
 import type { JsonValue } from "./json.js";
 import type { OpenRouterResponseFormat } from "./response-schemas.js";
 import { toJsonValue } from "./json.js";
+import { getModel } from "@mariozechner/pi-ai";
+import {
+  AuthStorage,
+  createAgentSession,
+  createExtensionRuntime,
+  ModelRegistry,
+  SessionManager,
+  SettingsManager,
+  type AgentSessionEvent,
+} from "@mariozechner/pi-coding-agent";
+import { applyEnvApiKeyOverrides } from "./env-api-keys.js";
 
 interface ToolLike {
   name: string;
@@ -15,6 +26,7 @@ export interface LlmClientMessage extends PromptMessageSnapshot {}
 
 export interface LlmClientConfig {
   model: ModelRef;
+  transport: ModelTransportConfig;
   systemPrompt?: string;
   userPrompt?: string;
   messages?: LlmClientMessage[];
@@ -35,6 +47,16 @@ export interface LlmClientResult {
   elapsedMs: number;
 }
 
+export interface LlmClientDeps {
+  fetchImpl?: typeof fetch;
+  createAgentSessionImpl?: typeof createAgentSession;
+  createAuthStorage?: () => AuthStorage;
+  createModelRegistry?: (authStorage: AuthStorage) => ModelRegistry;
+  createSessionManager?: () => SessionManager;
+  createSettingsManager?: (transport: ModelTransportConfig) => SettingsManager;
+  resolvePiModel?: (model: ModelRef, modelRegistry: ModelRegistry) => unknown;
+}
+
 function resolveMessages(config: LlmClientConfig): ChatMessage[] {
   if (config.messages && config.messages.length > 0) {
     return config.messages.map((message) => ({ role: message.role, content: message.content }));
@@ -52,9 +74,6 @@ function resolveMessages(config: LlmClientConfig): ChatMessage[] {
 
 const PROVIDER_BASE_URLS: Record<string, string> = {
   openrouter: "https://openrouter.ai/api/v1",
-  openai: "https://api.openai.com/v1",
-  anthropic: "https://api.anthropic.com/v1",
-  google: "https://generativelanguage.googleapis.com/v1beta",
 };
 
 function agentToolsToOpenAITools(tools: readonly unknown[]) {
@@ -139,7 +158,74 @@ function failTool(
   });
 }
 
-export async function runLlmClient(config: LlmClientConfig): Promise<LlmClientResult> {
+function buildUserPrompt(messages: ChatMessage[]): { systemPrompt: string; userPrompt: string } {
+  const systemParts = messages.filter((message) => message.role === "system").map((message) => message.content ?? "");
+  const nonSystemParts = messages
+    .filter((message) => message.role !== "system")
+    .map((message) => `${message.role.toUpperCase()}\n${message.content ?? ""}`.trim())
+    .filter((part) => part.length > 0);
+
+  return {
+    systemPrompt: systemParts.join("\n\n").trim(),
+    userPrompt: nonSystemParts.join("\n\n").trim(),
+  };
+}
+
+function extractAssistantText(message: unknown): string | undefined {
+  if (!message || typeof message !== "object") return undefined;
+  const content = (message as { content?: unknown }).content;
+  if (!Array.isArray(content)) return undefined;
+  const text = content
+    .filter((part): part is { type: string; text?: string } => Boolean(part) && typeof part === "object" && "type" in part)
+    .filter((part) => part.type === "text" && typeof part.text === "string")
+    .map((part) => part.text ?? "")
+    .join("");
+  return text.length > 0 ? text : undefined;
+}
+
+function buildPiUsageSummary(message: unknown): JsonValue | undefined {
+  if (!message || typeof message !== "object") return undefined;
+  const usage = (message as { usage?: unknown }).usage as {
+    input?: number;
+    output?: number;
+    totalTokens?: number;
+    cost?: { total?: number };
+  } | undefined;
+  if (!usage) return undefined;
+  const promptTokens = usage.input ?? 0;
+  const completionTokens = usage.output ?? 0;
+  const totalTokens = usage.totalTokens ?? promptTokens + completionTokens;
+  const totalCost = usage.cost?.total;
+  if (promptTokens === 0 && completionTokens === 0 && totalCost === undefined) return undefined;
+  return toJsonValue({
+    prompt_tokens: promptTokens,
+    completion_tokens: completionTokens,
+    total_tokens: totalTokens,
+    ...(typeof totalCost === "number" ? { cost: totalCost } : {}),
+  });
+}
+
+function buildPiSettingsManager(transport: ModelTransportConfig): SettingsManager {
+  const session = transport.session ?? { compaction: false, retry: false, maxRetries: 0 };
+  return SettingsManager.inMemory({
+    compaction: { enabled: session.compaction },
+    retry: { enabled: session.retry, maxRetries: session.maxRetries },
+  });
+}
+
+function defaultResolvePiModel(model: ModelRef, modelRegistry: ModelRegistry): unknown {
+  const fromRegistry = modelRegistry.find(model.provider, model.modelId);
+  if (fromRegistry) return fromRegistry;
+  try {
+    const builtin = (getModel as unknown as (provider: string, modelId: string) => unknown)(model.provider, model.modelId);
+    if (builtin) return builtin;
+  } catch {
+    // ignore and throw a clearer error below
+  }
+  throw new Error(`Pi transport could not resolve model ${model.provider}/${model.modelId}. Add it to pi's models registry or use transport.kind=openrouter.`);
+}
+
+async function runOpenRouterClient(config: LlmClientConfig, deps: LlmClientDeps = {}): Promise<LlmClientResult> {
   const startedAt = Date.now();
   const maxRounds = config.maxRounds ?? 30;
   const events: TraceEventRecord[] = [];
@@ -148,6 +234,10 @@ export async function runLlmClient(config: LlmClientConfig): Promise<LlmClientRe
   let completionTokens = 0;
   let totalCostUsd = 0;
   let hasTrackedCost = false;
+
+  if (config.model.provider !== "openrouter") {
+    throw new Error(`transport.kind=openrouter requires openrouter/* model refs. Received ${config.model.provider}/${config.model.modelId}`);
+  }
 
   if (!config.apiKey) {
     return {
@@ -162,7 +252,8 @@ export async function runLlmClient(config: LlmClientConfig): Promise<LlmClientRe
     };
   }
 
-  const baseUrl = PROVIDER_BASE_URLS[config.model.provider] ?? "https://openrouter.ai/api/v1";
+  const fetchImpl = deps.fetchImpl ?? fetch;
+  const baseUrl = PROVIDER_BASE_URLS.openrouter;
   const url = `${baseUrl}/chat/completions`;
   const headers: Record<string, string> = {
     Authorization: `Bearer ${config.apiKey}`,
@@ -172,12 +263,11 @@ export async function runLlmClient(config: LlmClientConfig): Promise<LlmClientRe
   };
 
   const messages: ChatMessage[] = resolveMessages(config);
-
   const openaiTools = config.tools.length > 0 ? agentToolsToOpenAITools(config.tools) : undefined;
-  const toolMap = new Map<string, unknown>(config.tools.map((r) => [(r as ToolLike).name, r]));
+  const toolMap = new Map<string, unknown>(config.tools.map((raw) => [(raw as ToolLike).name, raw]));
 
   try {
-    for (let round = 0; round <= maxRounds; round++) {
+    for (let round = 0; round <= maxRounds; round += 1) {
       const body: Record<string, unknown> = { model: config.model.modelId, messages };
       if (openaiTools) body.tools = openaiTools;
       if (config.responseFormat) body.response_format = config.responseFormat;
@@ -185,10 +275,10 @@ export async function runLlmClient(config: LlmClientConfig): Promise<LlmClientRe
       events.push({
         observedAt: new Date().toISOString(),
         eventType: "llm_request",
-        payload: toJsonValue({ round, model: config.model.modelId }),
+        payload: toJsonValue({ round, model: config.model.modelId, transport: config.transport.kind }),
       });
 
-      const response = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
+      const response = await fetchImpl(url, { method: "POST", headers, body: JSON.stringify(body) });
       if (!response.ok) {
         const errorText = await response.text().catch(() => "unknown error");
         throw new Error(`API error ${response.status}: ${errorText}`);
@@ -266,6 +356,11 @@ export async function runLlmClient(config: LlmClientConfig): Promise<LlmClientRe
         try {
           const result = await tool.execute(toolCallId, resolvedArgs, undefined, (partial) => {
             invocation.updates.push(toJsonValue(partial));
+            events.push({
+              observedAt: new Date().toISOString(),
+              eventType: "tool_execution_update",
+              payload: toJsonValue({ toolCallId, toolName, args, partialResult: partial }),
+            });
           });
           const resultText = result.content
             .filter((block): block is { type: "text"; text: string } => block.type === "text")
@@ -292,4 +387,127 @@ export async function runLlmClient(config: LlmClientConfig): Promise<LlmClientRe
       elapsedMs: Date.now() - startedAt,
     };
   }
+}
+
+async function runPiSessionClient(config: LlmClientConfig, deps: LlmClientDeps = {}): Promise<LlmClientResult> {
+  const startedAt = Date.now();
+  const toolInvocations: ToolInvocationTrace[] = [];
+  const events: TraceEventRecord[] = [];
+  const createSession = deps.createAgentSessionImpl ?? createAgentSession;
+
+  try {
+    const messages = resolveMessages(config);
+    const { systemPrompt, userPrompt } = buildUserPrompt(messages);
+    const authStorage = deps.createAuthStorage?.() ?? AuthStorage.create();
+    applyEnvApiKeyOverrides(authStorage);
+    const modelRegistry = deps.createModelRegistry?.(authStorage) ?? ModelRegistry.create(authStorage);
+    const model = (deps.resolvePiModel ?? defaultResolvePiModel)(config.model, modelRegistry);
+    const settingsManager = deps.createSettingsManager?.(config.transport) ?? buildPiSettingsManager(config.transport);
+    const sessionManager = deps.createSessionManager?.() ?? SessionManager.inMemory(process.cwd());
+
+    const resourceLoader = {
+      getExtensions: () => ({ extensions: [], errors: [], runtime: createExtensionRuntime() }),
+      getSkills: () => ({ skills: [], diagnostics: [] }),
+      getPrompts: () => ({ prompts: [], diagnostics: [] }),
+      getThemes: () => ({ themes: [], diagnostics: [] }),
+      getAgentsFiles: () => ({ agentsFiles: [] }),
+      getSystemPrompt: () => systemPrompt,
+      getAppendSystemPrompt: () => [],
+      extendResources: () => {},
+      reload: async () => {},
+    };
+
+    const { session } = await createSession({
+      cwd: process.cwd(),
+      model: model as never,
+      thinkingLevel: "off",
+      authStorage,
+      modelRegistry,
+      resourceLoader,
+      tools: config.tools as never,
+      sessionManager,
+      settingsManager,
+    });
+
+    const toolInvocationMap = new Map<string, ToolInvocationTrace>();
+    const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
+      events.push({
+        observedAt: new Date().toISOString(),
+        eventType: event.type,
+        payload: toJsonValue(event as unknown as Record<string, unknown>),
+      });
+
+      if (event.type === "tool_execution_start") {
+        const invocation: ToolInvocationTrace = {
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          args: toJsonValue(event.args),
+          startedAt: new Date().toISOString(),
+          updates: [],
+        };
+        toolInvocationMap.set(event.toolCallId, invocation);
+        toolInvocations.push(invocation);
+      } else if (event.type === "tool_execution_update") {
+        const invocation = toolInvocationMap.get(event.toolCallId);
+        invocation?.updates.push(toJsonValue(event.partialResult));
+      } else if (event.type === "tool_execution_end") {
+        const invocation = toolInvocationMap.get(event.toolCallId);
+        if (invocation) {
+          invocation.finishedAt = new Date().toISOString();
+          invocation.isError = event.isError;
+          invocation.result = toJsonValue(event.result);
+        }
+      }
+    });
+
+    await session.prompt(userPrompt.length > 0 ? userPrompt : config.userPrompt ?? "");
+    unsubscribe();
+
+    const assistantMessages = session.state.messages.filter((message) => {
+      return Boolean(message) && typeof message === "object" && (message as { role?: string }).role === "assistant";
+    });
+    const finalAssistantMessage = assistantMessages.at(-1);
+    const finalText = extractAssistantText(finalAssistantMessage);
+    const usage = buildPiUsageSummary(finalAssistantMessage);
+    const costUsd = (() => {
+      if (!finalAssistantMessage || typeof finalAssistantMessage !== "object") return undefined;
+      const usage = (finalAssistantMessage as { usage?: { cost?: { total?: number } } }).usage;
+      return usage?.cost?.total;
+    })();
+    const stopReason = finalAssistantMessage && typeof finalAssistantMessage === "object"
+      ? (finalAssistantMessage as { stopReason?: string }).stopReason
+      : undefined;
+    const errorMessage = finalAssistantMessage && typeof finalAssistantMessage === "object"
+      ? (finalAssistantMessage as { errorMessage?: string }).errorMessage
+      : undefined;
+
+    return {
+      finalText,
+      finalAssistantMessage: finalAssistantMessage !== undefined ? toJsonValue(finalAssistantMessage) : undefined,
+      usage,
+      costUsd,
+      toolInvocations,
+      events,
+      error: stopReason === "error" ? toJsonValue(new Error(errorMessage ?? "Pi session returned an error")) : undefined,
+      elapsedMs: Date.now() - startedAt,
+    };
+  } catch (error) {
+    return {
+      finalText: undefined,
+      finalAssistantMessage: undefined,
+      usage: undefined,
+      costUsd: undefined,
+      toolInvocations,
+      events,
+      error: toJsonValue(error),
+      elapsedMs: Date.now() - startedAt,
+    };
+  }
+}
+
+export async function runLlmClient(config: LlmClientConfig, deps: LlmClientDeps = {}): Promise<LlmClientResult> {
+  if (config.transport.kind === "openrouter") {
+    return runOpenRouterClient(config, deps);
+  }
+  return runPiSessionClient(config, deps);
 }

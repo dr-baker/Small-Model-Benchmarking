@@ -23,6 +23,7 @@ const REPO_ROOT = resolve(import.meta.dirname ?? ".", "..");
 interface CliArgs {
   model?: string;
   judgeModel?: string;
+  transport?: "openrouter" | "pi";
   questionIds?: string[];
   modes?: string[];
   runId?: string;
@@ -68,6 +69,11 @@ function parseCliArgs(argv: string[]): CliArgs {
     if (arg.startsWith("--model=")) result.model = arg.split("=")[1];
     else if (arg.startsWith("--judge-model=")) result.judgeModel = arg.split("=")[1];
     else if (arg.startsWith("--question=")) result.questionIds = parseCsv(arg.split("=")[1] ?? "");
+    else if (arg.startsWith("--transport=")) {
+      const transport = arg.split("=")[1];
+      if (transport !== "openrouter" && transport !== "pi") throw new Error("--transport must be openrouter or pi");
+      result.transport = transport;
+    }
     else if (arg.startsWith("--mode=")) result.modes = parseCsv(arg.split("=")[1] ?? "");
     else if (arg.startsWith("--run-id=")) result.runId = arg.split("=")[1];
     else if (arg.startsWith("--batch-size=")) result.batchSize = parsePositiveInteger(arg.split("=")[1] ?? "", "--batch-size");
@@ -201,9 +207,10 @@ async function main() {
   const candidateModels = cli.model
     ? [parseModelRefFromString(cli.model)]
     : getCandidateModelRefs(config);
-  const judgeModelRef: ModelRef | undefined = cli.judgeModel
+  const judgeModelRef: ModelRef = cli.judgeModel
     ? parseModelRefFromString(cli.judgeModel)
-    : getJudgeModelRef(config) ?? undefined;
+    : getJudgeModelRef(config);
+  const transport = cli.transport ? { ...config.transport, kind: cli.transport } : config.transport;
 
   if (executionResume && effectiveRunId === "auto") {
     console.warn("Warning: execution.resume=true with runId=auto only resumes within this invocation. Set an explicit runId for resumable/idempotent batches across invocations.");
@@ -275,6 +282,7 @@ async function main() {
             executionDirectory,
             benchmarkName: config.benchmarkName,
             model: modelRef,
+            transport,
             mode,
             toolSet,
             promptTemplateId: "benchmark-answer-v1",
@@ -301,12 +309,12 @@ async function main() {
           const judgeOutput = await judgeRun({
             runDirectory,
             datasetPath: config.paths.dataset,
-            judgeProfilePath: config.paths.judgeProfiles,
-            judgeProfileId: config.judgeProfileId,
+            judgeProfile: config.judge.profile,
             promptTemplatePath: getPromptTemplatePath(config, "judge-answer-v1"),
             systemPrompt: config.systemPrompts.judge,
             toolSetCatalogPath: config.paths.toolSets,
-            ...(judgeModelRef ? { judgeModelOverride: judgeModelRef } : {}),
+            transport,
+            judgeModelOverride: judgeModelRef,
           });
           judgeHadError = judgeOutput.artifact.status === "error";
         } else {
@@ -373,7 +381,7 @@ async function main() {
         + ` | Explanation: ${summary.judge.meanExplanation.toFixed(1)}`
         + ` | DeprecatedRate: ${(summary.judge.recommendsDeprecatedPatternRate * 100).toFixed(0)}%`
       : " | Judge: (no scored runs)";
-    console.log(`- ${summary.model.provider}/${summary.model.modelId} | ${summary.mode} | ${gradeLine}${groundedLine}${mrrLine}${costLine}${judgeLine}`);
+    console.log(`- ${summary.model.provider}/${summary.model.modelId} | ${summary.mode} | transport=${summary.transport.kind} | ${gradeLine}${groundedLine}${mrrLine}${costLine}${judgeLine}`);
   }
 
   if (observedErrors) {

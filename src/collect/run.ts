@@ -96,6 +96,7 @@ export async function runCollect(input: CollectRunInput): Promise<CollectRunOutp
 
   const llmResult = await runLlmClient({
     model: input.model,
+    transport: input.transport,
     messages: promptMessages,
     tools,
     responseFormat: buildAnswerResponseFormat(),
@@ -132,6 +133,7 @@ export async function runCollect(input: CollectRunInput): Promise<CollectRunOutp
     createdAt,
     piSdkVersion,
     model: input.model,
+    transport: input.transport,
     mode: input.mode,
     toolSet: input.toolSet,
     promptTemplateId: input.promptTemplateId,

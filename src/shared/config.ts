@@ -2,7 +2,17 @@ import { readFile } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
-import type { BenchmarkMode, ModelRef, PromptTemplateId, JudgePromptTemplateId, ToolSetName, CorpusSnapshotRef } from "./contracts.js";
+import type {
+  BenchmarkMode,
+  ModelRef,
+  PromptTemplateId,
+  JudgePromptTemplateId,
+  ToolSetName,
+  CorpusSnapshotRef,
+  JudgeProfile,
+  ModelTransportConfig,
+  SessionConfig,
+} from "./contracts.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -10,15 +20,8 @@ const REPO_ROOT = resolve(__dirname, "../..");
 
 const DEFAULT_CONFIG_PATH = resolve(REPO_ROOT, "benchmark.yaml");
 
-export interface SessionConfig {
-  compaction: boolean;
-  retry: boolean;
-  maxRetries: number;
-}
-
 export interface BenchmarkModelConfig {
   candidates: string[];
-  judge: string | null;
 }
 
 export interface BenchmarkExecutionConfig {
@@ -36,17 +39,19 @@ export interface BenchmarkBatchConfig {
 export interface BenchmarkConfig {
   benchmarkName: string;
   runId: string; // "auto" or explicit execution id
+  transport: ModelTransportConfig;
   models: BenchmarkModelConfig;
+  judge: {
+    model: string;
+    profile: JudgeProfile;
+  };
   paths: {
     dataset: string;
     toolSets: string;
-    judgeProfiles: string;
     rubric: string;
     promptTemplates: Record<string, string>;
   };
   corpus: CorpusSnapshotRef;
-  judgeProfileId: string;
-  session: SessionConfig;
   execution: BenchmarkExecutionConfig;
   batch: BenchmarkBatchConfig;
   systemPrompts: {
@@ -83,25 +88,48 @@ function validateConfig(raw: unknown): asserts raw is BenchmarkConfig {
 
   if (!c.models || typeof c.models !== "object") throw new Error("Missing models");
   const models = c.models as Record<string, unknown>;
+  if (!c.transport || typeof c.transport !== "object") throw new Error("Missing transport");
+  const transport = c.transport as Record<string, unknown>;
+  if (transport.kind !== "openrouter" && transport.kind !== "pi") {
+    throw new Error("transport.kind must be 'openrouter' or 'pi'");
+  }
+  if (transport.kind === "pi") {
+    if (!transport.session || typeof transport.session !== "object") {
+      throw new Error("transport.session must be provided for transport.kind='pi'");
+    }
+    const session = transport.session as Record<string, unknown>;
+    if (typeof session.compaction !== "boolean") throw new Error("transport.session.compaction must be boolean");
+    if (typeof session.retry !== "boolean") throw new Error("transport.session.retry must be boolean");
+    if (!isPositiveInteger(session.maxRetries) && session.maxRetries !== 0) {
+      throw new Error("transport.session.maxRetries must be a non-negative integer");
+    }
+  }
+
   if (!isStringArray(models.candidates) || models.candidates.length === 0) {
     throw new Error("models.candidates must be a non-empty array of provider/model strings");
   }
-  if (!(models.judge === null || typeof models.judge === "string")) {
-    throw new Error("models.judge must be null or a provider/model string");
-  }
+
+  if (!c.judge || typeof c.judge !== "object") throw new Error("Missing judge");
+  const judge = c.judge as Record<string, unknown>;
+  if (typeof judge.model !== "string") throw new Error("judge.model must be a provider/model string");
+  if (!judge.profile || typeof judge.profile !== "object") throw new Error("Missing judge.profile");
+  const profile = judge.profile as Record<string, unknown>;
+  if (typeof profile.id !== "string") throw new Error("judge.profile.id must be a string");
+  if (typeof profile.version !== "string") throw new Error("judge.profile.version must be a string");
+  if (typeof profile.description !== "string") throw new Error("judge.profile.description must be a string");
+  if (typeof profile.toolSetName !== "string") throw new Error("judge.profile.toolSetName must be a string");
+  if (typeof profile.promptTemplateId !== "string") throw new Error("judge.profile.promptTemplateId must be a string");
+  if (typeof profile.promptTemplateVersion !== "string") throw new Error("judge.profile.promptTemplateVersion must be a string");
+  if (profile.responseSchemaVersion !== "judge-verdict.v1") throw new Error("judge.profile.responseSchemaVersion must be 'judge-verdict.v1'");
 
   if (!c.paths || typeof c.paths !== "object") throw new Error("Missing paths");
   const paths = c.paths as Record<string, unknown>;
   if (typeof paths.dataset !== "string") throw new Error("Missing paths.dataset");
   if (typeof paths.toolSets !== "string") throw new Error("Missing paths.toolSets");
-  if (typeof paths.judgeProfiles !== "string") throw new Error("Missing paths.judgeProfiles");
   if (typeof paths.rubric !== "string") throw new Error("Missing paths.rubric");
   if (!paths.promptTemplates || typeof paths.promptTemplates !== "object") throw new Error("Missing paths.promptTemplates");
 
   if (!c.corpus || typeof c.corpus !== "object") throw new Error("Missing corpus");
-  if (typeof c.judgeProfileId !== "string") throw new Error("Missing judgeProfileId");
-
-  if (!c.session || typeof c.session !== "object") throw new Error("Missing session");
   if (!c.execution || typeof c.execution !== "object") throw new Error("Missing execution");
   const execution = c.execution as Record<string, unknown>;
   if (typeof execution.resume !== "boolean") throw new Error("execution.resume must be boolean");
@@ -134,7 +162,6 @@ export function resolvePaths(config: BenchmarkConfig): BenchmarkConfig {
     paths: {
       dataset: resolvePath(config.paths.dataset),
       toolSets: resolvePath(config.paths.toolSets),
-      judgeProfiles: resolvePath(config.paths.judgeProfiles),
       rubric: resolvePath(config.paths.rubric),
       promptTemplates: Object.fromEntries(
         Object.entries(config.paths.promptTemplates).map(([k, v]) => [k, resolvePath(v)]),
@@ -169,7 +196,6 @@ export function getCandidateModelRefs(config: BenchmarkConfig): ModelRef[] {
   return config.models.candidates.map(parseModelRef);
 }
 
-export function getJudgeModelRef(config: BenchmarkConfig): ModelRef | null {
-  if (!config.models.judge) return null;
-  return parseModelRef(config.models.judge);
+export function getJudgeModelRef(config: BenchmarkConfig): ModelRef {
+  return parseModelRef(config.judge.model);
 }
