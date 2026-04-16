@@ -143,6 +143,7 @@ function parseQuestions(markdown) {
       referenceAnswer: answer,
       pitfall,
       taxonomyTags: inferTaxonomyTags(title, question, pitfall),
+      questionType: 'best_practice',
       goldEvidence: [],
       source: {
         file: 'final-qa-bank.md',
@@ -158,6 +159,10 @@ function parseQuestions(markdown) {
   return questions;
 }
 
+function classifyQuestionType(question) {
+  return question.goldEvidence.length > 0 ? 'corpus_backed' : 'best_practice';
+}
+
 function mergeGoldEvidence(questions, goldEvidencePath) {
   let evidenceMap = {};
   try {
@@ -169,6 +174,7 @@ function mergeGoldEvidence(questions, goldEvidencePath) {
 
   for (const question of questions) {
     question.goldEvidence = evidenceMap[question.id] ?? [];
+    question.questionType = classifyQuestionType(question);
   }
 
   const covered = questions.filter((q) => q.goldEvidence.length > 0).length;
@@ -198,7 +204,7 @@ function buildDataset(markdown, goldEvidencePath) {
     },
     goldEvidenceCurationRequired: covered < total,
     notes:
-      `goldEvidence populated for ${covered}/${total} questions from rubric/gold-evidence.v1.json. Questions without corpus docs (Swift language features, Foundation APIs) have empty evidence.`,
+      `goldEvidence populated for ${covered}/${total} questions from rubric/gold-evidence.v1.json. Questions with corpus evidence are marked corpus_backed; questions without direct corpus evidence are marked best_practice.`,
     questions,
   };
 }

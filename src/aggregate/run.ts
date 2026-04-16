@@ -6,7 +6,9 @@ import type {
   AggregateCostMetrics,
   AggregateJudgeMetrics,
   AggregateModelSummary,
+  AggregateQuestionTypeSummary,
   BenchmarkMode,
+  BenchmarkQuestionType,
   CollectTrace,
   GradeArtifact,
   JudgeArtifact,
@@ -45,6 +47,26 @@ interface SummaryAccumulator {
   judgeExplanationTotal: number;
   judgeRecommendsCorrectCount: number;
   judgeRecommendsDeprecatedCount: number;
+  questionTypeBreakdown: Map<BenchmarkQuestionType, QuestionTypeAccumulator>;
+}
+
+interface QuestionTypeAccumulator {
+  questionType: BenchmarkQuestionType;
+  runs: number;
+  answerScoreTotal: number;
+  groundedRuns: number;
+  groundedTrue: number;
+  retrievalCount: number;
+  retrievalMrrTotal: number;
+  judgeRuns: number;
+  judgeCorrectCount: number;
+  judgePartiallyCorrectCount: number;
+  judgeIncorrectCount: number;
+  judgeCompletenessTotal: number;
+  judgeCodeExampleTotal: number;
+  judgeExplanationTotal: number;
+  judgeRecommendsCorrectCount: number;
+  judgeRecommendsDeprecatedCount: number;
 }
 
 function summaryKey(manifest: RunManifest): string {
@@ -66,6 +88,42 @@ async function readOptionalJsonFile<T>(path: string): Promise<T | undefined> {
     return undefined;
   }
   return readJsonFile<T>(path);
+}
+
+function createQuestionTypeAccumulator(questionType: BenchmarkQuestionType): QuestionTypeAccumulator {
+  return {
+    questionType,
+    runs: 0,
+    answerScoreTotal: 0,
+    groundedRuns: 0,
+    groundedTrue: 0,
+    retrievalCount: 0,
+    retrievalMrrTotal: 0,
+    judgeRuns: 0,
+    judgeCorrectCount: 0,
+    judgePartiallyCorrectCount: 0,
+    judgeIncorrectCount: 0,
+    judgeCompletenessTotal: 0,
+    judgeCodeExampleTotal: 0,
+    judgeExplanationTotal: 0,
+    judgeRecommendsCorrectCount: 0,
+    judgeRecommendsDeprecatedCount: 0,
+  };
+}
+
+function toJudgeMetrics(accumulator: Pick<QuestionTypeAccumulator, "judgeRuns" | "judgeCorrectCount" | "judgePartiallyCorrectCount" | "judgeIncorrectCount" | "judgeCompletenessTotal" | "judgeCodeExampleTotal" | "judgeExplanationTotal" | "judgeRecommendsCorrectCount" | "judgeRecommendsDeprecatedCount">): AggregateJudgeMetrics | undefined {
+  if (accumulator.judgeRuns === 0) return undefined;
+  return {
+    judgeRuns: accumulator.judgeRuns,
+    judgeCorrectCount: accumulator.judgeCorrectCount,
+    judgePartiallyCorrectCount: accumulator.judgePartiallyCorrectCount,
+    judgeIncorrectCount: accumulator.judgeIncorrectCount,
+    meanCompleteness: accumulator.judgeCompletenessTotal / accumulator.judgeRuns,
+    meanCodeExample: accumulator.judgeCodeExampleTotal / accumulator.judgeRuns,
+    meanExplanation: accumulator.judgeExplanationTotal / accumulator.judgeRuns,
+    recommendsCorrectPatternRate: accumulator.judgeRecommendsCorrectCount / accumulator.judgeRuns,
+    recommendsDeprecatedPatternRate: accumulator.judgeRecommendsDeprecatedCount / accumulator.judgeRuns,
+  };
 }
 
 export async function aggregateRuns(options: AggregateRunOptions): Promise<AggregateArtifact> {
@@ -101,10 +159,16 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
       judgeExplanationTotal: 0,
       judgeRecommendsCorrectCount: 0,
       judgeRecommendsDeprecatedCount: 0,
+      questionTypeBreakdown: new Map(),
     };
 
     existing.runs += 1;
     existing.answerScoreTotal += grade.answer.score;
+
+    const questionTypeAccumulator = existing.questionTypeBreakdown.get(grade.questionType)
+      ?? createQuestionTypeAccumulator(grade.questionType);
+    questionTypeAccumulator.runs += 1;
+    questionTypeAccumulator.answerScoreTotal += grade.answer.score;
 
     if (typeof trace.costUsd === "number") {
       existing.collectTrackedRuns += 1;
@@ -113,14 +177,18 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
 
     if (grade.answer.grounded !== undefined) {
       existing.groundedRuns += 1;
+      questionTypeAccumulator.groundedRuns += 1;
       if (grade.answer.grounded) {
         existing.groundedTrue += 1;
+        questionTypeAccumulator.groundedTrue += 1;
       }
     }
 
     if (grade.retrieval?.mrr !== undefined) {
       existing.retrievalCount += 1;
       existing.retrievalMrrTotal += grade.retrieval.mrr;
+      questionTypeAccumulator.retrievalCount += 1;
+      questionTypeAccumulator.retrievalMrrTotal += grade.retrieval.mrr;
     }
 
     if (typeof judge?.costUsd === "number") {
@@ -130,16 +198,42 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
 
     if (judge?.status === "scored") {
       existing.judgeRuns += 1;
-      if (judge.verdict === "correct") existing.judgeCorrectCount += 1;
-      else if (judge.verdict === "partially_correct") existing.judgePartiallyCorrectCount += 1;
-      else if (judge.verdict === "incorrect") existing.judgeIncorrectCount += 1;
-      if (judge.completeness !== undefined) existing.judgeCompletenessTotal += judge.completeness;
-      if (judge.codeExample !== undefined) existing.judgeCodeExampleTotal += judge.codeExample;
-      if (judge.explanation !== undefined) existing.judgeExplanationTotal += judge.explanation;
-      if (judge.recommendsCorrectPattern) existing.judgeRecommendsCorrectCount += 1;
-      if (judge.recommendsDeprecatedPattern) existing.judgeRecommendsDeprecatedCount += 1;
+      questionTypeAccumulator.judgeRuns += 1;
+      if (judge.verdict === "correct") {
+        existing.judgeCorrectCount += 1;
+        questionTypeAccumulator.judgeCorrectCount += 1;
+      }
+      else if (judge.verdict === "partially_correct") {
+        existing.judgePartiallyCorrectCount += 1;
+        questionTypeAccumulator.judgePartiallyCorrectCount += 1;
+      }
+      else if (judge.verdict === "incorrect") {
+        existing.judgeIncorrectCount += 1;
+        questionTypeAccumulator.judgeIncorrectCount += 1;
+      }
+      if (judge.completeness !== undefined) {
+        existing.judgeCompletenessTotal += judge.completeness;
+        questionTypeAccumulator.judgeCompletenessTotal += judge.completeness;
+      }
+      if (judge.codeExample !== undefined) {
+        existing.judgeCodeExampleTotal += judge.codeExample;
+        questionTypeAccumulator.judgeCodeExampleTotal += judge.codeExample;
+      }
+      if (judge.explanation !== undefined) {
+        existing.judgeExplanationTotal += judge.explanation;
+        questionTypeAccumulator.judgeExplanationTotal += judge.explanation;
+      }
+      if (judge.recommendsCorrectPattern) {
+        existing.judgeRecommendsCorrectCount += 1;
+        questionTypeAccumulator.judgeRecommendsCorrectCount += 1;
+      }
+      if (judge.recommendsDeprecatedPattern) {
+        existing.judgeRecommendsDeprecatedCount += 1;
+        questionTypeAccumulator.judgeRecommendsDeprecatedCount += 1;
+      }
     }
 
+    existing.questionTypeBreakdown.set(grade.questionType, questionTypeAccumulator);
     accumulators.set(key, existing);
   }
 
@@ -175,19 +269,31 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
       base.cost = costMetrics;
     }
 
-    if (accumulator.judgeRuns > 0) {
-      const judgeMetrics: AggregateJudgeMetrics = {
-        judgeRuns: accumulator.judgeRuns,
-        judgeCorrectCount: accumulator.judgeCorrectCount,
-        judgePartiallyCorrectCount: accumulator.judgePartiallyCorrectCount,
-        judgeIncorrectCount: accumulator.judgeIncorrectCount,
-        meanCompleteness: accumulator.judgeCompletenessTotal / accumulator.judgeRuns,
-        meanCodeExample: accumulator.judgeCodeExampleTotal / accumulator.judgeRuns,
-        meanExplanation: accumulator.judgeExplanationTotal / accumulator.judgeRuns,
-        recommendsCorrectPatternRate: accumulator.judgeRecommendsCorrectCount / accumulator.judgeRuns,
-        recommendsDeprecatedPatternRate: accumulator.judgeRecommendsDeprecatedCount / accumulator.judgeRuns,
-      };
+    const judgeMetrics = toJudgeMetrics(accumulator);
+    if (judgeMetrics) {
       base.judge = judgeMetrics;
+    }
+
+    const questionTypeBreakdown: AggregateQuestionTypeSummary[] = [...accumulator.questionTypeBreakdown.values()]
+      .sort((left, right) => left.questionType.localeCompare(right.questionType))
+      .map((questionTypeAccumulator) => {
+        const questionTypeJudgeMetrics = toJudgeMetrics(questionTypeAccumulator);
+        return {
+          questionType: questionTypeAccumulator.questionType,
+          runs: questionTypeAccumulator.runs,
+          meanAnswerScore: questionTypeAccumulator.answerScoreTotal / questionTypeAccumulator.runs,
+          ...(questionTypeAccumulator.groundedRuns === 0
+            ? {}
+            : { groundedRate: questionTypeAccumulator.groundedTrue / questionTypeAccumulator.groundedRuns }),
+          ...(questionTypeAccumulator.retrievalCount === 0
+            ? {}
+            : { meanRetrievalMrr: questionTypeAccumulator.retrievalMrrTotal / questionTypeAccumulator.retrievalCount }),
+          ...(questionTypeJudgeMetrics ? { judge: questionTypeJudgeMetrics } : {}),
+        };
+      });
+
+    if (questionTypeBreakdown.length > 0) {
+      base.questionTypeBreakdown = questionTypeBreakdown;
     }
 
     return base;
