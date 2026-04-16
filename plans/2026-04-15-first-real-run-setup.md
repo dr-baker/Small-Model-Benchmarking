@@ -20,9 +20,10 @@ Configure the benchmark for the first real run using pi SDK for the judge and Op
 - 2026-04-15 22:35: Updated `benchmark.yaml` to use `openrouter/inception/mercury-2` for candidates and pi SDK `openrouter/openai/gpt-5.4` with `thinkingLevel: medium` for judging. Also updated README config docs.
 - 2026-04-15 22:36: Verified with `npm run typecheck` and `npm run check:architecture`.
 - 2026-04-15 22:37: Ran smoke test `npm run test:run -- --run-id=smoke-gpt54-mercury2 --question=q01-tab-definition --mode=open_book --batch-size=1 --batch-number=1 --resume=false`. Collect ran via OpenRouter Mercury 2 and judge ran via pi transport with `openrouter/openai/gpt-5.4` + `thinkingLevel: medium`; artifacts recorded both successfully.
+- 2026-04-15 23:02: Updated the first-run config again after confirming pi subscription auth works for GPT-5.4 and pi can also resolve Mercury 2 through OpenRouter. The intended first real run now uses pi transport with `thinkingLevel: medium` for both the candidate (`openrouter/inception/mercury-2`) and the judge (`openai-codex/gpt-5.4`).
 
 ## Final notes and learnings
-- The runner now supports a clean mixed setup: candidate answers can use direct OpenRouter HTTP while the judge uses pi SDK sessions with an independent model/transport.
+- The runner now supports independently configured candidate and judge execution paths: candidate answers use the top-level `transport`, while the judge can override that with `judge.transport`.
 - Pi SDK thinking level is now configurable through transport session config instead of being hardcoded off.
-- Because this environment has an OpenRouter credential but not a native OpenAI key, the configured judge uses GPT-5.4 through the pi SDK on the `openrouter` provider. If a native OpenAI key is added later, switching to `openai/gpt-5.4` only requires changing `judge.model`.
-- Smoke test artifacts are under `benchmark-results/swiftui-docs-chatbot-benchmark--smoke-gpt54-mercury2/` and show the intended transport split working end to end.
+- This environment can use GPT-5.4 through the pi subscription auth path (`openai-codex/gpt-5.4`) and Mercury 2 through pi on the OpenRouter provider (`openrouter/inception/mercury-2`).
+- Earlier smoke test artifacts under `benchmark-results/swiftui-docs-chatbot-benchmark--smoke-gpt54-mercury2/` show the mixed transport setup working; the next smoke verification should confirm the updated first-run choice of pi transport with medium thinking for both sides.

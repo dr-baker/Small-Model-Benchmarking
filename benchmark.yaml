@@ -2,21 +2,21 @@
 # All paths relative to repo root
 
 benchmarkName: swiftui-docs-chatbot-benchmark
-runId: auto                      # Supported execution id location. Set an explicit value for resumable / idempotent runs.
+runId: nemotron3-super-openrouter-v1   # Supported execution id location. Set an explicit value for resumable / idempotent runs.
 
 # Candidate model execution path: direct OpenRouter HTTP or pi SDK sessions
 transport:
   kind: openrouter               # openrouter | pi
-  session:
-    compaction: false
-    retry: false
-    maxRetries: 0
-    thinkingLevel: off
+  openRouterRouting:
+    order:
+      - deepinfra/bf16
+    only:
+      - deepinfra/bf16
 
 # Candidate benchmark models
 models:
   candidates:
-    - openrouter/inception/mercury-2
+    - openrouter/nvidia/nemotron-3-super-120b-a12b:nitro
 
 # Judge configuration
 judge:
@@ -57,6 +57,7 @@ corpus:
 execution:
   resume: true                   # true = skip completed runs and continue partial executions when runId is explicit
   stopOnError: false             # false = keep going and record failures instead of aborting the whole matrix
+  maxParseRetries: 3             # retry collect-stage schema parse failures up to N times before recording the failure
 
 # Batch controls
 batch:

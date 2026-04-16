@@ -29,14 +29,17 @@ Use `benchmark.yaml` as the supported place to configure models and execution be
 ### Main config knobs
 
 - `transport.kind` — candidate execution path: `openrouter` for direct OpenRouter HTTP, or `pi` for pi SDK sessions
-- `transport.session.thinkingLevel` — optional pi SDK thinking level (`off`, `minimal`, `low`, `medium`, `high`, `xhigh`)
+- `transport.openRouterRouting` — optional OpenRouter provider routing config (`order`, `only`) for direct OpenRouter HTTP runs
+- `transport.session.thinkingLevel` — optional candidate pi SDK thinking level (`off`, `minimal`, `low`, `medium`, `high`, `xhigh`)
 - `models.candidates` — benchmark model(s) to run
 - `judge.model` — judge model
 - `judge.transport` — optional judge-specific transport override when you want collect and judge to use different execution paths
+- `judge.transport.session.thinkingLevel` — optional judge pi SDK thinking level, independent from the candidate setting
 - `judge.profile` — inline judge behavior config
 - `runId` — set an explicit value for resumable / idempotent executions
 - `execution.resume` — skip completed runs and continue incomplete executions
 - `execution.stopOnError` — stop on the first recorded run failure, or keep going
+- `execution.maxParseRetries` — retry collect-stage answer schema parse failures before recording a failed run
 - `batch.size` — number of questions per batch
 - `batch.number` — 1-based batch number, or `auto` to pick the next incomplete batch from existing artifacts
 
@@ -47,10 +50,11 @@ runId: pilot-v1
 
 transport:
   kind: openrouter
-  session:
-    compaction: false
-    retry: false
-    maxRetries: 0
+  openRouterRouting:
+    order:
+      - deepinfra/bf16
+    only:
+      - deepinfra/bf16
 
 models:
   candidates:
@@ -78,6 +82,7 @@ judge:
 execution:
   resume: true
   stopOnError: false
+  maxParseRetries: 3
 
 batch:
   size: 10
