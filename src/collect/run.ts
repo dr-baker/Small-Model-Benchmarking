@@ -6,6 +6,7 @@ import {
   ANSWER_RESPONSE_SCHEMA_VERSION,
   PIPELINE_CONTRACT_VERSION,
   type BenchmarkAnswerResponse,
+  type CollectRetryMetadata,
   type CollectRunInput,
   type CollectTrace,
   type PromptMessageSnapshot,
@@ -70,6 +71,26 @@ function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function toUsageTotals(value: unknown): { promptTokens: number; completionTokens: number; totalTokens: number; cost?: number } | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const usage = value as Record<string, unknown>;
+  const promptTokens = typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : 0;
+  const completionTokens = typeof usage.completion_tokens === "number" ? usage.completion_tokens : 0;
+  const totalTokens = typeof usage.total_tokens === "number" ? usage.total_tokens : promptTokens + completionTokens;
+  const cost = typeof usage.cost === "number" ? usage.cost : undefined;
+  if (promptTokens === 0 && completionTokens === 0 && totalTokens === 0 && cost === undefined) return undefined;
+  return {
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    ...(cost !== undefined ? { cost } : {}),
+  };
+}
+
+function isParseErrorResult(value: BenchmarkAnswerResponse | { parseError: string; rawText?: string }): value is { parseError: string; rawText?: string } {
+  return "parseError" in value;
+}
+
 export async function runCollect(input: CollectRunInput): Promise<CollectRunOutput> {
   validateInput(input);
 
@@ -94,16 +115,77 @@ export async function runCollect(input: CollectRunInput): Promise<CollectRunOutp
   const tools = createToolsForToolSet(input.toolSet, corpusRoot);
   const apiKey = await resolveModelApiKey(input.model);
 
-  const llmResult = await runLlmClient({
-    model: input.model,
-    transport: input.transport,
-    messages: promptMessages,
-    tools,
-    responseFormat: buildAnswerResponseFormat(),
-    apiKey,
-  });
+  const maxParseRetries = input.maxParseRetries ?? 0;
+  const events: CollectTrace["events"] = [];
+  const toolInvocations: CollectTrace["toolInvocations"] = [];
+  const retryReasons: string[] = [];
+  let parseRetriesUsed = 0;
+  let totalCostUsd = 0;
+  let hasTrackedCost = false;
+  let totalPromptTokens = 0;
+  let totalCompletionTokens = 0;
+  let totalTokens = 0;
+  let llmResult;
+  let normalizedAnswer: BenchmarkAnswerResponse | { parseError: string; rawText?: string } = { parseError: "Collect did not run." };
 
-  const normalizedAnswer = parseAnswer(llmResult.finalText);
+  for (let attempt = 1; attempt <= maxParseRetries + 1; attempt += 1) {
+    events.push({
+      observedAt: new Date().toISOString(),
+      eventType: "collect_attempt_start",
+      payload: { attempt, maxParseRetries },
+    });
+
+    llmResult = await runLlmClient({
+      model: input.model,
+      transport: input.transport,
+      messages: promptMessages,
+      tools,
+      responseFormat: buildAnswerResponseFormat(),
+      apiKey,
+    });
+
+    events.push(...llmResult.events);
+    toolInvocations.push(...llmResult.toolInvocations);
+
+    const usageTotals = toUsageTotals(llmResult.usage);
+    if (usageTotals) {
+      totalPromptTokens += usageTotals.promptTokens;
+      totalCompletionTokens += usageTotals.completionTokens;
+      totalTokens += usageTotals.totalTokens;
+      if (typeof usageTotals.cost === "number") {
+        totalCostUsd += usageTotals.cost;
+        hasTrackedCost = true;
+      }
+    }
+    if (typeof llmResult.costUsd === "number" && !(usageTotals && typeof usageTotals.cost === "number")) {
+      totalCostUsd += llmResult.costUsd;
+      hasTrackedCost = true;
+    }
+
+    normalizedAnswer = parseAnswer(llmResult.finalText);
+    const parseErrorResult = isParseErrorResult(normalizedAnswer) ? normalizedAnswer : undefined;
+
+    events.push({
+      observedAt: new Date().toISOString(),
+      eventType: "collect_attempt_end",
+      payload: {
+        attempt,
+        parseFailed: parseErrorResult !== undefined,
+        ...(parseErrorResult ? { parseError: parseErrorResult.parseError } : {}),
+        ...(llmResult.error !== undefined ? { llmError: llmResult.error } : {}),
+      },
+    });
+
+    if (llmResult.error !== undefined || !parseErrorResult) {
+      break;
+    }
+
+    if (attempt <= maxParseRetries) {
+      parseRetriesUsed += 1;
+      retryReasons.push(parseErrorResult.parseError);
+    }
+  }
+
   const promptSnapshot: PromptSnapshot = {
     systemPrompt,
     userPrompt,
@@ -111,16 +193,38 @@ export async function runCollect(input: CollectRunInput): Promise<CollectRunOutp
     availableTools: tools.map((tool) => ({ name: tool.name, description: tool.description })),
   };
 
+  if (!llmResult) {
+    throw new Error("Collect did not produce an LLM result.");
+  }
+
+  const collectRetry: CollectRetryMetadata = {
+    maxParseRetries,
+    parseRetriesUsed,
+    attempts: parseRetriesUsed + 1,
+    succeededAfterRetry: parseRetriesUsed > 0 && !isParseErrorResult(normalizedAnswer) && llmResult.error === undefined,
+    retryReasons,
+  };
+
   const trace: CollectTrace = {
     runId: input.runId,
     prompt: promptSnapshot,
-    events: llmResult.events,
-    toolInvocations: llmResult.toolInvocations,
+    events,
+    toolInvocations,
     ...(llmResult.finalText !== undefined ? { finalAssistantText: llmResult.finalText } : {}),
     ...(llmResult.finalAssistantMessage !== undefined ? { finalAssistantMessage: llmResult.finalAssistantMessage } : {}),
-    ...(llmResult.usage !== undefined ? { usage: llmResult.usage } : {}),
-    ...(llmResult.costUsd !== undefined ? { costUsd: llmResult.costUsd } : {}),
+    ...((totalPromptTokens > 0 || totalCompletionTokens > 0 || totalTokens > 0 || hasTrackedCost)
+      ? {
+          usage: {
+            prompt_tokens: totalPromptTokens,
+            completion_tokens: totalCompletionTokens,
+            total_tokens: totalTokens || totalPromptTokens + totalCompletionTokens,
+            ...(hasTrackedCost ? { cost: totalCostUsd } : {}),
+          },
+        }
+      : {}),
+    ...(hasTrackedCost ? { costUsd: totalCostUsd } : {}),
     ...(llmResult.error !== undefined ? { error: llmResult.error } : {}),
+    collectRetry,
     elapsedMs: Date.now() - startedAt,
   };
 
@@ -143,6 +247,7 @@ export async function runCollect(input: CollectRunInput): Promise<CollectRunOutp
     corpus: input.corpus,
     questionId: input.question.id,
     sampling: input.sampling,
+    collectRetry,
     artifactPaths: { trace: tracePath, normalizedAnswer: normalizedAnswerPath, judge: judgePath, grade: gradePath, aggregate: aggregatePath },
   };
 

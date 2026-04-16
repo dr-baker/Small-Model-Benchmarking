@@ -30,9 +30,15 @@ export interface SessionConfig {
 
 export type TransportKind = "openrouter" | "pi";
 
+export interface OpenRouterProviderRoutingConfig {
+  order?: string[];
+  only?: string[];
+}
+
 export interface ModelTransportConfig {
   kind: TransportKind;
   session?: SessionConfig;
+  openRouterRouting?: OpenRouterProviderRoutingConfig;
 }
 
 export interface CorpusSnapshotRef {
@@ -95,6 +101,7 @@ export interface CollectRunInput {
   question: DatasetQuestion;
   sampling: SamplingConfig;
   systemPrompt: string;
+  maxParseRetries?: number;
 }
 
 export interface PromptMessageSnapshot {
@@ -165,6 +172,14 @@ export interface ToolInvocationTrace {
   updates: JsonValue[];
 }
 
+export interface CollectRetryMetadata {
+  maxParseRetries: number;
+  parseRetriesUsed: number;
+  attempts: number;
+  succeededAfterRetry: boolean;
+  retryReasons: string[];
+}
+
 export interface CollectTrace {
   runId: string;
   prompt: PromptSnapshot;
@@ -175,6 +190,7 @@ export interface CollectTrace {
   usage?: JsonValue;
   costUsd?: number;
   error?: JsonValue;
+  collectRetry?: CollectRetryMetadata;
   elapsedMs: number;
 }
 
@@ -195,6 +211,7 @@ export interface RunManifest {
   corpus: CorpusSnapshotRef;
   questionId: string;
   sampling: SamplingConfig;
+  collectRetry?: CollectRetryMetadata;
   artifactPaths: {
     trace: string;
     normalizedAnswer: string;

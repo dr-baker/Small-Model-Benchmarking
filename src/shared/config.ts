@@ -28,6 +28,7 @@ export interface BenchmarkModelConfig {
 export interface BenchmarkExecutionConfig {
   resume: boolean;
   stopOnError: boolean;
+  maxParseRetries: number;
 }
 
 export type BenchmarkBatchNumber = number | "auto";
@@ -81,6 +82,10 @@ function isPositiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
 }
 
+function isNonEmptyStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string" && item.length > 0);
+}
+
 const VALID_THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
 
 function validateTransportConfig(raw: unknown, label: string): asserts raw is ModelTransportConfig {
@@ -103,6 +108,22 @@ function validateTransportConfig(raw: unknown, label: string): asserts raw is Mo
     }
     if (session.thinkingLevel !== undefined && !VALID_THINKING_LEVELS.includes(session.thinkingLevel as ThinkingLevel)) {
       throw new Error(`${label}.session.thinkingLevel must be one of ${VALID_THINKING_LEVELS.join(", ")}`);
+    }
+  }
+
+  if (transport.openRouterRouting !== undefined) {
+    if (transport.kind !== "openrouter") {
+      throw new Error(`${label}.openRouterRouting is only supported when ${label}.kind='openrouter'`);
+    }
+    if (typeof transport.openRouterRouting !== "object" || transport.openRouterRouting === null) {
+      throw new Error(`${label}.openRouterRouting must be an object`);
+    }
+    const routing = transport.openRouterRouting as Record<string, unknown>;
+    if (routing.order !== undefined && !isNonEmptyStringArray(routing.order)) {
+      throw new Error(`${label}.openRouterRouting.order must be an array of non-empty strings`);
+    }
+    if (routing.only !== undefined && !isNonEmptyStringArray(routing.only)) {
+      throw new Error(`${label}.openRouterRouting.only must be an array of non-empty strings`);
     }
   }
 }
@@ -150,6 +171,9 @@ function validateConfig(raw: unknown): asserts raw is BenchmarkConfig {
   const execution = c.execution as Record<string, unknown>;
   if (typeof execution.resume !== "boolean") throw new Error("execution.resume must be boolean");
   if (typeof execution.stopOnError !== "boolean") throw new Error("execution.stopOnError must be boolean");
+  if (!isPositiveInteger(execution.maxParseRetries) && execution.maxParseRetries !== 0) {
+    throw new Error("execution.maxParseRetries must be a non-negative integer");
+  }
 
   if (!c.batch || typeof c.batch !== "object") throw new Error("Missing batch");
   const batch = c.batch as Record<string, unknown>;

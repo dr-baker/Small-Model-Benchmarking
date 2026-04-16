@@ -276,6 +276,7 @@ async function main() {
         console.log(`\n==> [${modelRef.provider}/${modelRef.modelId} | ${mode.toUpperCase()} | ${question.id}]`);
 
         let collectHadError = false;
+        let collectParseRetriesUsed = 0;
         if (!stageState.manifest || !stageState.trace || !stageState.normalizedAnswer) {
           console.log("   collect: running");
           const collectOutput = await runCollect({
@@ -296,13 +297,20 @@ async function main() {
             question,
             sampling: {},
             systemPrompt: config.systemPrompts.collect,
+            maxParseRetries: config.execution.maxParseRetries,
           });
           collectHadError = collectOutput.hasError;
+          collectParseRetriesUsed = collectOutput.trace.collectRetry?.parseRetriesUsed ?? 0;
         } else {
           console.log("   collect: skipped (artifacts already exist)");
           const normalizedAnswer = await readJsonFile<{ parseError?: string }>(join(runDirectory, "normalized-answer.json"));
-          const trace = await readJsonFile<{ error?: unknown }>(join(runDirectory, "trace.json"));
+          const trace = await readJsonFile<{ error?: unknown; collectRetry?: { parseRetriesUsed?: number } }>(join(runDirectory, "trace.json"));
           collectHadError = typeof normalizedAnswer.parseError === "string" || trace.error !== undefined;
+          collectParseRetriesUsed = trace.collectRetry?.parseRetriesUsed ?? 0;
+        }
+
+        if (collectParseRetriesUsed > 0) {
+          console.log(`   collect: parse retries used = ${collectParseRetriesUsed}`);
         }
 
         let judgeHadError = false;

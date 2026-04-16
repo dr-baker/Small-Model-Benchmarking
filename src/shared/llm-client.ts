@@ -265,12 +265,16 @@ async function runOpenRouterClient(config: LlmClientConfig, deps: LlmClientDeps 
   const messages: ChatMessage[] = resolveMessages(config);
   const openaiTools = config.tools.length > 0 ? agentToolsToOpenAITools(config.tools) : undefined;
   const toolMap = new Map<string, unknown>(config.tools.map((raw) => [(raw as ToolLike).name, raw]));
+  let responseFormat = config.responseFormat;
 
   try {
     for (let round = 0; round <= maxRounds; round += 1) {
       const body: Record<string, unknown> = { model: config.model.modelId, messages };
       if (openaiTools) body.tools = openaiTools;
-      if (config.responseFormat) body.response_format = config.responseFormat;
+      if (responseFormat) body.response_format = responseFormat;
+      if (config.transport.openRouterRouting) {
+        body.provider = config.transport.openRouterRouting;
+      }
 
       events.push({
         observedAt: new Date().toISOString(),
@@ -281,6 +285,26 @@ async function runOpenRouterClient(config: LlmClientConfig, deps: LlmClientDeps 
       const response = await fetchImpl(url, { method: "POST", headers, body: JSON.stringify(body) });
       if (!response.ok) {
         const errorText = await response.text().catch(() => "unknown error");
+        const unsupportedStructuredOutput = response.status === 405
+          && responseFormat !== undefined
+          && /json_schema response format is not supported/i.test(errorText);
+
+        if (unsupportedStructuredOutput) {
+          events.push({
+            observedAt: new Date().toISOString(),
+            eventType: "llm_response_format_fallback",
+            payload: toJsonValue({
+              round,
+              model: config.model.modelId,
+              reason: "provider_does_not_support_json_schema",
+              status: response.status,
+              errorText,
+            }),
+          });
+          responseFormat = undefined;
+          continue;
+        }
+
         throw new Error(`API error ${response.status}: ${errorText}`);
       }
 
