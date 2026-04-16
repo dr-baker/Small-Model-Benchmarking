@@ -34,6 +34,7 @@ export interface LlmClientConfig {
   responseFormat?: OpenRouterResponseFormat;
   maxRounds?: number;
   apiKey?: string | undefined;
+  cwd?: string;
 }
 
 export interface LlmClientResult {
@@ -427,7 +428,8 @@ async function runPiSessionClient(config: LlmClientConfig, deps: LlmClientDeps =
     const modelRegistry = deps.createModelRegistry?.(authStorage) ?? ModelRegistry.create(authStorage);
     const model = (deps.resolvePiModel ?? defaultResolvePiModel)(config.model, modelRegistry);
     const settingsManager = deps.createSettingsManager?.(config.transport) ?? buildPiSettingsManager(config.transport);
-    const sessionManager = deps.createSessionManager?.() ?? SessionManager.inMemory(process.cwd());
+    const sessionCwd = config.cwd ?? process.cwd();
+    const sessionManager = deps.createSessionManager?.() ?? SessionManager.inMemory(sessionCwd);
 
     const resourceLoader = {
       getExtensions: () => ({ extensions: [], errors: [], runtime: createExtensionRuntime() }),
@@ -442,7 +444,7 @@ async function runPiSessionClient(config: LlmClientConfig, deps: LlmClientDeps =
     };
 
     const { session } = await createSession({
-      cwd: process.cwd(),
+      cwd: sessionCwd,
       model: model as never,
       thinkingLevel: config.transport.session?.thinkingLevel ?? "off",
       authStorage,

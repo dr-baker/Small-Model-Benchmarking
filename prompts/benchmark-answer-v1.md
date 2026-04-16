@@ -7,6 +7,7 @@ You are answering a single benchmark question about modern SwiftUI / Apple-platf
 - If no documentation tools are available, answer from model knowledge only.
 - If documentation tools are available, use them when needed and ground the answer in the actual material you read.
 - Never claim to have read evidence you did not actually inspect in this run.
+- Treat the frozen corpus as the only valid documentation source for open-book evidence in this benchmark.
 
 ## Output contract
 Return exactly one JSON object that matches this schema.
@@ -32,7 +33,7 @@ Do not wrap it in markdown fences.
   "confidence": 0.0,
   "citations": [
     {
-      "filePath": "relative/path/in/corpus",
+      "filePath": "relative/path/inside/the/frozen-corpus",
       "anchor": "optional passage anchor",
       "quote": "optional direct quote",
       "justification": "why this citation supports the answer"

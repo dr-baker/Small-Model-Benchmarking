@@ -15,6 +15,7 @@ import {
 } from "../shared/contracts.js";
 import { serializeJson, writeJsonFile } from "../shared/io.js";
 import { extractJsonObject } from "../shared/json.js";
+import { normalizeCitationFilePath } from "../shared/corpus-paths.js";
 import { renderPrompt, renderPromptMessages } from "./prompt-template.js";
 import { createToolsForToolSet } from "./tool-sets.js";
 import { runLlmClient } from "../shared/llm-client.js";
@@ -55,12 +56,26 @@ function validateParsedAnswer(value: unknown): value is BenchmarkAnswerResponse 
   return typeof c.evidenceSummary === "string" && c.evidenceSummary.trim().length > 0;
 }
 
-function parseAnswer(rawText: string | undefined): BenchmarkAnswerResponse | { parseError: string; rawText?: string } {
+function normalizeAnswerCitations(answer: BenchmarkAnswerResponse, corpusRoot: string): BenchmarkAnswerResponse {
+  if (answer.mode === "closed_book") return answer;
+
+  return {
+    ...answer,
+    citations: answer.citations
+      .map((citation) => {
+        const filePath = normalizeCitationFilePath(citation.filePath, corpusRoot);
+        return filePath ? { ...citation, filePath } : undefined;
+      })
+      .filter((citation): citation is BenchmarkAnswerResponse["citations"][number] => citation !== undefined),
+  };
+}
+
+function parseAnswer(rawText: string | undefined, corpusRoot: string): BenchmarkAnswerResponse | { parseError: string; rawText?: string } {
   if (!rawText) return { parseError: "Assistant produced no final text." };
   try {
     const parsed = extractJsonObject(rawText);
     return validateParsedAnswer(parsed)
-      ? parsed
+      ? normalizeAnswerCitations(parsed, corpusRoot)
       : { parseError: "Assistant JSON did not match answer-response.v1 schema or contained an empty answer.", rawText };
   } catch (error) {
     return { parseError: error instanceof Error ? error.message : String(error), rawText };
@@ -142,6 +157,7 @@ export async function runCollect(input: CollectRunInput): Promise<CollectRunOutp
       tools,
       responseFormat: buildAnswerResponseFormat(),
       apiKey,
+      cwd: corpusRoot,
     });
 
     events.push(...llmResult.events);
@@ -162,7 +178,7 @@ export async function runCollect(input: CollectRunInput): Promise<CollectRunOutp
       hasTrackedCost = true;
     }
 
-    normalizedAnswer = parseAnswer(llmResult.finalText);
+    normalizedAnswer = parseAnswer(llmResult.finalText, corpusRoot);
     const parseErrorResult = isParseErrorResult(normalizedAnswer) ? normalizedAnswer : undefined;
 
     events.push({

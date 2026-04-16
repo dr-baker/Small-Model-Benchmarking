@@ -7,8 +7,10 @@ import type {
   GradeArtifact,
   RetrievalMetrics,
   RubricDefinition,
+  RunManifest,
 } from "../shared/contracts.js";
 import { readJsonFile, writeJsonFile } from "../shared/io.js";
+import { inferQuestionType, normalizeCorpusRelativePath } from "../shared/corpus-paths.js";
 
 interface GradeRunOptions {
   runDirectory: string;
@@ -29,7 +31,7 @@ function deriveFailures(answer: BenchmarkAnswerResponse | { parseError: string }
   return failures;
 }
 
-function calculateRetrievalMetrics(trace: CollectTrace, question: DatasetQuestion): RetrievalMetrics | undefined {
+function calculateRetrievalMetrics(trace: CollectTrace, question: DatasetQuestion, corpusRoot: string): RetrievalMetrics | undefined {
   if (trace.toolInvocations.length === 0) return undefined;
 
   let bytesRead = 0;
@@ -46,10 +48,11 @@ function calculateRetrievalMetrics(trace: CollectTrace, question: DatasetQuestio
     if (tool.toolName === "read") {
       readCount += 1;
       const args = tool.args as { path?: string };
+      const normalizedPath = normalizeCorpusRelativePath(args.path, corpusRoot);
       const content = JSON.stringify(tool.result ?? "");
       bytesRead += content.length;
 
-      if (args.path && relevantPaths.has(args.path)) {
+      if (normalizedPath && relevantPaths.has(normalizedPath)) {
         hitAtK = true;
         if (readCount === 1) hitAt1 = true;
         if (mrr === undefined) mrr = 1.0 / readCount;
@@ -75,10 +78,47 @@ function calculateRetrievalMetrics(trace: CollectTrace, question: DatasetQuestio
   };
 }
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function isDeprecatedMentionContext(finalAnswer: string, phrase: string): boolean {
+  const escapedPhrase = escapeRegex(phrase);
+  const pattern = new RegExp(`.{0,80}${escapedPhrase}.{0,80}`, "gi");
+  const contexts = finalAnswer.match(pattern) ?? [];
+  if (contexts.length === 0) return false;
+
+  const warningMarkers = [
+    "deprecated",
+    "legacy",
+    "avoid",
+    "do not use",
+    "don't use",
+    "should not use",
+    "shouldn't use",
+    "never use",
+    "instead of",
+    "rather than",
+    "replace",
+    "replaces",
+    "replaced by",
+    "warning",
+    "wrong pattern",
+    "old way",
+    "older pattern",
+    "not ",
+  ];
+
+  return contexts.every((context) => {
+    const normalizedContext = context.toLowerCase();
+    return warningMarkers.some((marker) => normalizedContext.includes(marker));
+  });
+}
+
 export async function gradeRun(options: GradeRunOptions): Promise<GradeArtifact> {
   const trace = await readJsonFile<CollectTrace>(join(options.runDirectory, "trace.json"));
   const answer = await readJsonFile<BenchmarkAnswerResponse | { parseError: string }>(join(options.runDirectory, "normalized-answer.json"));
-  const manifest = await readJsonFile<{ questionId?: string }>(join(options.runDirectory, "manifest.json"));
+  const manifest = await readJsonFile<RunManifest>(join(options.runDirectory, "manifest.json"));
 
   const rubric = await readJsonFile<RubricDefinition>(options.rubricPath);
   const dataset = await readJsonFile<{ questions: DatasetQuestion[] }>(options.datasetPath);
@@ -87,6 +127,7 @@ export async function gradeRun(options: GradeRunOptions): Promise<GradeArtifact>
   const question = dataset.questions.find((q) => q.id === questionId);
   const questionRubric = rubric.questions.find((q) => q.questionId === questionId);
   const failures = deriveFailures(answer, trace);
+  const corpusRoot = manifest.corpus.rootDir;
 
   const mustMentionPassed: string[] = [];
   const mustMentionFailed: string[] = [];
@@ -107,7 +148,7 @@ export async function gradeRun(options: GradeRunOptions): Promise<GradeArtifact>
     }
 
     for (const phrase of questionRubric.mustNotMention) {
-      if (finalAnswer.includes(phrase.toLowerCase())) {
+      if (finalAnswer.includes(phrase.toLowerCase()) && !isDeprecatedMentionContext(finalAnswer, phrase.toLowerCase())) {
         mustNotMentionViolated.push(phrase);
       }
     }
@@ -119,7 +160,7 @@ export async function gradeRun(options: GradeRunOptions): Promise<GradeArtifact>
       const readPaths = new Set(
         trace.toolInvocations
           .filter((tool) => tool.toolName === "read")
-          .map((tool) => (tool.args as { path?: string }).path)
+          .map((tool) => normalizeCorpusRelativePath((tool.args as { path?: string }).path, corpusRoot))
           .filter((path): path is string => typeof path === "string" && path.length > 0),
       );
 
@@ -131,12 +172,13 @@ export async function gradeRun(options: GradeRunOptions): Promise<GradeArtifact>
     }
   }
 
-  const retrieval = question ? calculateRetrievalMetrics(trace, question) : undefined;
+  const retrieval = question ? calculateRetrievalMetrics(trace, question, corpusRoot) : undefined;
 
   const artifact: GradeArtifact = {
     runId: trace.runId,
     rubricVersion: rubric.version,
     questionId,
+    questionType: question?.questionType ?? inferQuestionType({ goldEvidence: question?.goldEvidence ?? [] }),
     answer: {
       score,
       correct,
@@ -147,6 +189,7 @@ export async function gradeRun(options: GradeRunOptions): Promise<GradeArtifact>
       mustNotMentionViolated,
       notes: [
         "Answer graded via deterministic text matching over final text.",
+        "Deprecated APIs mentioned only as warnings are ignored by must-not-match checks.",
         "This artifact intentionally does not consume judge.json; LLM judging is a separate stage for later comparison.",
       ],
     },
