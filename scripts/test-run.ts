@@ -391,7 +391,10 @@ async function main() {
         + ` | Explanation: ${summary.judge.meanExplanation.toFixed(1)}`
         + ` | DeprecatedRate: ${(summary.judge.recommendsDeprecatedPatternRate * 100).toFixed(0)}%`
       : " | Judge: (no scored runs)";
-    console.log(`- ${summary.model.provider}/${summary.model.modelId} | ${summary.mode} | transport=${summary.transport.kind} | ${gradeLine}${groundedLine}${mrrLine}${costLine}${judgeLine}`);
+    const errorLine = summary.errors
+      ? ` | Errors: any=${summary.errors.runsWithAnyError}/${summary.runs}, collect=${summary.errors.collectErrorRuns}, judge=${summary.errors.judgeErrorRuns}`
+      : "";
+    console.log(`- ${summary.model.provider}/${summary.model.modelId} | ${summary.mode} | transport=${summary.transport.kind} | ${gradeLine}${groundedLine}${mrrLine}${costLine}${judgeLine}${errorLine}`);
   }
 
   if (observedErrors) {

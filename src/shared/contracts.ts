@@ -12,6 +12,7 @@ export type JudgeVerdictLabel = "correct" | "partially_correct" | "incorrect";
 export type JudgeQualitativeScore = 0 | 1 | 2;
 export type GradingMethod = "deterministic";
 export type JudgeArtifactStatus = "scored" | "skipped" | "error";
+export type BenchmarkQuestionType = "corpus_backed" | "best_practice";
 
 export interface ModelRef {
   provider: string;
@@ -39,6 +40,8 @@ export interface ModelTransportConfig {
   kind: TransportKind;
   session?: SessionConfig;
   openRouterRouting?: OpenRouterProviderRoutingConfig;
+  openRouterUseStructuredOutputs?: boolean;
+  openRouterRetryDelaysMs?: number[];
 }
 
 export interface CorpusSnapshotRef {
@@ -62,6 +65,7 @@ export interface DatasetQuestion {
   referenceAnswer: string;
   pitfall: string;
   taxonomyTags: string[];
+  questionType: BenchmarkQuestionType;
   goldEvidence: GoldEvidenceReference[];
   source: {
     file: string;
@@ -300,6 +304,7 @@ export interface GradeArtifact {
   runId: string;
   rubricVersion: string;
   questionId: string;
+  questionType: BenchmarkQuestionType;
   answer: AnswerGrade;
   retrieval?: RetrievalMetrics;
   failures: FailureTaxonomyId[];
@@ -328,6 +333,21 @@ export interface AggregateCostMetrics {
   meanTotalCostUsdPerRun: number;
 }
 
+export interface AggregateErrorMetrics {
+  runsWithAnyError: number;
+  collectErrorRuns: number;
+  judgeErrorRuns: number;
+}
+
+export interface AggregateQuestionTypeSummary {
+  questionType: BenchmarkQuestionType;
+  runs: number;
+  meanAnswerScore: number;
+  groundedRate?: number;
+  meanRetrievalMrr?: number;
+  judge?: AggregateJudgeMetrics;
+}
+
 export interface AggregateModelSummary {
   model: ModelRef;
   mode: BenchmarkMode;
@@ -339,6 +359,8 @@ export interface AggregateModelSummary {
   meanRetrievalMrr?: number;
   cost?: AggregateCostMetrics;
   judge?: AggregateJudgeMetrics;
+  errors?: AggregateErrorMetrics;
+  questionTypeBreakdown?: AggregateQuestionTypeSummary[];
 }
 
 export interface AggregateArtifact {

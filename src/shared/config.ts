@@ -82,6 +82,10 @@ function isPositiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
 }
 
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
 function isNonEmptyStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string" && item.length > 0);
 }
@@ -124,6 +128,24 @@ function validateTransportConfig(raw: unknown, label: string): asserts raw is Mo
     }
     if (routing.only !== undefined && !isNonEmptyStringArray(routing.only)) {
       throw new Error(`${label}.openRouterRouting.only must be an array of non-empty strings`);
+    }
+  }
+
+  if (transport.openRouterUseStructuredOutputs !== undefined) {
+    if (transport.kind !== "openrouter") {
+      throw new Error(`${label}.openRouterUseStructuredOutputs is only supported when ${label}.kind='openrouter'`);
+    }
+    if (typeof transport.openRouterUseStructuredOutputs !== "boolean") {
+      throw new Error(`${label}.openRouterUseStructuredOutputs must be boolean`);
+    }
+  }
+
+  if (transport.openRouterRetryDelaysMs !== undefined) {
+    if (transport.kind !== "openrouter") {
+      throw new Error(`${label}.openRouterRetryDelaysMs is only supported when ${label}.kind='openrouter'`);
+    }
+    if (!Array.isArray(transport.openRouterRetryDelaysMs) || !transport.openRouterRetryDelaysMs.every(isNonNegativeInteger)) {
+      throw new Error(`${label}.openRouterRetryDelaysMs must be an array of non-negative integers`);
     }
   }
 }

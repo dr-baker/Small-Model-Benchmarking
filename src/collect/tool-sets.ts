@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { createFindTool, createGrepTool, createLsTool, createReadTool } from "@mariozechner/pi-coding-agent";
 import type { ToolSetDefinition, ToolSetName } from "../shared/contracts.js";
+import { resolvePathWithinCorpus } from "../shared/corpus-paths.js";
 
 interface ToolSetCatalogFile {
   version: string;
@@ -29,21 +30,56 @@ type CollectTool =
   | ReturnType<typeof createFindTool>
   | ReturnType<typeof createLsTool>;
 
+type ToolLike = {
+  name: string;
+  description: string;
+  parameters: unknown;
+  prepareArguments?: (args: unknown) => unknown;
+  execute: (toolCallId: string, params: unknown, signal?: AbortSignal, onUpdate?: (partialResult: unknown) => void) => Promise<{ content: Array<{ type: string; text?: string }> }>;
+};
+
+function sandboxPathArgs(args: unknown, corpusRoot: string, toolName: string): unknown {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return args;
+  const candidate = args as Record<string, unknown>;
+  if (!("path" in candidate)) return args;
+  const rawPath = typeof candidate.path === "string" ? candidate.path : undefined;
+  if (!rawPath && toolName === "read") return args;
+  return {
+    ...candidate,
+    path: resolvePathWithinCorpus(rawPath, corpusRoot),
+  };
+}
+
+function sandboxTool<T extends CollectTool>(tool: T, corpusRoot: string): T {
+  const wrapped = tool as T & ToolLike;
+  return {
+    ...wrapped,
+    prepareArguments: (args: unknown) => {
+      const prepared = wrapped.prepareArguments ? wrapped.prepareArguments(args) : args;
+      return sandboxPathArgs(prepared, corpusRoot, wrapped.name);
+    },
+    execute: (toolCallId: string, params: unknown, signal?: AbortSignal, onUpdate?: (partialResult: unknown) => void) => {
+      const sandboxedParams = sandboxPathArgs(params, corpusRoot, wrapped.name);
+      return wrapped.execute(toolCallId, sandboxedParams, signal, onUpdate);
+    },
+  } as T;
+}
+
 export function createToolsForToolSet(toolSet: ToolSetDefinition, cwd: string): CollectTool[] {
   const tools = [] as CollectTool[];
   for (const toolName of toolSet.toolNames) {
     switch (toolName) {
       case "read":
-        tools.push(createReadTool(cwd));
+        tools.push(sandboxTool(createReadTool(cwd), cwd));
         break;
       case "grep":
-        tools.push(createGrepTool(cwd));
+        tools.push(sandboxTool(createGrepTool(cwd), cwd));
         break;
       case "find":
-        tools.push(createFindTool(cwd));
+        tools.push(sandboxTool(createFindTool(cwd), cwd));
         break;
       case "ls":
-        tools.push(createLsTool(cwd));
+        tools.push(sandboxTool(createLsTool(cwd), cwd));
         break;
       default:
         throw new Error(`Unsupported tool in catalog: ${toolName}`);

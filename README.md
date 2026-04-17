@@ -30,6 +30,8 @@ Use `benchmark.yaml` as the supported place to configure models and execution be
 
 - `transport.kind` — candidate execution path: `openrouter` for direct OpenRouter HTTP, or `pi` for pi SDK sessions
 - `transport.openRouterRouting` — optional OpenRouter provider routing config (`order`, `only`) for direct OpenRouter HTTP runs
+- `transport.openRouterUseStructuredOutputs` — optional boolean to disable OpenRouter structured output for models that don't support `json_schema` reliably
+- `transport.openRouterRetryDelaysMs` — optional retry backoff schedule in milliseconds for retryable OpenRouter HTTP failures
 - `transport.session.thinkingLevel` — optional candidate pi SDK thinking level (`off`, `minimal`, `low`, `medium`, `high`, `xhigh`)
 - `models.candidates` — benchmark model(s) to run
 - `judge.model` — judge model

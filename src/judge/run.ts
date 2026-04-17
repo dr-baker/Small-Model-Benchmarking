@@ -163,6 +163,7 @@ export async function judgeRun(options: JudgeRunOptions): Promise<JudgeRunOutput
     tools,
     responseFormat: buildJudgeVerdictResponseFormat(),
     apiKey,
+    cwd: corpusRoot,
   });
 
   const parsed = parseJudgeResponse(llmResult.finalText);
