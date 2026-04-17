@@ -139,6 +139,19 @@ function buildUsageSummary(promptTokens: number, completionTokens: number, total
   });
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableOpenRouterStatus(status: number): boolean {
+  return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
+}
+
+function getOpenRouterRetryDelayMs(attempt: number): number {
+  const delays = [2000, 5000, 10000];
+  return delays[Math.min(attempt, delays.length - 1)] ?? 10000;
+}
+
 function failTool(
   invocation: ToolInvocationTrace,
   messages: ChatMessage[],
@@ -283,8 +296,11 @@ async function runOpenRouterClient(config: LlmClientConfig, deps: LlmClientDeps 
         payload: toJsonValue({ round, model: config.model.modelId, transport: config.transport.kind }),
       });
 
-      const response = await fetchImpl(url, { method: "POST", headers, body: JSON.stringify(body) });
-      if (!response.ok) {
+      let response: Response | undefined;
+      for (let requestAttempt = 0; requestAttempt < 3; requestAttempt += 1) {
+        response = await fetchImpl(url, { method: "POST", headers, body: JSON.stringify(body) });
+        if (response.ok) break;
+
         const errorText = await response.text().catch(() => "unknown error");
         const unsupportedStructuredOutput = response.status === 405
           && responseFormat !== undefined
@@ -303,10 +319,32 @@ async function runOpenRouterClient(config: LlmClientConfig, deps: LlmClientDeps 
             }),
           });
           responseFormat = undefined;
-          continue;
+          response = undefined;
+          break;
         }
 
-        throw new Error(`API error ${response.status}: ${errorText}`);
+        if (!isRetryableOpenRouterStatus(response.status) || requestAttempt === 2) {
+          throw new Error(`API error ${response.status}: ${errorText}`);
+        }
+
+        const delayMs = getOpenRouterRetryDelayMs(requestAttempt);
+        events.push({
+          observedAt: new Date().toISOString(),
+          eventType: "llm_request_retry_scheduled",
+          payload: toJsonValue({
+            round,
+            model: config.model.modelId,
+            requestAttempt: requestAttempt + 1,
+            status: response.status,
+            delayMs,
+            errorText,
+          }),
+        });
+        await sleep(delayMs);
+      }
+
+      if (!response) {
+        continue;
       }
 
       const data = (await response.json()) as ChatCompletionResponse;
