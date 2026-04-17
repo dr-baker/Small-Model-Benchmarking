@@ -333,6 +333,12 @@ export interface AggregateCostMetrics {
   meanTotalCostUsdPerRun: number;
 }
 
+export interface AggregateErrorMetrics {
+  runsWithAnyError: number;
+  collectErrorRuns: number;
+  judgeErrorRuns: number;
+}
+
 export interface AggregateQuestionTypeSummary {
   questionType: BenchmarkQuestionType;
   runs: number;
@@ -353,6 +359,7 @@ export interface AggregateModelSummary {
   meanRetrievalMrr?: number;
   cost?: AggregateCostMetrics;
   judge?: AggregateJudgeMetrics;
+  errors?: AggregateErrorMetrics;
   questionTypeBreakdown?: AggregateQuestionTypeSummary[];
 }
 

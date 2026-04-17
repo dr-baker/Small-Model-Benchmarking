@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import type {
   AggregateArtifact,
   AggregateCostMetrics,
+  AggregateErrorMetrics,
   AggregateJudgeMetrics,
   AggregateModelSummary,
   AggregateQuestionTypeSummary,
@@ -47,6 +48,9 @@ interface SummaryAccumulator {
   judgeExplanationTotal: number;
   judgeRecommendsCorrectCount: number;
   judgeRecommendsDeprecatedCount: number;
+  runsWithAnyError: number;
+  collectErrorRuns: number;
+  judgeErrorRuns: number;
   questionTypeBreakdown: Map<BenchmarkQuestionType, QuestionTypeAccumulator>;
 }
 
@@ -159,6 +163,9 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
       judgeExplanationTotal: 0,
       judgeRecommendsCorrectCount: 0,
       judgeRecommendsDeprecatedCount: 0,
+      runsWithAnyError: 0,
+      collectErrorRuns: 0,
+      judgeErrorRuns: 0,
       questionTypeBreakdown: new Map(),
     };
 
@@ -173,6 +180,18 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
     if (typeof trace.costUsd === "number") {
       existing.collectTrackedRuns += 1;
       existing.collectCostUsdTotal += trace.costUsd;
+    }
+
+    const collectHadError = trace.error !== undefined;
+    const judgeHadError = judge?.status === "error";
+    if (collectHadError) {
+      existing.collectErrorRuns += 1;
+    }
+    if (judgeHadError) {
+      existing.judgeErrorRuns += 1;
+    }
+    if (collectHadError || judgeHadError) {
+      existing.runsWithAnyError += 1;
     }
 
     if (grade.answer.grounded !== undefined) {
@@ -272,6 +291,15 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
     const judgeMetrics = toJudgeMetrics(accumulator);
     if (judgeMetrics) {
       base.judge = judgeMetrics;
+    }
+
+    const errorMetrics: AggregateErrorMetrics = {
+      runsWithAnyError: accumulator.runsWithAnyError,
+      collectErrorRuns: accumulator.collectErrorRuns,
+      judgeErrorRuns: accumulator.judgeErrorRuns,
+    };
+    if (errorMetrics.runsWithAnyError > 0 || errorMetrics.collectErrorRuns > 0 || errorMetrics.judgeErrorRuns > 0) {
+      base.errors = errorMetrics;
     }
 
     const questionTypeBreakdown: AggregateQuestionTypeSummary[] = [...accumulator.questionTypeBreakdown.values()]

@@ -20,6 +20,7 @@ Make the benchmark trustworthy by sandboxing collect/judge to the corpus, normal
 - 2026-04-17 01:30 Smoke test hit transient OpenRouter 429s on Nemotron, so I added bounded retry/backoff for retryable OpenRouter errors before attempting larger batches.
 - 2026-04-17 01:34 Removed the global `deepinfra/bf16` routing pin from `benchmark.yaml`; it was breaking non-DeepInfra models entirely and keeping Nemotron stuck on the most failure-prone provider path.
 - 2026-04-17 01:40 Added transport config knobs for OpenRouter structured-output disablement and retry backoff tiers, then set Nemotron's benchmark transport to prompt-only JSON with `[3000, 10000, 20000]` retry delays.
+- 2026-04-17 03:40 Added aggregate-level error counts so summaries now report runs with any recorded errors plus collect/judge error counts, instead of burying that signal only in per-run traces.
 
 ## Final notes and learnings
 - Pending.
