@@ -7,6 +7,8 @@ runId: nemotron3-super-openrouter-v1   # Supported execution id location. Set an
 # Candidate model execution path: direct OpenRouter HTTP or pi SDK sessions
 transport:
   kind: openrouter               # openrouter | pi
+  openRouterUseStructuredOutputs: false
+  openRouterRetryDelaysMs: [3000, 10000, 20000]
 
 # Candidate benchmark models
 models:

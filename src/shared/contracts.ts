@@ -40,6 +40,8 @@ export interface ModelTransportConfig {
   kind: TransportKind;
   session?: SessionConfig;
   openRouterRouting?: OpenRouterProviderRoutingConfig;
+  openRouterUseStructuredOutputs?: boolean;
+  openRouterRetryDelaysMs?: number[];
 }
 
 export interface CorpusSnapshotRef {

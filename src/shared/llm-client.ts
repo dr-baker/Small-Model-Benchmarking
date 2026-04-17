@@ -147,8 +147,8 @@ function isRetryableOpenRouterStatus(status: number): boolean {
   return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
 }
 
-function getOpenRouterRetryDelayMs(attempt: number): number {
-  const delays = [2000, 5000, 10000];
+function getOpenRouterRetryDelayMs(transport: ModelTransportConfig, attempt: number): number {
+  const delays = transport.openRouterRetryDelaysMs ?? [2000, 5000, 10000];
   return delays[Math.min(attempt, delays.length - 1)] ?? 10000;
 }
 
@@ -279,7 +279,7 @@ async function runOpenRouterClient(config: LlmClientConfig, deps: LlmClientDeps 
   const messages: ChatMessage[] = resolveMessages(config);
   const openaiTools = config.tools.length > 0 ? agentToolsToOpenAITools(config.tools) : undefined;
   const toolMap = new Map<string, unknown>(config.tools.map((raw) => [(raw as ToolLike).name, raw]));
-  let responseFormat = config.responseFormat;
+  let responseFormat = config.transport.openRouterUseStructuredOutputs === false ? undefined : config.responseFormat;
 
   try {
     for (let round = 0; round <= maxRounds; round += 1) {
@@ -327,7 +327,7 @@ async function runOpenRouterClient(config: LlmClientConfig, deps: LlmClientDeps 
           throw new Error(`API error ${response.status}: ${errorText}`);
         }
 
-        const delayMs = getOpenRouterRetryDelayMs(requestAttempt);
+        const delayMs = getOpenRouterRetryDelayMs(config.transport, requestAttempt);
         events.push({
           observedAt: new Date().toISOString(),
           eventType: "llm_request_retry_scheduled",
