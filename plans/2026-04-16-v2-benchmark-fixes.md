@@ -18,6 +18,7 @@ Make the benchmark trustworthy by sandboxing collect/judge to the corpus, normal
 - 2026-04-16 09:32 Added corpus-path normalization, corpus-only tool sandboxing, prompt tightening, dataset question classification, deterministic grading heuristics for warning-only legacy mentions, and aggregate breakdowns by question type.
 - 2026-04-16 09:35 Rebuilt the dataset and passed `build`, `typecheck`, `dataset:validate`, and `check:architecture`.
 - 2026-04-17 01:30 Smoke test hit transient OpenRouter 429s on Nemotron, so I added bounded retry/backoff for retryable OpenRouter errors before attempting larger batches.
+- 2026-04-17 01:34 Removed the global `deepinfra/bf16` routing pin from `benchmark.yaml`; it was breaking non-DeepInfra models entirely and keeping Nemotron stuck on the most failure-prone provider path.
 
 ## Final notes and learnings
 - Pending.
