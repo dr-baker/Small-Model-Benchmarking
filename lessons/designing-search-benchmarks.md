@@ -66,5 +66,5 @@ When building a search benchmark for any domain:
 
 ## Related
 
-- `final-qa-bank.md` — the curated 75-question bank built using these principles
-- `model-qa-evaluation.md` — per-question classification showing which models produced keyword-obvious vs semantic questions
+- `dataset/source/final-qa-bank.md` — the curated 75-question bank built using these principles
+- `raw/model-qa-evaluation.md` — per-question classification showing which models produced keyword-obvious vs semantic questions

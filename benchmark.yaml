@@ -1,8 +1,8 @@
-# Benchmark configuration — single source of truth
-# All paths relative to repo root
+# Benchmark configuration — tracked base config
+# Repo-local paths are relative to repo root. Put machine-specific overrides in benchmark.local.yaml.
 
 benchmarkName: swiftui-docs-chatbot-benchmark
-runId: nemotron3-super-openrouter-v1   # Supported execution id location. Set an explicit value for resumable / idempotent runs.
+runId: auto   # Set an explicit value for resumable / idempotent runs.
 
 # Candidate model execution path: direct OpenRouter HTTP or pi SDK sessions
 transport:
@@ -50,6 +50,8 @@ corpus:
   manifestPath: corpus/swift-docs-2026-04-10/manifest.json
   manifestSha256: d71285e0
 
+# Optional local-only Swift Docs hybrid search config belongs in benchmark.local.yaml.
+
 # Execution controls
 execution:
   resume: true                   # true = skip completed runs and continue partial executions when runId is explicit
@@ -67,6 +69,7 @@ systemPrompts:
   judge: "You are a benchmark judge. Follow the response schema exactly."
 
 # Run matrix: which modes to run + default toolSet per mode
+# Use --tool-set=swift_docs_hybrid to benchmark database-assisted retrieval.
 modes:
   open_book: read_grep
   closed_book: none

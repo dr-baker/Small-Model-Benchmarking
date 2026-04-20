@@ -1,5 +1,7 @@
 # Models Fall Into Their Own Traps
 
+> Historical note: this write-up analyzes the original 70-question bank used during early curation. The final tracked dataset in this repo contains 75 questions.
+
 The single most striking finding from this benchmark: **models produced answers that contained the exact mistakes they were told to catch**, even though the benchmark prompt explicitly described each pitfall.
 
 ## The Setup

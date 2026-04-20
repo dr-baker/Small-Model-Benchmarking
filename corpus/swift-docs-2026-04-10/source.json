@@ -2,7 +2,7 @@
   "snapshot_id": "swift-docs-2026-04-10",
   "snapshot_date": "2026-04-10",
   "upstream": {
-    "repo_path": "/Users/daniel/Developer/Swift Docs",
+    "repo_path": "local-path-omitted",
     "description": "Local SwiftUI/macOS documentation crawler and retrieval layer.",
     "git_commit": "76240323111f1c66ef96116e0a8d50495eac8d78",
     "git_commit_date": "2026-03-28T13:12:15-07:00",

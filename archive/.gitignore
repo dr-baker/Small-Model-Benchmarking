@@ -1,0 +1,15 @@
+# Ignore new archive drops by default.
+*
+
+# Keep archive docs and curated historical artifacts tracked.
+!.gitignore
+!README.md
+!benchmark-gold-evidence.legacy.json
+!gpt54minihigh/
+!gpt54minihigh/**
+!mercury2/
+!mercury2/**
+!opus46/
+!opus46/**
+!trinitylargehigh/
+!trinitylargehigh/**

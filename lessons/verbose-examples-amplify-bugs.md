@@ -1,5 +1,7 @@
 # Verbose Examples Amplify Bugs
 
+> Historical note: this write-up analyzes the original 70-question bank used during early curation. The final tracked dataset in this repo contains 75 questions.
+
 A clear pattern emerged when comparing the four models' outputs: **the more code a model wrote per answer, the more errors it introduced**.
 
 ## The Data

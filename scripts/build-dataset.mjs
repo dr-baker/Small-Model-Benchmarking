@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
-const DEFAULT_SOURCE = path.join(REPO_ROOT, 'final-qa-bank.md');
+const DEFAULT_SOURCE_RELATIVE = 'dataset/source/final-qa-bank.md';
+const DEFAULT_SOURCE = path.join(REPO_ROOT, DEFAULT_SOURCE_RELATIVE);
 const DEFAULT_OUTPUT = path.join(REPO_ROOT, 'dataset', 'swiftui-docs-chatbot-benchmark.v1.json');
 const DEFAULT_GOLD_EVIDENCE = path.join(REPO_ROOT, 'rubric', 'gold-evidence.v1.json');
 
@@ -146,7 +147,7 @@ function parseQuestions(markdown) {
       questionType: 'best_practice',
       goldEvidence: [],
       source: {
-        file: 'final-qa-bank.md',
+        file: DEFAULT_SOURCE_RELATIVE,
         questionNumber,
       },
     });
@@ -198,7 +199,7 @@ function buildDataset(markdown, goldEvidencePath) {
     datasetVersion: 'v1',
     generatedAt: '2026-04-10',
     source: {
-      file: 'final-qa-bank.md',
+      file: DEFAULT_SOURCE_RELATIVE,
       format: 'markdown',
       questionCount: questions.length,
     },

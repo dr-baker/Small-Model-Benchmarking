@@ -1,6 +1,6 @@
 # How to Work With This Codebase
 
-Three-stage pipeline (collect → judge → grade → aggregate). Only collect/judge call models. Grade and aggregate stay pure over traces.
+Four-stage pipeline (collect → judge → grade → aggregate). Only collect/judge call models. Grade and aggregate stay pure over traces.
 
 ## Core Commands
 
@@ -11,16 +11,17 @@ npm run check:architecture
 npm run dataset:build
 npm run dataset:validate
 npm run test:run
+npm run aggregate:run
 ```
 
 ## Directory Purpose
 
 - `corpus/` — Frozen doc snapshots (manifests tracked)
-- `dataset/` — Benchmark questions + gold evidence
+- `dataset/` — Benchmark questions, source bank, and derived dataset JSON
 - `prompts/` — Versioned prompts
 - `tool-sets/` — Named tool configs
 - `rubric/` — Deterministic grading rules
-- `judges/` — Judge profiles
+- `docs/` — Shareable usage and layout docs
 - `src/collect/` — Trace collection
 - `src/judge/` — LLM judge stage
 - `src/grade/` — Pure deterministic grading
@@ -37,5 +38,5 @@ npm run test:run
 - New rubrics or judges never force re-collect
 - Use `scripts/test-run.ts` for local testing
 
-See `README.md` for goals and results.
-Read `plans/` and `lessons/` for deep detail.
+See `README.md` for the repo pitch and quickstart.
+Read `docs/` for shareable setup details, then `plans/` and `lessons/` for deep detail.

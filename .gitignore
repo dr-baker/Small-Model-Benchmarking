@@ -13,7 +13,13 @@ corpus/*/swiftui-macos-corpus/
 # .gitignore when we start producing traces; until then, stay out of git.
 benchmark-results/*/
 
-# Node / TS tooling (for when the harness starts taking shape)
+# Local benchmark scratch output
+.tmp-benchmark-logs/
+
+# Local benchmark config overlay
+benchmark.local.yaml
+
+# Node / TS tooling
 node_modules/
 dist/
 *.log
