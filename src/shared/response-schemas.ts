@@ -51,9 +51,11 @@ const JUDGE_SCHEMA = {
     completeness: { type: "integer", enum: [0, 1, 2] },
     codeExample: { type: "integer", enum: [0, 1, 2] },
     explanation: { type: "integer", enum: [0, 1, 2] },
+    retrievalSupportsReferenceAnswer: { type: "boolean" },
+    retrievalQuality: { type: "integer", enum: [0, 1, 2] },
     reasoning: { type: "string", description: "One-sentence judgment summary" },
   },
-  required: ["recommendsCorrectPattern", "recommendsDeprecatedPattern", "completeness", "codeExample", "explanation", "reasoning"],
+  required: ["recommendsCorrectPattern", "recommendsDeprecatedPattern", "completeness", "codeExample", "explanation", "retrievalSupportsReferenceAnswer", "retrievalQuality", "reasoning"],
   additionalProperties: false,
 };
 

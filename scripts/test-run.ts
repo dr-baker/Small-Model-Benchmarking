@@ -1,23 +1,15 @@
 import { constants as fsConstants } from "node:fs";
 import { access } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { stringify as stringifyYaml } from "yaml";
+import { aggregateRuns, listAggregateReadyRunDirectories } from "../src/aggregate/run.js";
 import { runCollect } from "../src/collect/run.js";
-import { judgeRun } from "../src/judge/run.js";
-import { gradeRun } from "../src/grade/run.js";
-import { aggregateRuns } from "../src/aggregate/run.js";
 import { loadToolSetCatalog } from "../src/collect/tool-sets.js";
-import type { DatasetQuestion, ModelRef } from "../src/shared/contracts.js";
-import { readJsonFile } from "../src/shared/io.js";
-import {
-  getCandidateModelRefs,
-  getJudgeModelRef,
-  getJudgeTransportConfig,
-  getPromptTemplatePath,
-  loadBenchmarkConfig,
-  parseModelRefFromString,
-  type BenchmarkBatchNumber,
-  type BenchmarkConfig,
-} from "../src/shared/config.js";
+import { gradeRun } from "../src/grade/run.js";
+import { judgeRun } from "../src/judge/run.js";
+import type { DatasetQuestion, ModelRef, ToolSetName } from "../src/shared/contracts.js";
+import { loadBenchmarkConfigWithMeta, getCandidateModelRefs, getJudgeModelRef, getJudgeTransportConfig, getPromptTemplatePath, parseModelRefFromString, type BenchmarkBatchNumber, type BenchmarkConfig, type BenchmarkConfigPaths } from "../src/shared/config.js";
+import { readJsonFile, writeJsonFile, writeTextFile } from "../src/shared/io.js";
 
 const REPO_ROOT = resolve(import.meta.dirname ?? ".", "..");
 
@@ -27,6 +19,7 @@ interface CliArgs {
   transport?: "openrouter" | "pi";
   questionIds?: string[];
   modes?: string[];
+  toolSet?: ToolSetName;
   runId?: string;
   batchSize?: number;
   batchNumber?: BenchmarkBatchNumber;
@@ -76,6 +69,7 @@ function parseCliArgs(argv: string[]): CliArgs {
       result.transport = transport;
     }
     else if (arg.startsWith("--mode=")) result.modes = parseCsv(arg.split("=")[1] ?? "");
+    else if (arg.startsWith("--tool-set=")) result.toolSet = arg.split("=")[1] as ToolSetName;
     else if (arg.startsWith("--run-id=")) result.runId = arg.split("=")[1];
     else if (arg.startsWith("--batch-size=")) result.batchSize = parsePositiveInteger(arg.split("=")[1] ?? "", "--batch-size");
     else if (arg.startsWith("--batch-number=")) result.batchNumber = parseBatchNumber(arg.split("=")[1] ?? "");
@@ -124,8 +118,9 @@ function getExecutionDirectory(benchmarkName: string, configuredRunId: string): 
   return resolve(REPO_ROOT, "benchmark-results", executionId);
 }
 
-function getRunId(model: ModelRef, mode: string, questionId: string): string {
-  return `${slugify(model.provider)}--${slugify(model.modelId)}--${slugify(questionId)}--${slugify(mode)}`;
+function getRunId(model: ModelRef, mode: string, questionId: string, toolSetName: string, defaultToolSetName: string): string {
+  const base = `${slugify(model.provider)}--${slugify(model.modelId)}--${slugify(questionId)}--${slugify(mode)}`;
+  return toolSetName === defaultToolSetName ? base : `${base}--${slugify(toolSetName)}`;
 }
 
 async function pathExists(path: string): Promise<boolean> {
@@ -167,6 +162,8 @@ async function detectNextIncompleteBatchNumber(params: {
   executionDirectory: string;
   models: ModelRef[];
   modes: string[];
+  resolveToolSetName: (mode: string) => string;
+  getDefaultToolSetName: (mode: string) => string;
 }): Promise<number> {
   const totalBatches = countBatches(params.questions, params.batchSize);
   for (let batchNumber = 1; batchNumber <= totalBatches; batchNumber += 1) {
@@ -176,7 +173,9 @@ async function detectNextIncompleteBatchNumber(params: {
     for (const question of batchQuestions) {
       for (const model of params.models) {
         for (const mode of params.modes) {
-          const runDirectory = join(params.executionDirectory, getRunId(model, mode, question.id));
+          const toolSetName = params.resolveToolSetName(mode);
+          const defaultToolSetName = params.getDefaultToolSetName(mode);
+          const runDirectory = join(params.executionDirectory, getRunId(model, mode, question.id, toolSetName, defaultToolSetName));
           if (!(await isRunComplete(runDirectory))) {
             batchComplete = false;
             break;
@@ -187,17 +186,112 @@ async function detectNextIncompleteBatchNumber(params: {
       if (!batchComplete) break;
     }
 
-    if (!batchComplete) {
-      return batchNumber;
-    }
+    if (!batchComplete) return batchNumber;
   }
 
   return totalBatches;
 }
 
+function normalizeTransportForArtifact(transport: BenchmarkConfig["transport"]): Record<string, unknown> {
+  if (transport.kind === "openrouter") {
+    return {
+      kind: transport.kind,
+      ...(transport.openRouterRouting ? { openRouterRouting: transport.openRouterRouting } : {}),
+      ...(transport.openRouterUseStructuredOutputs !== undefined ? { openRouterUseStructuredOutputs: transport.openRouterUseStructuredOutputs } : {}),
+      ...(transport.openRouterRetryDelaysMs ? { openRouterRetryDelaysMs: transport.openRouterRetryDelaysMs } : {}),
+    };
+  }
+
+  return {
+    kind: transport.kind,
+    ...(transport.session ? { session: transport.session } : {}),
+  };
+}
+
+async function writeExecutionArtifacts(params: {
+  executionDirectory: string;
+  config: BenchmarkConfig;
+  cli: CliArgs;
+  effectiveRunId: string;
+  candidateModels: ModelRef[];
+  judgeModelRef: ModelRef;
+  transport: BenchmarkConfig["transport"];
+  judgeTransport: BenchmarkConfig["transport"];
+  modes: string[];
+  selectedQuestions: DatasetQuestion[];
+  toolSetOverride?: ToolSetName;
+  batchSize: number | null;
+  configuredBatchNumber: BenchmarkBatchNumber;
+  resolvedBatchNumber: number;
+  batchQuestions: DatasetQuestion[];
+  executionResume: boolean;
+  stopOnError: boolean;
+  configPaths: BenchmarkConfigPaths;
+}): Promise<void> {
+  const executionYaml = stringifyYaml({
+    benchmarkName: params.config.benchmarkName,
+    runId: params.effectiveRunId,
+    transport: normalizeTransportForArtifact(params.transport),
+    models: {
+      candidates: params.candidateModels.map((model) => `${model.provider}/${model.modelId}`),
+    },
+    judge: {
+      model: `${params.judgeModelRef.provider}/${params.judgeModelRef.modelId}`,
+      transport: normalizeTransportForArtifact(params.judgeTransport),
+      profile: params.config.judge.profile,
+    },
+    paths: params.config.paths,
+    corpus: params.config.corpus,
+    ...(params.config.swiftDocs ? { swiftDocs: params.config.swiftDocs } : {}),
+    execution: {
+      ...params.config.execution,
+      resume: params.executionResume,
+      stopOnError: params.stopOnError,
+    },
+    batch: {
+      size: params.batchSize,
+      requestedNumber: params.configuredBatchNumber,
+      resolvedNumber: params.resolvedBatchNumber,
+      questionIds: params.batchQuestions.map((question) => question.id),
+    },
+    systemPrompts: params.config.systemPrompts,
+    modes: Object.fromEntries(params.modes.map((mode) => [mode, params.toolSetOverride ?? params.config.modes[mode as keyof typeof params.config.modes]])),
+    questions: params.selectedQuestions.map((question) => question.id),
+  });
+
+  await writeTextFile(join(params.executionDirectory, "execution-config.yaml"), executionYaml);
+  await writeJsonFile(join(params.executionDirectory, "execution-metadata.json"), {
+    generatedAt: new Date().toISOString(),
+    configPaths: params.configPaths,
+    executionDirectory: params.executionDirectory,
+    benchmarkName: params.config.benchmarkName,
+    effectiveRunId: params.effectiveRunId,
+    cliOverrides: {
+      ...(params.cli.model ? { model: params.cli.model } : {}),
+      ...(params.cli.judgeModel ? { judgeModel: params.cli.judgeModel } : {}),
+      ...(params.cli.transport ? { transport: params.cli.transport } : {}),
+      ...(params.cli.questionIds ? { questionIds: params.cli.questionIds } : {}),
+      ...(params.cli.modes ? { modes: params.cli.modes } : {}),
+      ...(params.cli.runId ? { runId: params.cli.runId } : {}),
+      ...(params.cli.toolSet ? { toolSet: params.cli.toolSet } : {}),
+      ...(params.cli.batchSize ? { batchSize: params.cli.batchSize } : {}),
+      ...(params.cli.batchNumber ? { batchNumber: params.cli.batchNumber } : {}),
+      ...(params.cli.resume !== undefined ? { resume: params.cli.resume } : {}),
+      ...(params.cli.stopOnError !== undefined ? { stopOnError: params.cli.stopOnError } : {}),
+    },
+    aggregateOutputs: {
+      json: join(params.executionDirectory, "aggregate.json"),
+      summaryCsv: join(params.executionDirectory, "aggregate-summary.csv"),
+      questionTypesCsv: join(params.executionDirectory, "aggregate-question-types.csv"),
+      runsCsv: join(params.executionDirectory, "aggregate-runs.csv"),
+      runsJsonl: join(params.executionDirectory, "aggregate-runs.jsonl"),
+    },
+  });
+}
+
 async function main() {
   const cli = parseCliArgs(process.argv);
-  const config = await loadBenchmarkConfig();
+  const { config, configPaths } = await loadBenchmarkConfigWithMeta();
 
   const effectiveRunId = cli.runId ?? config.runId;
   const executionResume = cli.resume ?? config.execution.resume;
@@ -220,10 +314,13 @@ async function main() {
 
   const executionDirectory = getExecutionDirectory(config.benchmarkName, effectiveRunId);
   console.log(`Execution directory: ${executionDirectory}`);
+  console.log(`Config: ${configPaths.basePath}${configPaths.overridePath ? ` + ${configPaths.overridePath}` : ""}`);
 
   const dataset = await readJsonFile<{ questions: DatasetQuestion[] }>(config.paths.dataset);
   const selectedQuestions = selectQuestions(config, dataset.questions, cli.questionIds);
   const catalog = await loadToolSetCatalog(config.paths.toolSets);
+  const resolveToolSetName = (mode: string) => cli.toolSet ?? config.modes[mode as keyof typeof config.modes];
+  const getDefaultToolSetName = (mode: string) => config.modes[mode as keyof typeof config.modes];
   const modes = cli.modes && cli.modes.length > 0
     ? cli.modes as Array<keyof typeof config.modes>
     : (Object.keys(config.modes) as Array<keyof typeof config.modes>);
@@ -237,10 +334,33 @@ async function main() {
           executionDirectory,
           models: candidateModels,
           modes,
+          resolveToolSetName,
+          getDefaultToolSetName,
         })
       : configuredBatchNumber;
 
   const questions = applyBatch(selectedQuestions, batchSize, batchNumber);
+
+  await writeExecutionArtifacts({
+    executionDirectory,
+    config,
+    cli,
+    effectiveRunId,
+    candidateModels,
+    judgeModelRef,
+    transport,
+    judgeTransport,
+    modes,
+    selectedQuestions,
+    toolSetOverride: cli.toolSet,
+    batchSize,
+    configuredBatchNumber,
+    resolvedBatchNumber: batchNumber,
+    batchQuestions: questions,
+    executionResume,
+    stopOnError,
+    configPaths,
+  });
 
   console.log(`Selected ${questions.length} question(s), ${candidateModels.length} model(s), ${modes.length} mode(s).`);
   if (batchSize !== null) {
@@ -248,17 +368,17 @@ async function main() {
     console.log(`Batch ${batchNumber} with size ${batchSize}.${autoLabel}`);
   }
 
-  const completedRunDirs: string[] = [];
   let observedErrors = false;
 
   for (const modelRef of candidateModels) {
     for (const question of questions) {
       for (const mode of modes) {
-        const toolSetName = config.modes[mode];
+        const toolSetName = resolveToolSetName(mode);
+        const defaultToolSetName = getDefaultToolSetName(mode);
         const toolSet = catalog.get(toolSetName);
         if (!toolSet) throw new Error(`Unknown tool set: ${toolSetName}`);
 
-        const runId = getRunId(modelRef, mode, question.id);
+        const runId = getRunId(modelRef, mode, question.id, toolSetName, defaultToolSetName);
         const runDirectory = join(executionDirectory, runId);
         const stageState = await getRunStageState(runDirectory);
         assertResumableCollectState(runDirectory, stageState);
@@ -268,12 +388,11 @@ async function main() {
         }
 
         if (executionResume && stageState.grade) {
-          console.log(`\n==> [${modelRef.provider}/${modelRef.modelId} | ${mode.toUpperCase()} | ${question.id}] Skipping completed run.`);
-          completedRunDirs.push(runDirectory);
+          console.log(`\n==> [${modelRef.provider}/${modelRef.modelId} | ${mode.toUpperCase()} | toolSet=${toolSetName} | ${question.id}] Skipping completed run.`);
           continue;
         }
 
-        console.log(`\n==> [${modelRef.provider}/${modelRef.modelId} | ${mode.toUpperCase()} | ${question.id}]`);
+        console.log(`\n==> [${modelRef.provider}/${modelRef.modelId} | ${mode.toUpperCase()} | toolSet=${toolSetName} | ${question.id}]`);
 
         let collectHadError = false;
         let collectParseRetriesUsed = 0;
@@ -294,6 +413,7 @@ async function main() {
             responseSchemaVersion: "answer-response.v1",
             rubricVersion: "rubric.v1",
             corpus: config.corpus,
+            ...(config.swiftDocs ? { swiftDocs: config.swiftDocs } : {}),
             question,
             sampling: {},
             systemPrompt: config.systemPrompts.collect,
@@ -344,8 +464,6 @@ async function main() {
           console.log("   grade: skipped (artifact already exists)");
         }
 
-        completedRunDirs.push(runDirectory);
-
         if (collectHadError || judgeHadError) {
           observedErrors = true;
           console.warn(`   warning: run completed with recorded errors (${collectHadError ? "collect" : ""}${collectHadError && judgeHadError ? ", " : ""}${judgeHadError ? "judge" : ""})`);
@@ -357,13 +475,7 @@ async function main() {
     }
   }
 
-  const aggregateReadyRunDirs: string[] = [];
-  for (const runDirectory of completedRunDirs) {
-    if (await pathExists(join(runDirectory, "grade.json"))) {
-      aggregateReadyRunDirs.push(runDirectory);
-    }
-  }
-
+  const aggregateReadyRunDirs = await listAggregateReadyRunDirectories(executionDirectory);
   if (aggregateReadyRunDirs.length === 0) {
     console.log("No completed runs available for aggregation.");
     return;
@@ -389,13 +501,23 @@ async function main() {
         + ` | Completeness: ${summary.judge.meanCompleteness.toFixed(1)}`
         + ` | Code: ${summary.judge.meanCodeExample.toFixed(1)}`
         + ` | Explanation: ${summary.judge.meanExplanation.toFixed(1)}`
+        + (summary.judge.meanRetrievalQuality !== undefined ? ` | RetrievalQuality: ${summary.judge.meanRetrievalQuality.toFixed(1)}` : "")
         + ` | DeprecatedRate: ${(summary.judge.recommendsDeprecatedPatternRate * 100).toFixed(0)}%`
       : " | Judge: (no scored runs)";
     const errorLine = summary.errors
       ? ` | Errors: any=${summary.errors.runsWithAnyError}/${summary.runs}, collect=${summary.errors.collectErrorRuns}, judge=${summary.errors.judgeErrorRuns}`
       : "";
-    console.log(`- ${summary.model.provider}/${summary.model.modelId} | ${summary.mode} | transport=${summary.transport.kind} | ${gradeLine}${groundedLine}${mrrLine}${costLine}${judgeLine}${errorLine}`);
+    console.log(`- ${summary.model.provider}/${summary.model.modelId} | ${summary.mode} | toolSet=${summary.toolSet.name} | transport=${summary.transport.kind} | ${gradeLine}${groundedLine}${mrrLine}${costLine}${judgeLine}${errorLine}`);
   }
+
+  console.log("\n==> Aggregate artifacts:");
+  console.log(`- ${join(executionDirectory, "execution-config.yaml")}`);
+  console.log(`- ${join(executionDirectory, "execution-metadata.json")}`);
+  console.log(`- ${join(executionDirectory, "aggregate.json")}`);
+  console.log(`- ${join(executionDirectory, "aggregate-summary.csv")}`);
+  console.log(`- ${join(executionDirectory, "aggregate-question-types.csv")}`);
+  console.log(`- ${join(executionDirectory, "aggregate-runs.csv")}`);
+  console.log(`- ${join(executionDirectory, "aggregate-runs.jsonl")}`);
 
   if (observedErrors) {
     console.warn("\nCompleted with recorded run errors. See trace.json and judge.json artifacts in the execution directory for details.");

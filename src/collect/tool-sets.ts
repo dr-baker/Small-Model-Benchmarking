@@ -1,14 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { createFindTool, createGrepTool, createLsTool, createReadTool } from "@mariozechner/pi-coding-agent";
-import type { ToolSetDefinition, ToolSetName } from "../shared/contracts.js";
+import type { SwiftDocsToolConfig, ToolSetDefinition, ToolSetName } from "../shared/contracts.js";
 import { resolvePathWithinCorpus } from "../shared/corpus-paths.js";
+import { createSwiftDocsSearchHybridTool } from "./swift-docs-tool.js";
 
 interface ToolSetCatalogFile {
   version: string;
   toolSets: ToolSetDefinition[];
 }
-
-
 
 export async function loadToolSetCatalog(catalogPath: string): Promise<Map<ToolSetName, ToolSetDefinition>> {
   const parsed = JSON.parse(await readFile(catalogPath, "utf8")) as ToolSetCatalogFile;
@@ -28,7 +27,8 @@ type CollectTool =
   | ReturnType<typeof createReadTool>
   | ReturnType<typeof createGrepTool>
   | ReturnType<typeof createFindTool>
-  | ReturnType<typeof createLsTool>;
+  | ReturnType<typeof createLsTool>
+  | ReturnType<typeof createSwiftDocsSearchHybridTool>;
 
 type ToolLike = {
   name: string;
@@ -65,7 +65,7 @@ function sandboxTool<T extends CollectTool>(tool: T, corpusRoot: string): T {
   } as T;
 }
 
-export function createToolsForToolSet(toolSet: ToolSetDefinition, cwd: string): CollectTool[] {
+export function createToolsForToolSet(toolSet: ToolSetDefinition, cwd: string, options?: { swiftDocs?: SwiftDocsToolConfig }): CollectTool[] {
   const tools = [] as CollectTool[];
   for (const toolName of toolSet.toolNames) {
     switch (toolName) {
@@ -80,6 +80,12 @@ export function createToolsForToolSet(toolSet: ToolSetDefinition, cwd: string): 
         break;
       case "ls":
         tools.push(sandboxTool(createLsTool(cwd), cwd));
+        break;
+      case "swift_docs_search_hybrid":
+        if (!options?.swiftDocs) {
+          throw new Error("Tool set requires swiftDocs config, but benchmark config.swiftDocs is missing.");
+        }
+        tools.push(createSwiftDocsSearchHybridTool(options.swiftDocs));
         break;
       default:
         throw new Error(`Unsupported tool in catalog: ${toolName}`);

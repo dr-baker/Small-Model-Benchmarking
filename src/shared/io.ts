@@ -19,6 +19,11 @@ export async function writeJsonFile(path: string, value: unknown): Promise<void>
   await writeFile(path, serializeJson(value), "utf8");
 }
 
+export async function writeTextFile(path: string, content: string): Promise<void> {
+  await ensureDirectory(dirname(path));
+  await writeFile(path, content, "utf8");
+}
+
 export function assertPathWithinDirectory(baseDir: string, candidatePath: string): string {
   const resolvedBaseDir = resolve(baseDir);
   const resolvedCandidate = resolve(candidatePath);

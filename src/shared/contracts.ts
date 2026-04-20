@@ -5,7 +5,7 @@ export const ANSWER_RESPONSE_SCHEMA_VERSION = "answer-response.v1" as const;
 export const JUDGE_VERDICT_SCHEMA_VERSION = "judge-verdict.v1" as const;
 
 export type BenchmarkMode = "closed_book" | "open_book";
-export type ToolSetName = "none" | "read_only" | "read_grep" | "read_grep_glob";
+export type ToolSetName = "none" | "read_only" | "read_grep" | "read_grep_glob" | "swift_docs_hybrid";
 export type PromptTemplateId = "benchmark-answer-v1";
 export type JudgePromptTemplateId = "judge-answer-v1";
 export type JudgeVerdictLabel = "correct" | "partially_correct" | "incorrect";
@@ -49,6 +49,12 @@ export interface CorpusSnapshotRef {
   rootDir: string;
   manifestPath: string;
   manifestSha256: string;
+}
+
+export interface SwiftDocsToolConfig {
+  repoRoot: string;
+  dbPath: string;
+  configPath?: string;
 }
 
 export interface GoldEvidenceReference {
@@ -102,6 +108,7 @@ export interface CollectRunInput {
   responseSchemaVersion: typeof ANSWER_RESPONSE_SCHEMA_VERSION;
   rubricVersion: string;
   corpus: CorpusSnapshotRef;
+  swiftDocs?: SwiftDocsToolConfig;
   question: DatasetQuestion;
   sampling: SamplingConfig;
   systemPrompt: string;
@@ -213,6 +220,7 @@ export interface RunManifest {
   responseSchemaVersion: typeof ANSWER_RESPONSE_SCHEMA_VERSION;
   rubricVersion: string;
   corpus: CorpusSnapshotRef;
+  swiftDocs?: SwiftDocsToolConfig;
   questionId: string;
   sampling: SamplingConfig;
   collectRetry?: CollectRetryMetadata;
@@ -255,6 +263,8 @@ export interface RetrievalMetrics {
   timeToFirstRelevantDocMs?: number;
   filesReadBeforeFirstRelevantDoc?: number;
   bytesRead?: number;
+  searchCalls?: number;
+  reformulations?: number;
 }
 
 export interface JudgeArtifact {
@@ -266,6 +276,8 @@ export interface JudgeArtifact {
   completeness?: JudgeQualitativeScore;
   codeExample?: JudgeQualitativeScore;
   explanation?: JudgeQualitativeScore;
+  retrievalSupportsReferenceAnswer?: boolean;
+  retrievalQuality?: JudgeQualitativeScore;
   verdict?: JudgeVerdictLabel;
   reasoning?: string;
   status: JudgeArtifactStatus;
@@ -318,8 +330,10 @@ export interface AggregateJudgeMetrics {
   meanCompleteness: number;
   meanCodeExample: number;
   meanExplanation: number;
+  meanRetrievalQuality?: number;
   recommendsCorrectPatternRate: number;
   recommendsDeprecatedPatternRate: number;
+  retrievalSupportsReferenceAnswerRate?: number;
 }
 
 export interface AggregateCostMetrics {
@@ -363,9 +377,73 @@ export interface AggregateModelSummary {
   questionTypeBreakdown?: AggregateQuestionTypeSummary[];
 }
 
+export interface AggregateRunQuestionDetail {
+  questionId: string;
+  questionType: BenchmarkQuestionType;
+  title?: string;
+  question?: string;
+}
+
+export interface AggregateRunAnswerDetail {
+  mode?: BenchmarkMode;
+  confidence?: number;
+  finalAnswer?: string;
+  parseError?: string;
+  evidenceSummary?: string;
+  citationCount: number;
+  citationFilePaths: string[];
+}
+
+export interface AggregateRunJudgeDetail {
+  status: JudgeArtifact["status"];
+  verdict?: JudgeArtifact["verdict"];
+  completeness?: number;
+  codeExample?: number;
+  explanation?: number;
+  retrievalQuality?: number;
+  recommendsCorrectPattern?: boolean;
+  recommendsDeprecatedPattern?: boolean;
+  retrievalSupportsReferenceAnswer?: boolean;
+  reasoning?: string;
+  costUsd?: number;
+}
+
+export interface AggregateRunDetail {
+  runDirectory: string;
+  runId: string;
+  question: AggregateRunQuestionDetail;
+  model: ModelRef;
+  transport: ModelTransportConfig;
+  mode: BenchmarkMode;
+  toolSet: ToolSetDefinition;
+  answer: AggregateRunAnswerDetail;
+  grade: {
+    score: number;
+    correct: boolean;
+    grounded?: boolean;
+    mustMentionPassed: string[];
+    mustMentionFailed: string[];
+    mustNotMentionViolated: string[];
+    failures: FailureTaxonomyId[];
+    retrieval?: RetrievalMetrics;
+  };
+  judge?: AggregateRunJudgeDetail;
+  cost: {
+    collectUsd?: number;
+    judgeUsd?: number;
+    totalUsd?: number;
+  };
+  errors: {
+    collectHadError: boolean;
+    judgeHadError: boolean;
+  };
+  artifactPaths: RunManifest["artifactPaths"];
+}
+
 export interface AggregateArtifact {
   benchmarkName: string;
   rubricVersion: string;
   generatedAt: string;
   summaries: AggregateModelSummary[];
+  runs: AggregateRunDetail[];
 }

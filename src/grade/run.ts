@@ -8,9 +8,11 @@ import type {
   RetrievalMetrics,
   RubricDefinition,
   RunManifest,
+  ToolInvocationTrace,
 } from "../shared/contracts.js";
 import { readJsonFile, writeJsonFile } from "../shared/io.js";
 import { inferQuestionType, normalizeCorpusRelativePath } from "../shared/corpus-paths.js";
+import { collectSwiftDocsRetrievedPaths, parseSwiftDocsHybridToolResult } from "../shared/swift-docs-search.js";
 
 interface GradeRunOptions {
   runDirectory: string;
@@ -31,7 +33,11 @@ function deriveFailures(answer: BenchmarkAnswerResponse | { parseError: string }
   return failures;
 }
 
-function calculateRetrievalMetrics(trace: CollectTrace, question: DatasetQuestion, corpusRoot: string): RetrievalMetrics | undefined {
+function getToolResultSize(tool: ToolInvocationTrace): number {
+  return typeof tool.result === "string" ? tool.result.length : JSON.stringify(tool.result ?? "").length;
+}
+
+function calculateReadRetrievalMetrics(trace: CollectTrace, question: DatasetQuestion, corpusRoot: string): RetrievalMetrics | undefined {
   if (trace.toolInvocations.length === 0) return undefined;
 
   let bytesRead = 0;
@@ -49,8 +55,7 @@ function calculateRetrievalMetrics(trace: CollectTrace, question: DatasetQuestio
       readCount += 1;
       const args = tool.args as { path?: string };
       const normalizedPath = normalizeCorpusRelativePath(args.path, corpusRoot);
-      const content = JSON.stringify(tool.result ?? "");
-      bytesRead += content.length;
+      bytesRead += getToolResultSize(tool);
 
       if (normalizedPath && relevantPaths.has(normalizedPath)) {
         hitAtK = true;
@@ -63,8 +68,7 @@ function calculateRetrievalMetrics(trace: CollectTrace, question: DatasetQuestio
         filesReadBeforeFirstRelevantDoc += 1;
       }
     } else if (tool.toolName === "grep") {
-      const resultStr = typeof tool.result === "string" ? tool.result : JSON.stringify(tool.result ?? "");
-      bytesRead += resultStr.length;
+      bytesRead += getToolResultSize(tool);
     }
   }
 
@@ -76,6 +80,75 @@ function calculateRetrievalMetrics(trace: CollectTrace, question: DatasetQuestio
     hitAtK,
     ...(mrr !== undefined ? { mrr } : {}),
   };
+}
+
+function searchCallHasRelevantPath(tool: ToolInvocationTrace, relevantPaths: Set<string>, corpusRoot: string): boolean {
+  const parsed = parseSwiftDocsHybridToolResult(tool.result);
+  if (!parsed) return false;
+
+  for (const path of collectSwiftDocsRetrievedPaths(parsed)) {
+    const normalizedPath = normalizeCorpusRelativePath(path, corpusRoot);
+    if (normalizedPath && relevantPaths.has(normalizedPath)) return true;
+  }
+  return false;
+}
+
+function calculateSwiftDocsHybridRetrievalMetrics(trace: CollectTrace, question: DatasetQuestion, corpusRoot: string): RetrievalMetrics | undefined {
+  const successfulSearchCalls = trace.toolInvocations.filter((tool) => tool.toolName === "swift_docs_search_hybrid" && !tool.isError);
+  if (successfulSearchCalls.length === 0) return undefined;
+
+  const relevantPaths = new Set(question.goldEvidence.map((e) => e.filePath));
+  const traceStartedAt = trace.events[0]?.observedAt;
+  let bytesRead = 0;
+  let firstRelevantCallIndex: number | undefined;
+  let timeToFirstRelevantDocMs: number | undefined;
+
+  successfulSearchCalls.forEach((tool, index) => {
+    bytesRead += getToolResultSize(tool);
+    if (firstRelevantCallIndex !== undefined) return;
+    if (!searchCallHasRelevantPath(tool, relevantPaths, corpusRoot)) return;
+
+    firstRelevantCallIndex = index;
+    if (tool.finishedAt && traceStartedAt) {
+      timeToFirstRelevantDocMs = new Date(tool.finishedAt).getTime() - new Date(traceStartedAt).getTime();
+    }
+  });
+
+  return {
+    bytesRead,
+    searchCalls: successfulSearchCalls.length,
+    reformulations: Math.max(0, successfulSearchCalls.length - 1),
+    ...(timeToFirstRelevantDocMs !== undefined ? { timeToFirstRelevantDocMs } : {}),
+    hitAt1: firstRelevantCallIndex === 0,
+    hitAtK: firstRelevantCallIndex !== undefined,
+  };
+}
+
+function calculateRetrievalMetrics(trace: CollectTrace, question: DatasetQuestion, corpusRoot: string): RetrievalMetrics | undefined {
+  return calculateSwiftDocsHybridRetrievalMetrics(trace, question, corpusRoot) ?? calculateReadRetrievalMetrics(trace, question, corpusRoot);
+}
+
+function collectRetrievedPaths(trace: CollectTrace, corpusRoot: string): Set<string> {
+  const paths = new Set<string>();
+
+  for (const tool of trace.toolInvocations) {
+    if (tool.toolName === "read") {
+      const path = normalizeCorpusRelativePath((tool.args as { path?: string }).path, corpusRoot);
+      if (typeof path === "string" && path.length > 0) paths.add(path);
+      continue;
+    }
+
+    if (tool.toolName === "swift_docs_search_hybrid") {
+      const parsed = parseSwiftDocsHybridToolResult(tool.result);
+      if (!parsed) continue;
+      for (const path of collectSwiftDocsRetrievedPaths(parsed)) {
+        const normalizedPath = normalizeCorpusRelativePath(path, corpusRoot);
+        if (normalizedPath) paths.add(normalizedPath);
+      }
+    }
+  }
+
+  return paths;
 }
 
 function escapeRegex(value: string): string {
@@ -157,14 +230,8 @@ export async function gradeRun(options: GradeRunOptions): Promise<GradeArtifact>
     score = correct ? 1.0 : 0.0;
 
     if (answer.mode === "open_book") {
-      const readPaths = new Set(
-        trace.toolInvocations
-          .filter((tool) => tool.toolName === "read")
-          .map((tool) => normalizeCorpusRelativePath((tool.args as { path?: string }).path, corpusRoot))
-          .filter((path): path is string => typeof path === "string" && path.length > 0),
-      );
-
-      const citationsValid = answer.citations.length > 0 && answer.citations.every((citation) => readPaths.has(citation.filePath));
+      const retrievedPaths = collectRetrievedPaths(trace, corpusRoot);
+      const citationsValid = answer.citations.length > 0 && answer.citations.every((citation) => retrievedPaths.has(citation.filePath));
       grounded = citationsValid;
       if (!grounded) {
         failures.push("correct_without_support");
@@ -173,6 +240,8 @@ export async function gradeRun(options: GradeRunOptions): Promise<GradeArtifact>
   }
 
   const retrieval = question ? calculateRetrievalMetrics(trace, question, corpusRoot) : undefined;
+  if (retrieval?.hitAtK === false) failures.push("no_relevant_doc_found");
+  if (retrieval?.hitAtK && !correct) failures.push("relevant_doc_found_wrong_synthesis");
 
   const artifact: GradeArtifact = {
     runId: trace.runId,

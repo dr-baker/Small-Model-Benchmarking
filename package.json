@@ -9,6 +9,7 @@
     "dataset:build": "node scripts/build-dataset.mjs",
     "dataset:validate": "node scripts/build-dataset.mjs --check",
     "test:run": "tsx scripts/test-run.ts",
+    "aggregate:run": "tsx scripts/aggregate-run.ts",
     "test:transport-lite": "tsx scripts/test-transport-lite.ts"
   },
   "dependencies": {

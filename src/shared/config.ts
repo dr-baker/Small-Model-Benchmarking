@@ -13,6 +13,7 @@ import type {
   ModelTransportConfig,
   SessionConfig,
   ThinkingLevel,
+  SwiftDocsToolConfig,
 } from "./contracts.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -20,6 +21,17 @@ const __dirname = dirname(__filename);
 const REPO_ROOT = resolve(__dirname, "../..");
 
 const DEFAULT_CONFIG_PATH = resolve(REPO_ROOT, "benchmark.yaml");
+const DEFAULT_LOCAL_CONFIG_PATH = resolve(REPO_ROOT, "benchmark.local.yaml");
+
+export interface BenchmarkConfigPaths {
+  basePath: string;
+  overridePath?: string;
+}
+
+export interface LoadedBenchmarkConfig {
+  config: BenchmarkConfig;
+  configPaths: BenchmarkConfigPaths;
+}
 
 export interface BenchmarkModelConfig {
   candidates: string[];
@@ -55,6 +67,7 @@ export interface BenchmarkConfig {
     promptTemplates: Record<string, string>;
   };
   corpus: CorpusSnapshotRef;
+  swiftDocs?: SwiftDocsToolConfig;
   execution: BenchmarkExecutionConfig;
   batch: BenchmarkBatchConfig;
   systemPrompts: {
@@ -189,6 +202,15 @@ function validateConfig(raw: unknown): asserts raw is BenchmarkConfig {
   if (!paths.promptTemplates || typeof paths.promptTemplates !== "object") throw new Error("Missing paths.promptTemplates");
 
   if (!c.corpus || typeof c.corpus !== "object") throw new Error("Missing corpus");
+  if (c.swiftDocs !== undefined) {
+    if (!c.swiftDocs || typeof c.swiftDocs !== "object") throw new Error("swiftDocs must be an object when provided");
+    const swiftDocs = c.swiftDocs as Record<string, unknown>;
+    if (typeof swiftDocs.repoRoot !== "string") throw new Error("swiftDocs.repoRoot must be a string");
+    if (typeof swiftDocs.dbPath !== "string") throw new Error("swiftDocs.dbPath must be a string");
+    if (swiftDocs.configPath !== undefined && typeof swiftDocs.configPath !== "string") {
+      throw new Error("swiftDocs.configPath must be a string when provided");
+    }
+  }
   if (!c.execution || typeof c.execution !== "object") throw new Error("Missing execution");
   const execution = c.execution as Record<string, unknown>;
   if (typeof execution.resume !== "boolean") throw new Error("execution.resume must be boolean");
@@ -218,6 +240,30 @@ function resolvePath(relativeOrAbsolute: string): string {
   return resolve(REPO_ROOT, relativeOrAbsolute);
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function mergeConfigValue(baseValue: unknown, overrideValue: unknown): unknown {
+  if (overrideValue === undefined) return baseValue;
+  if (!isPlainObject(baseValue) || !isPlainObject(overrideValue)) return overrideValue;
+
+  const merged: Record<string, unknown> = { ...baseValue };
+  for (const [key, value] of Object.entries(overrideValue)) {
+    merged[key] = mergeConfigValue(baseValue[key], value);
+  }
+  return merged;
+}
+
+async function readYamlFileIfExists(path: string): Promise<unknown | undefined> {
+  try {
+    return parseYaml(await readFile(path, "utf8"));
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
+    throw error;
+  }
+}
+
 export function resolvePaths(config: BenchmarkConfig): BenchmarkConfig {
   return {
     ...config,
@@ -234,14 +280,39 @@ export function resolvePaths(config: BenchmarkConfig): BenchmarkConfig {
       rootDir: resolvePath(config.corpus.rootDir),
       manifestPath: resolvePath(config.corpus.manifestPath),
     },
+    ...(config.swiftDocs
+      ? {
+          swiftDocs: {
+            ...config.swiftDocs,
+            repoRoot: resolvePath(config.swiftDocs.repoRoot),
+            dbPath: resolvePath(config.swiftDocs.dbPath),
+            ...(config.swiftDocs.configPath ? { configPath: resolvePath(config.swiftDocs.configPath) } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+export async function loadBenchmarkConfigWithMeta(path?: string): Promise<LoadedBenchmarkConfig> {
+  const explicitConfigPath = path ?? process.env.BENCHMARK_CONFIG;
+  const basePath = explicitConfigPath ? resolvePath(explicitConfigPath) : DEFAULT_CONFIG_PATH;
+  const baseRaw = parseYaml(await readFile(basePath, "utf8"));
+  const overridePath = explicitConfigPath ? undefined : DEFAULT_LOCAL_CONFIG_PATH;
+  const overrideRaw = overridePath ? await readYamlFileIfExists(overridePath) : undefined;
+  const mergedRaw = overrideRaw === undefined ? baseRaw : mergeConfigValue(baseRaw, overrideRaw);
+
+  validateConfig(mergedRaw);
+  return {
+    config: resolvePaths(mergedRaw),
+    configPaths: {
+      basePath,
+      ...(overrideRaw !== undefined && overridePath ? { overridePath } : {}),
+    },
   };
 }
 
 export async function loadBenchmarkConfig(path?: string): Promise<BenchmarkConfig> {
-  const configPath = path ? resolvePath(path) : DEFAULT_CONFIG_PATH;
-  const raw = parseYaml(await readFile(configPath, "utf8"));
-  validateConfig(raw);
-  return resolvePaths(raw);
+  return (await loadBenchmarkConfigWithMeta(path)).config;
 }
 
 export function parseModelRefFromString(raw: string): ModelRef {

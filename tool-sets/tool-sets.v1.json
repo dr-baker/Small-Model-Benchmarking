@@ -24,6 +24,12 @@
       "version": "1.0.0",
       "description": "Allows file reads, text search, and file discovery across the frozen corpus.",
       "toolNames": ["read", "grep", "find", "ls"]
+    },
+    {
+      "name": "swift_docs_hybrid",
+      "version": "1.0.0",
+      "description": "Allows one canonical Swift Docs hybrid retrieval tool that accepts explicit terms, symbol hints, and semantic queries.",
+      "toolNames": ["swift_docs_search_hybrid"]
     }
   ]
 }

@@ -59,9 +59,13 @@ function parseDotEnv(filePath: string): Record<string, string> {
  * `~/.config/pi/auth.json` — e.g. a dedicated OpenRouter key for
  * cost tracking.
  */
-export function applyEnvApiKeyOverrides(authStorage: AuthStorage, projectRoot?: string): void {
+export function loadProjectEnvVars(projectRoot?: string): Record<string, string> {
   const root = projectRoot ?? resolve(import.meta.dirname ?? ".", "../..");
-  const envVars = parseDotEnv(resolve(root, ".env"));
+  return parseDotEnv(resolve(root, ".env"));
+}
+
+export function applyEnvApiKeyOverrides(authStorage: AuthStorage, projectRoot?: string): void {
+  const envVars = loadProjectEnvVars(projectRoot);
 
   for (const [envVar, provider] of Object.entries(ENV_TO_PROVIDER)) {
     // .env values take precedence, fall back to process.env

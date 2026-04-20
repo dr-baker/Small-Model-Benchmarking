@@ -127,7 +127,11 @@ export async function runCollect(input: CollectRunInput): Promise<CollectRunOutp
     { role: "system", content: systemPrompt },
     ...userMessages,
   ];
-  const tools = createToolsForToolSet(input.toolSet, corpusRoot);
+  const tools = createToolsForToolSet(
+    input.toolSet,
+    corpusRoot,
+    input.swiftDocs ? { swiftDocs: input.swiftDocs } : undefined,
+  );
   const apiKey = await resolveModelApiKey(input.model);
 
   const maxParseRetries = input.maxParseRetries ?? 0;
@@ -261,6 +265,7 @@ export async function runCollect(input: CollectRunInput): Promise<CollectRunOutp
     responseSchemaVersion: input.responseSchemaVersion,
     rubricVersion: input.rubricVersion,
     corpus: input.corpus,
+    ...(input.swiftDocs ? { swiftDocs: input.swiftDocs } : {}),
     questionId: input.question.id,
     sampling: input.sampling,
     collectRetry,

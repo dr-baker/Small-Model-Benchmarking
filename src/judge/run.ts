@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import {
   JUDGE_VERDICT_SCHEMA_VERSION,
   type BenchmarkAnswerResponse,
+  type CollectTrace,
   type DatasetQuestion,
   type JudgeArtifact,
   type JudgeProfile,
@@ -13,6 +14,7 @@ import {
   type ModelTransportConfig,
   type PromptMessageSnapshot,
   type RunManifest,
+  type ToolInvocationTrace,
 } from "../shared/contracts.js";
 import { serializeJson, readJsonFile, writeJsonFile } from "../shared/io.js";
 import { toJsonValue, extractJsonObject } from "../shared/json.js";
@@ -20,6 +22,7 @@ import { createToolsForToolSet, loadToolSetDefinition } from "../collect/tool-se
 import { runLlmClient } from "../shared/llm-client.js";
 import { buildJudgeVerdictResponseFormat } from "../shared/response-schemas.js";
 import { resolveModelApiKey } from "../shared/api-key.js";
+import { parseSwiftDocsHybridToolResult } from "../shared/swift-docs-search.js";
 
 const REPO_ROOT = resolve(import.meta.dirname ?? ".", "../..");
 
@@ -29,6 +32,8 @@ interface ParsedJudgeResponse {
   completeness: JudgeQualitativeScore;
   codeExample: JudgeQualitativeScore;
   explanation: JudgeQualitativeScore;
+  retrievalSupportsReferenceAnswer: boolean;
+  retrievalQuality: JudgeQualitativeScore;
   reasoning: string;
 }
 
@@ -55,8 +60,13 @@ function isQualitativeScore(v: unknown): v is JudgeQualitativeScore { return v =
 function validateJudgeResponse(value: unknown): value is ParsedJudgeResponse {
   if (!value || typeof value !== "object") return false;
   const c = value as Record<string, unknown>;
-  return typeof c.recommendsCorrectPattern === "boolean" && typeof c.recommendsDeprecatedPattern === "boolean"
-    && isQualitativeScore(c.completeness) && isQualitativeScore(c.codeExample) && isQualitativeScore(c.explanation)
+  return typeof c.recommendsCorrectPattern === "boolean"
+    && typeof c.recommendsDeprecatedPattern === "boolean"
+    && isQualitativeScore(c.completeness)
+    && isQualitativeScore(c.codeExample)
+    && isQualitativeScore(c.explanation)
+    && typeof c.retrievalSupportsReferenceAnswer === "boolean"
+    && isQualitativeScore(c.retrievalQuality)
     && typeof c.reasoning === "string";
 }
 
@@ -76,11 +86,35 @@ function rollUpVerdict(r: ParsedJudgeResponse): JudgeVerdictLabel {
   return "partially_correct";
 }
 
-async function renderJudgePromptMessages(question: DatasetQuestion, answer: BenchmarkAnswerResponse, promptTemplatePath: string): Promise<PromptMessageSnapshot[]> {
+function buildSearchTraceSummary(trace: CollectTrace): string | undefined {
+  const searchCalls = trace.toolInvocations.filter((tool) => tool.toolName === "swift_docs_search_hybrid" && !tool.isError);
+  if (searchCalls.length === 0) return undefined;
+
+  const summarizeCall = (tool: ToolInvocationTrace, index: number) => {
+    const parsed = parseSwiftDocsHybridToolResult(tool.result);
+    const summarizedResult = parsed
+      ? {
+          pages: parsed.pages.slice(0, 5),
+          chunks: parsed.chunks.slice(0, 8),
+        }
+      : tool.result;
+    return [
+      `### Search call ${index + 1}`,
+      `Request: ${JSON.stringify(tool.args)}`,
+      `Result: ${JSON.stringify(summarizedResult)}`,
+    ].join("\n");
+  };
+
+  return `## Candidate retrieval trace\n${searchCalls.slice(0, 3).map(summarizeCall).join("\n\n")}`;
+}
+
+async function renderJudgePromptMessages(question: DatasetQuestion, answer: BenchmarkAnswerResponse, trace: CollectTrace, promptTemplatePath: string): Promise<PromptMessageSnapshot[]> {
   const template = await readFile(promptTemplatePath, "utf8");
   const evidenceBlock = answer.mode === "open_book"
     ? `\n## Candidate answer evidence metadata\n- answer included ${answer.citations.length} citation(s)\n- answer evidence summary: ${answer.evidenceSummary}`
     : "";
+
+  const retrievalBlock = buildSearchTraceSummary(trace);
 
   return [
     { role: "user", content: template.trim() },
@@ -96,11 +130,12 @@ async function renderJudgePromptMessages(question: DatasetQuestion, answer: Benc
       role: "user",
       content: `## Candidate answer\n${answer.finalAnswer}`,
     },
+    ...(retrievalBlock ? [{ role: "user" as const, content: retrievalBlock }] : []),
   ];
 }
 
-async function renderJudgePrompt(question: DatasetQuestion, answer: BenchmarkAnswerResponse, promptTemplatePath: string): Promise<string> {
-  const messages = await renderJudgePromptMessages(question, answer, promptTemplatePath);
+async function renderJudgePrompt(question: DatasetQuestion, answer: BenchmarkAnswerResponse, trace: CollectTrace, promptTemplatePath: string): Promise<string> {
+  const messages = await renderJudgePromptMessages(question, answer, trace, promptTemplatePath);
   return messages.map((message) => message.content).join("\n\n").trimEnd() + "\n";
 }
 
@@ -128,6 +163,7 @@ export async function judgeRun(options: JudgeRunOptions): Promise<JudgeRunOutput
 
   const manifest = await readJsonFile<RunManifest>(join(options.runDirectory, "manifest.json"));
   const normalizedAnswer = await readJsonFile<BenchmarkAnswerResponse | { parseError: string; rawText?: string }>(join(options.runDirectory, "normalized-answer.json"));
+  const trace = await readJsonFile<CollectTrace>(join(options.runDirectory, "trace.json"));
   const dataset = await readJsonFile<{ questions: DatasetQuestion[] }>(options.datasetPath);
   const questionId = manifest.questionId ?? "unknown";
   const runId = manifest.runId ?? "unknown";
@@ -146,14 +182,14 @@ export async function judgeRun(options: JudgeRunOptions): Promise<JudgeRunOutput
   if (!question) { const a = skip("question_not_found_in_dataset", ["Judge skipped: question missing from dataset."]); await writeJsonFile(judgePath, a); return { judgePath, artifact: a }; }
   if ("parseError" in normalizedAnswer) { const a = skip("answer_parse_error", ["Judge skipped: answer has parse error."]); await writeJsonFile(judgePath, a); return { judgePath, artifact: a }; }
 
-  const userMessages = await renderJudgePromptMessages(question, normalizedAnswer, options.promptTemplatePath);
-  const userPrompt = await renderJudgePrompt(question, normalizedAnswer, options.promptTemplatePath);
+  const userMessages = await renderJudgePromptMessages(question, normalizedAnswer, trace, options.promptTemplatePath);
+  const userPrompt = await renderJudgePrompt(question, normalizedAnswer, trace, options.promptTemplatePath);
   const promptMessages: PromptMessageSnapshot[] = [
     { role: "system", content: systemPrompt },
     ...userMessages,
   ];
   const corpusRoot = resolve(REPO_ROOT, manifest.corpus.rootDir);
-  const tools = createToolsForToolSet(judgeToolSet, corpusRoot);
+  const tools = createToolsForToolSet(judgeToolSet, corpusRoot, manifest.swiftDocs ? { swiftDocs: manifest.swiftDocs } : undefined);
   const apiKey = await resolveModelApiKey(effectiveJudgeModel);
 
   const llmResult = await runLlmClient({
@@ -175,7 +211,11 @@ export async function judgeRun(options: JudgeRunOptions): Promise<JudgeRunOutput
     ...(scored ? {
       recommendsCorrectPattern: parsed.recommendsCorrectPattern,
       recommendsDeprecatedPattern: parsed.recommendsDeprecatedPattern,
-      completeness: parsed.completeness, codeExample: parsed.codeExample, explanation: parsed.explanation,
+      completeness: parsed.completeness,
+      codeExample: parsed.codeExample,
+      explanation: parsed.explanation,
+      retrievalSupportsReferenceAnswer: parsed.retrievalSupportsReferenceAnswer,
+      retrievalQuality: parsed.retrievalQuality,
       verdict: rollUpVerdict(parsed), reasoning: parsed.reasoning,
     } : {}),
     status: !hasError && scored ? "scored" : "error",
