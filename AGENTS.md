@@ -17,10 +17,7 @@ npm run aggregate:run
 ## Directory Purpose
 
 - `corpus/` — Frozen doc snapshots (manifests tracked)
-- `dataset/` — Benchmark questions, source bank, and derived dataset JSON
-- `prompts/` — Versioned prompts
-- `tool-sets/` — Named tool configs
-- `rubric/` — Deterministic grading rules
+- `benchmark/` — Benchmark definition assets (dataset, gold evidence, prompts, tool sets, rubric)
 - `docs/` — Shareable usage and layout docs
 - `src/collect/` — Trace collection
 - `src/judge/` — LLM judge stage

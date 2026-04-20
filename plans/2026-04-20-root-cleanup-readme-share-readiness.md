@@ -12,12 +12,12 @@ Make the repo root easier to understand and safer to share by moving non-essenti
 
 ## Progress Notes
 - 2026-04-20 00:00 Created plan file and started audit.
-- 2026-04-20 00:11 Audited root clutter, script references, and share-readiness drift. Decided to move the QA bank into `dataset/source/`, archive the unused legacy gold-evidence export, add docs for layout/local setup, and replace machine-specific config with a local override flow.
-- 2026-04-20 00:26 Moved `final-qa-bank.md` to `dataset/source/final-qa-bank.md`, archived the unused legacy gold-evidence export, added `archive/README.md` plus default-ignore rules for future archive drops, and tightened root ignore rules for local config and temp logs.
+- 2026-04-20 00:11 Audited root clutter, script references, and share-readiness drift. Decided to move the QA bank into `benchmark/dataset/source/`, archive the unused legacy gold-evidence export, add docs for layout/local setup, and replace machine-specific config with a local override flow.
+- 2026-04-20 00:26 Moved `final-qa-bank.md` to `benchmark/dataset/source/final-qa-bank.md`, archived the unused legacy gold-evidence export, added `archive/README.md` plus default-ignore rules for future archive drops, and tightened root ignore rules for local config and temp logs.
 - 2026-04-20 00:35 Added automatic `benchmark.local.yaml` overlay support, removed machine-specific Swift Docs paths from tracked config, scrubbed the corpus provenance path, and rewrote the root README into a short share-ready pitch with supporting docs under `docs/`.
 - 2026-04-20 00:43 Verified the repo with `npm run dataset:build`, `npm run dataset:validate`, `npm run typecheck`, `npm run check:architecture`, plus explicit config-loader checks with and without a temporary `benchmark.local.yaml` override.
 
 ## Final notes and learnings
-- Root-level clarity improved most by moving the source QA bank under `dataset/source/`, documenting archive intent, and keeping the top-level README intentionally short.
+- Root-level clarity improved most by moving the source QA bank under `benchmark/dataset/source/`, documenting archive intent, and keeping the top-level README intentionally short.
 - Shareable config needed both content cleanup and code support: removing machine-specific paths from `benchmark.yaml` was not enough without a clean local override mechanism.
 - Verification covered dataset regeneration, typing, architecture boundaries, and the new config overlay path.

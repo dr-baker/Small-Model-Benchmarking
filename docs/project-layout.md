@@ -4,11 +4,12 @@ Very short map of the repo.
 
 ## Benchmark definition
 
-- `dataset/` — 75-question source bank and derived dataset JSON
+- `benchmark/` — benchmark definition assets grouped by concern:
+  - `dataset/` — 75-question source bank, gold evidence, and derived dataset JSON
+  - `prompts/` — versioned collect and judge prompts
+  - `tool-sets/` — named tool configurations
+  - `rubric/` — deterministic grading rules only
 - `corpus/` — frozen documentation snapshots and manifests
-- `prompts/` — versioned collect and judge prompts
-- `tool-sets/` — named tool configurations
-- `rubric/` — deterministic grading rules
 - `benchmark.yaml` — tracked base config
 - `benchmark.local.yaml` — optional local overrides, gitignored
 

@@ -54,5 +54,5 @@ npm run aggregate:run -- --run-id=<run-id>
 - `docs/local-setup.md` — local env setup and `benchmark.local.yaml`
 - `docs/project-layout.md` — repo map and directory purpose
 - `benchmark.yaml` — base benchmark config
-- `dataset/` — source bank and derived dataset JSON
+- `benchmark/` — dataset, gold evidence, prompts, tool sets, and rubric
 - `plans/` and `lessons/` — deeper implementation notes and findings

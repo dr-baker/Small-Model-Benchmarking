@@ -14,6 +14,7 @@ Keep repo-wide defaults here:
 
 - candidate model list
 - judge model and transport
+- benchmark asset paths
 - corpus paths
 - modes, batching, and question selection
 

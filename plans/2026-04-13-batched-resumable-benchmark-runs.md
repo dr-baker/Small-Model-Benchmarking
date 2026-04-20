@@ -15,7 +15,7 @@ Make the benchmark ready for iterative model comparisons by fixing dataset valid
 
 ## Progress Notes
 - 2026-04-13: Started plan after confirming the current pipeline builds and typechecks, but dataset validation fails and existing traces show many empty or parse-failed outputs from the default model.
-- 2026-04-13: Rebuilt `dataset/swiftui-docs-chatbot-benchmark.v1.json` from `dataset/source/final-qa-bank.md`, which restored `npm run dataset:validate`.
+- 2026-04-13: Rebuilt `benchmark/dataset/swiftui-docs-chatbot-benchmark.v1.json` from `benchmark/dataset/source/final-qa-bank.md`, which restored `npm run dataset:validate`.
 - 2026-04-13: Reworked benchmark config so `benchmark.yaml` now holds `models`, `execution`, and `batch` blocks. CLI overrides still work for one-off runs.
 - 2026-04-13: Refactored `scripts/test-run.ts` to use stable per-run IDs inside an execution directory, support batch slicing, skip completed runs when `resume` is enabled, and continue through recorded collect/judge failures unless `stopOnError` is set.
 - 2026-04-13: Added cost propagation from provider usage metadata through collect/judge traces into aggregate summaries. Providers that do not expose cost still aggregate cleanly with `Cost: unavailable`.

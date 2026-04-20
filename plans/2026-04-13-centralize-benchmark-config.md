@@ -60,13 +60,13 @@ judgeModel: null                 # null = use judge profile's model
 
 # Paths — all relative to repo root
 paths:
-  dataset: dataset/swiftui-docs-chatbot-benchmark.v1.json
-  toolSets: tool-sets/tool-sets.v1.json
+  dataset: benchmark/dataset/swiftui-docs-chatbot-benchmark.v1.json
+  toolSets: benchmark/tool-sets/tool-sets.v1.json
   judgeProfiles: judges/judge-profiles.v1.json
-  rubric: rubric/rubric.v1.json
+  rubric: benchmark/rubric/rubric.v1.json
   promptTemplates:
-    benchmark-answer-v1: prompts/benchmark-answer-v1.md
-    judge-answer-v1: prompts/judge-answer-v1.md
+    benchmark-answer-v1: benchmark/prompts/benchmark-answer-v1.md
+    judge-answer-v1: benchmark/prompts/judge-answer-v1.md
 
 # Corpus
 corpus:

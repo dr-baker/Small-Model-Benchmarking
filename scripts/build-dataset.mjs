@@ -6,10 +6,10 @@ import { fileURLToPath } from 'node:url';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
-const DEFAULT_SOURCE_RELATIVE = 'dataset/source/final-qa-bank.md';
+const DEFAULT_SOURCE_RELATIVE = 'benchmark/dataset/source/final-qa-bank.md';
 const DEFAULT_SOURCE = path.join(REPO_ROOT, DEFAULT_SOURCE_RELATIVE);
-const DEFAULT_OUTPUT = path.join(REPO_ROOT, 'dataset', 'swiftui-docs-chatbot-benchmark.v1.json');
-const DEFAULT_GOLD_EVIDENCE = path.join(REPO_ROOT, 'rubric', 'gold-evidence.v1.json');
+const DEFAULT_OUTPUT = path.join(REPO_ROOT, 'benchmark', 'dataset', 'swiftui-docs-chatbot-benchmark.v1.json');
+const DEFAULT_GOLD_EVIDENCE = path.join(REPO_ROOT, 'benchmark', 'dataset', 'gold-evidence.v1.json');
 
 function parseArgs(argv) {
   const args = { source: DEFAULT_SOURCE, out: DEFAULT_OUTPUT, check: false };
@@ -205,7 +205,7 @@ function buildDataset(markdown, goldEvidencePath) {
     },
     goldEvidenceCurationRequired: covered < total,
     notes:
-      `goldEvidence populated for ${covered}/${total} questions from rubric/gold-evidence.v1.json. Questions with corpus evidence are marked corpus_backed; questions without direct corpus evidence are marked best_practice.`,
+      `goldEvidence populated for ${covered}/${total} questions from benchmark/dataset/gold-evidence.v1.json. Questions with corpus evidence are marked corpus_backed; questions without direct corpus evidence are marked best_practice.`,
     questions,
   };
 }
