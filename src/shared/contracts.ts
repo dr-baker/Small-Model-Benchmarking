@@ -12,7 +12,9 @@ export type JudgeVerdictLabel = "correct" | "partially_correct" | "incorrect";
 export type JudgeQualitativeScore = 0 | 1 | 2;
 export type GradingMethod = "deterministic";
 export type JudgeArtifactStatus = "scored" | "skipped" | "error";
-export type BenchmarkQuestionType = "corpus_backed" | "best_practice";
+export type BenchmarkEvidenceBasis = "corpus" | "curated";
+export type PlatformScope = "ios" | "macos" | "all";
+export type QuestionShape = "targeted" | "synthesis";
 
 export interface ModelRef {
   provider: string;
@@ -71,7 +73,9 @@ export interface DatasetQuestion {
   referenceAnswer: string;
   pitfall: string;
   taxonomyTags: string[];
-  questionType: BenchmarkQuestionType;
+  platformScope: PlatformScope;
+  questionShape: QuestionShape;
+  evidenceBasis: BenchmarkEvidenceBasis;
   goldEvidence: GoldEvidenceReference[];
   source: {
     file: string;
@@ -245,7 +249,9 @@ export type FailureTaxonomyId =
 export interface QuestionRubric {
   questionId: string;
   mustMention: string[];
+  mustMentionAnyOf?: string[][];
   mustNotMention: string[];
+  passThreshold?: number;
 }
 
 export interface RubricDefinition {
@@ -308,6 +314,8 @@ export interface AnswerGrade {
   gradingMethod: GradingMethod;
   mustMentionPassed: string[];
   mustMentionFailed: string[];
+  mustMentionAnyOfPassed?: string[][];
+  mustMentionAnyOfFailed?: string[][];
   mustNotMentionViolated: string[];
   notes: string[];
 }
@@ -316,7 +324,9 @@ export interface GradeArtifact {
   runId: string;
   rubricVersion: string;
   questionId: string;
-  questionType: BenchmarkQuestionType;
+  evidenceBasis: BenchmarkEvidenceBasis;
+  platformScope: PlatformScope;
+  questionShape: QuestionShape;
   answer: AnswerGrade;
   retrieval?: RetrievalMetrics;
   failures: FailureTaxonomyId[];
@@ -353,8 +363,8 @@ export interface AggregateErrorMetrics {
   judgeErrorRuns: number;
 }
 
-export interface AggregateQuestionTypeSummary {
-  questionType: BenchmarkQuestionType;
+export interface AggregateEvidenceBasisSummary {
+  evidenceBasis: BenchmarkEvidenceBasis;
   runs: number;
   meanAnswerScore: number;
   groundedRate?: number;
@@ -374,12 +384,14 @@ export interface AggregateModelSummary {
   cost?: AggregateCostMetrics;
   judge?: AggregateJudgeMetrics;
   errors?: AggregateErrorMetrics;
-  questionTypeBreakdown?: AggregateQuestionTypeSummary[];
+  evidenceBasisBreakdown?: AggregateEvidenceBasisSummary[];
 }
 
 export interface AggregateRunQuestionDetail {
   questionId: string;
-  questionType: BenchmarkQuestionType;
+  evidenceBasis: BenchmarkEvidenceBasis;
+  platformScope: PlatformScope;
+  questionShape: QuestionShape;
   title?: string;
   question?: string;
 }

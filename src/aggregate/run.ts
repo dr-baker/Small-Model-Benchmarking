@@ -8,11 +8,11 @@ import type {
   AggregateErrorMetrics,
   AggregateJudgeMetrics,
   AggregateModelSummary,
-  AggregateQuestionTypeSummary,
+  AggregateEvidenceBasisSummary,
   AggregateRunDetail,
   BenchmarkAnswerResponse,
   BenchmarkMode,
-  BenchmarkQuestionType,
+  BenchmarkEvidenceBasis,
   CollectTrace,
   DatasetQuestion,
   GradeArtifact,
@@ -57,11 +57,11 @@ interface SummaryAccumulator {
   runsWithAnyError: number;
   collectErrorRuns: number;
   judgeErrorRuns: number;
-  questionTypeBreakdown: Map<BenchmarkQuestionType, QuestionTypeAccumulator>;
+  evidenceBasisBreakdown: Map<BenchmarkEvidenceBasis, EvidenceBasisAccumulator>;
 }
 
-interface QuestionTypeAccumulator {
-  questionType: BenchmarkQuestionType;
+interface EvidenceBasisAccumulator {
+  evidenceBasis: BenchmarkEvidenceBasis;
   runs: number;
   answerScoreTotal: number;
   groundedRuns: number;
@@ -175,7 +175,9 @@ function resolveQuestionDetail(record: Pick<RunRecord, "grade" | "trace"> & { ma
   const question = lookup?.question ?? extractQuestionTextFromTrace(record.trace);
   return {
     questionId,
-    questionType: record.grade.questionType,
+    evidenceBasis: record.grade.evidenceBasis,
+    platformScope: record.grade.platformScope,
+    questionShape: record.grade.questionShape,
     ...(title !== undefined ? { title } : {}),
     ...(question !== undefined ? { question } : {}),
   };
@@ -185,9 +187,9 @@ function isParseErrorAnswer(answer: NormalizedAnswerArtifact): answer is { parse
   return "parseError" in answer;
 }
 
-function createQuestionTypeAccumulator(questionType: BenchmarkQuestionType): QuestionTypeAccumulator {
+function createEvidenceBasisAccumulator(evidenceBasis: BenchmarkEvidenceBasis): EvidenceBasisAccumulator {
   return {
-    questionType,
+    evidenceBasis,
     runs: 0,
     answerScoreTotal: 0,
     groundedRuns: 0,
@@ -208,7 +210,7 @@ function createQuestionTypeAccumulator(questionType: BenchmarkQuestionType): Que
   };
 }
 
-function toJudgeMetrics(accumulator: Pick<QuestionTypeAccumulator, "judgeRuns" | "judgeCorrectCount" | "judgePartiallyCorrectCount" | "judgeIncorrectCount" | "judgeCompletenessTotal" | "judgeCodeExampleTotal" | "judgeExplanationTotal" | "judgeRetrievalQualityTotal" | "judgeRecommendsCorrectCount" | "judgeRecommendsDeprecatedCount" | "judgeRetrievalSupportsCount">): AggregateJudgeMetrics | undefined {
+function toJudgeMetrics(accumulator: Pick<EvidenceBasisAccumulator, "judgeRuns" | "judgeCorrectCount" | "judgePartiallyCorrectCount" | "judgeIncorrectCount" | "judgeCompletenessTotal" | "judgeCodeExampleTotal" | "judgeExplanationTotal" | "judgeRetrievalQualityTotal" | "judgeRecommendsCorrectCount" | "judgeRecommendsDeprecatedCount" | "judgeRetrievalSupportsCount">): AggregateJudgeMetrics | undefined {
   if (accumulator.judgeRuns === 0) return undefined;
   return {
     judgeRuns: accumulator.judgeRuns,
@@ -357,7 +359,9 @@ function createRunCsvRows(runs: AggregateRunDetail[]): Array<Record<string, unkn
     questionId: run.question.questionId,
     questionTitle: run.question.title,
     question: run.question.question,
-    questionType: run.question.questionType,
+    evidenceBasis: run.question.evidenceBasis,
+    platformScope: run.question.platformScope,
+    questionShape: run.question.questionShape,
     modelProvider: run.model.provider,
     modelId: run.model.modelId,
     transportKind: run.transport.kind,
@@ -454,30 +458,30 @@ function createSummaryCsvRows(summaries: AggregateModelSummary[]): Array<Record<
   }));
 }
 
-function createQuestionTypeCsvRows(summaries: AggregateModelSummary[]): Array<Record<string, unknown>> {
+function createEvidenceBasisCsvRows(summaries: AggregateModelSummary[]): Array<Record<string, unknown>> {
   return sortSummaries(summaries)
-    .flatMap((summary) => (summary.questionTypeBreakdown ?? []).map((questionTypeSummary) => ({
+    .flatMap((summary) => (summary.evidenceBasisBreakdown ?? []).map((evidenceBasisSummary) => ({
       modelProvider: summary.model.provider,
       modelId: summary.model.modelId,
       mode: summary.mode,
       transportKind: summary.transport.kind,
       toolSetName: summary.toolSet.name,
-      questionType: questionTypeSummary.questionType,
-      runs: questionTypeSummary.runs,
-      meanAnswerScore: questionTypeSummary.meanAnswerScore,
-      groundedRate: questionTypeSummary.groundedRate,
-      meanRetrievalMrr: questionTypeSummary.meanRetrievalMrr,
-      judgeRuns: questionTypeSummary.judge?.judgeRuns,
-      judgeCorrectCount: questionTypeSummary.judge?.judgeCorrectCount,
-      judgePartiallyCorrectCount: questionTypeSummary.judge?.judgePartiallyCorrectCount,
-      judgeIncorrectCount: questionTypeSummary.judge?.judgeIncorrectCount,
-      meanCompleteness: questionTypeSummary.judge?.meanCompleteness,
-      meanCodeExample: questionTypeSummary.judge?.meanCodeExample,
-      meanExplanation: questionTypeSummary.judge?.meanExplanation,
-      meanRetrievalQuality: questionTypeSummary.judge?.meanRetrievalQuality,
-      recommendsCorrectPatternRate: questionTypeSummary.judge?.recommendsCorrectPatternRate,
-      recommendsDeprecatedPatternRate: questionTypeSummary.judge?.recommendsDeprecatedPatternRate,
-      retrievalSupportsReferenceAnswerRate: questionTypeSummary.judge?.retrievalSupportsReferenceAnswerRate,
+      evidenceBasis: evidenceBasisSummary.evidenceBasis,
+      runs: evidenceBasisSummary.runs,
+      meanAnswerScore: evidenceBasisSummary.meanAnswerScore,
+      groundedRate: evidenceBasisSummary.groundedRate,
+      meanRetrievalMrr: evidenceBasisSummary.meanRetrievalMrr,
+      judgeRuns: evidenceBasisSummary.judge?.judgeRuns,
+      judgeCorrectCount: evidenceBasisSummary.judge?.judgeCorrectCount,
+      judgePartiallyCorrectCount: evidenceBasisSummary.judge?.judgePartiallyCorrectCount,
+      judgeIncorrectCount: evidenceBasisSummary.judge?.judgeIncorrectCount,
+      meanCompleteness: evidenceBasisSummary.judge?.meanCompleteness,
+      meanCodeExample: evidenceBasisSummary.judge?.meanCodeExample,
+      meanExplanation: evidenceBasisSummary.judge?.meanExplanation,
+      meanRetrievalQuality: evidenceBasisSummary.judge?.meanRetrievalQuality,
+      recommendsCorrectPatternRate: evidenceBasisSummary.judge?.recommendsCorrectPatternRate,
+      recommendsDeprecatedPatternRate: evidenceBasisSummary.judge?.recommendsDeprecatedPatternRate,
+      retrievalSupportsReferenceAnswerRate: evidenceBasisSummary.judge?.retrievalSupportsReferenceAnswerRate,
     })));
 }
 
@@ -533,16 +537,16 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
       runsWithAnyError: 0,
       collectErrorRuns: 0,
       judgeErrorRuns: 0,
-      questionTypeBreakdown: new Map(),
+      evidenceBasisBreakdown: new Map(),
     };
 
     existing.runs += 1;
     existing.answerScoreTotal += grade.answer.score;
 
-    const questionTypeAccumulator = existing.questionTypeBreakdown.get(grade.questionType)
-      ?? createQuestionTypeAccumulator(grade.questionType);
-    questionTypeAccumulator.runs += 1;
-    questionTypeAccumulator.answerScoreTotal += grade.answer.score;
+    const evidenceBasisAccumulator = existing.evidenceBasisBreakdown.get(grade.evidenceBasis)
+      ?? createEvidenceBasisAccumulator(grade.evidenceBasis);
+    evidenceBasisAccumulator.runs += 1;
+    evidenceBasisAccumulator.answerScoreTotal += grade.answer.score;
 
     if (typeof trace.costUsd === "number") {
       existing.collectTrackedRuns += 1;
@@ -557,18 +561,18 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
 
     if (grade.answer.grounded !== undefined) {
       existing.groundedRuns += 1;
-      questionTypeAccumulator.groundedRuns += 1;
+      evidenceBasisAccumulator.groundedRuns += 1;
       if (grade.answer.grounded) {
         existing.groundedTrue += 1;
-        questionTypeAccumulator.groundedTrue += 1;
+        evidenceBasisAccumulator.groundedTrue += 1;
       }
     }
 
     if (grade.retrieval?.mrr !== undefined) {
       existing.retrievalCount += 1;
       existing.retrievalMrrTotal += grade.retrieval.mrr;
-      questionTypeAccumulator.retrievalCount += 1;
-      questionTypeAccumulator.retrievalMrrTotal += grade.retrieval.mrr;
+      evidenceBasisAccumulator.retrievalCount += 1;
+      evidenceBasisAccumulator.retrievalMrrTotal += grade.retrieval.mrr;
     }
 
     if (typeof judge?.costUsd === "number") {
@@ -578,48 +582,48 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
 
     if (judge?.status === "scored") {
       existing.judgeRuns += 1;
-      questionTypeAccumulator.judgeRuns += 1;
+      evidenceBasisAccumulator.judgeRuns += 1;
       if (judge.verdict === "correct") {
         existing.judgeCorrectCount += 1;
-        questionTypeAccumulator.judgeCorrectCount += 1;
+        evidenceBasisAccumulator.judgeCorrectCount += 1;
       } else if (judge.verdict === "partially_correct") {
         existing.judgePartiallyCorrectCount += 1;
-        questionTypeAccumulator.judgePartiallyCorrectCount += 1;
+        evidenceBasisAccumulator.judgePartiallyCorrectCount += 1;
       } else if (judge.verdict === "incorrect") {
         existing.judgeIncorrectCount += 1;
-        questionTypeAccumulator.judgeIncorrectCount += 1;
+        evidenceBasisAccumulator.judgeIncorrectCount += 1;
       }
       if (judge.completeness !== undefined) {
         existing.judgeCompletenessTotal += judge.completeness;
-        questionTypeAccumulator.judgeCompletenessTotal += judge.completeness;
+        evidenceBasisAccumulator.judgeCompletenessTotal += judge.completeness;
       }
       if (judge.codeExample !== undefined) {
         existing.judgeCodeExampleTotal += judge.codeExample;
-        questionTypeAccumulator.judgeCodeExampleTotal += judge.codeExample;
+        evidenceBasisAccumulator.judgeCodeExampleTotal += judge.codeExample;
       }
       if (judge.explanation !== undefined) {
         existing.judgeExplanationTotal += judge.explanation;
-        questionTypeAccumulator.judgeExplanationTotal += judge.explanation;
+        evidenceBasisAccumulator.judgeExplanationTotal += judge.explanation;
       }
       if (judge.retrievalQuality !== undefined) {
         existing.judgeRetrievalQualityTotal += judge.retrievalQuality;
-        questionTypeAccumulator.judgeRetrievalQualityTotal += judge.retrievalQuality;
+        evidenceBasisAccumulator.judgeRetrievalQualityTotal += judge.retrievalQuality;
       }
       if (judge.recommendsCorrectPattern) {
         existing.judgeRecommendsCorrectCount += 1;
-        questionTypeAccumulator.judgeRecommendsCorrectCount += 1;
+        evidenceBasisAccumulator.judgeRecommendsCorrectCount += 1;
       }
       if (judge.recommendsDeprecatedPattern) {
         existing.judgeRecommendsDeprecatedCount += 1;
-        questionTypeAccumulator.judgeRecommendsDeprecatedCount += 1;
+        evidenceBasisAccumulator.judgeRecommendsDeprecatedCount += 1;
       }
       if (judge.retrievalSupportsReferenceAnswer) {
         existing.judgeRetrievalSupportsCount += 1;
-        questionTypeAccumulator.judgeRetrievalSupportsCount += 1;
+        evidenceBasisAccumulator.judgeRetrievalSupportsCount += 1;
       }
     }
 
-    existing.questionTypeBreakdown.set(grade.questionType, questionTypeAccumulator);
+    existing.evidenceBasisBreakdown.set(grade.evidenceBasis, evidenceBasisAccumulator);
     accumulators.set(key, existing);
   }
 
@@ -663,21 +667,21 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
       base.errors = errorMetrics;
     }
 
-    const questionTypeBreakdown: AggregateQuestionTypeSummary[] = [...accumulator.questionTypeBreakdown.values()]
-      .sort((left, right) => left.questionType.localeCompare(right.questionType))
-      .map((questionTypeAccumulator) => {
-        const questionTypeJudgeMetrics = toJudgeMetrics(questionTypeAccumulator);
+    const evidenceBasisBreakdown: AggregateEvidenceBasisSummary[] = [...accumulator.evidenceBasisBreakdown.values()]
+      .sort((left, right) => left.evidenceBasis.localeCompare(right.evidenceBasis))
+      .map((evidenceBasisAccumulator) => {
+        const evidenceBasisJudgeMetrics = toJudgeMetrics(evidenceBasisAccumulator);
         return {
-          questionType: questionTypeAccumulator.questionType,
-          runs: questionTypeAccumulator.runs,
-          meanAnswerScore: questionTypeAccumulator.answerScoreTotal / questionTypeAccumulator.runs,
-          ...(questionTypeAccumulator.groundedRuns === 0 ? {} : { groundedRate: questionTypeAccumulator.groundedTrue / questionTypeAccumulator.groundedRuns }),
-          ...(questionTypeAccumulator.retrievalCount === 0 ? {} : { meanRetrievalMrr: questionTypeAccumulator.retrievalMrrTotal / questionTypeAccumulator.retrievalCount }),
-          ...(questionTypeJudgeMetrics ? { judge: questionTypeJudgeMetrics } : {}),
+          evidenceBasis: evidenceBasisAccumulator.evidenceBasis,
+          runs: evidenceBasisAccumulator.runs,
+          meanAnswerScore: evidenceBasisAccumulator.answerScoreTotal / evidenceBasisAccumulator.runs,
+          ...(evidenceBasisAccumulator.groundedRuns === 0 ? {} : { groundedRate: evidenceBasisAccumulator.groundedTrue / evidenceBasisAccumulator.groundedRuns }),
+          ...(evidenceBasisAccumulator.retrievalCount === 0 ? {} : { meanRetrievalMrr: evidenceBasisAccumulator.retrievalMrrTotal / evidenceBasisAccumulator.retrievalCount }),
+          ...(evidenceBasisJudgeMetrics ? { judge: evidenceBasisJudgeMetrics } : {}),
         };
       });
 
-    if (questionTypeBreakdown.length > 0) base.questionTypeBreakdown = questionTypeBreakdown;
+    if (evidenceBasisBreakdown.length > 0) base.evidenceBasisBreakdown = evidenceBasisBreakdown;
     return base;
   });
 
@@ -698,7 +702,9 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
     "questionId",
     "questionTitle",
     "question",
-    "questionType",
+    "evidenceBasis",
+    "platformScope",
+    "questionShape",
     "modelProvider",
     "modelId",
     "transportKind",
@@ -792,13 +798,13 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
     "judgeErrorRuns",
   ];
 
-  const questionTypeCsvHeaders = [
+  const evidenceBasisCsvHeaders = [
     "modelProvider",
     "modelId",
     "mode",
     "transportKind",
     "toolSetName",
-    "questionType",
+    "evidenceBasis",
     "runs",
     "meanAnswerScore",
     "groundedRate",
@@ -819,7 +825,7 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
   await writeTextFile(join(executionDirectory, "aggregate-runs.csv"), toCsv(runCsvHeaders, createRunCsvRows(runDetails)));
   await writeTextFile(join(executionDirectory, "aggregate-runs.jsonl"), toJsonLines(runDetails));
   await writeTextFile(join(executionDirectory, "aggregate-summary.csv"), toCsv(summaryCsvHeaders, createSummaryCsvRows(artifact.summaries)));
-  await writeTextFile(join(executionDirectory, "aggregate-question-types.csv"), toCsv(questionTypeCsvHeaders, createQuestionTypeCsvRows(artifact.summaries)));
+  await writeTextFile(join(executionDirectory, "aggregate-evidence-basis.csv"), toCsv(evidenceBasisCsvHeaders, createEvidenceBasisCsvRows(artifact.summaries)));
 
   return artifact;
 }

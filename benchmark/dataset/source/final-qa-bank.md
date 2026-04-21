@@ -1,11 +1,11 @@
 # Final QA Bank — SwiftUI Docs Chatbot Benchmark
 
-75 questions for benchmarking an AI search agent. Questions are written to require **semantic understanding** rather than keyword matching. Each entry includes the correct modern answer targeting iOS 26 / Swift 6.2.
+83 questions for benchmarking an AI search agent. The bank now mixes focused implementation questions with broader synthesis questions that require searching and connecting multiple docs. Each entry includes the correct modern answer targeting iOS 26 / Swift 6.2.
 
 ---
 
 ## Q1. Tab Definition
-**Question:** I'm building a tab bar and want to give each tab an icon and title. What's the modern way to define tabs in a TabView?
+**Question:** I'm building a tab bar with icons and labels. How should I define each tab in SwiftUI?
 
 **Answer:** The `tabItem()` modifier is deprecated. Use the `Tab` view API instead:
 
@@ -25,7 +25,7 @@ TabView {
 ---
 
 ## Q2. Programmatic Tab Selection
-**Question:** I need to programmatically switch tabs in my app. I'm thinking of using integers to track which tab is selected — is that the standard approach?
+**Question:** I need to switch tabs from code and keep the selection in sync with app state. What should I bind the selected tab to?
 
 **Answer:** Use a type-safe enum instead of integers:
 
@@ -44,7 +44,7 @@ TabView(selection: $selectedTab) {
 ---
 
 ## Q3. Hierarchical Navigation Setup
-**Question:** I'm setting up hierarchical navigation where tapping a list row pushes a detail screen. What's the recommended container and link pattern?
+**Question:** What's the simplest way to push from a list row into a detail screen in SwiftUI?
 
 **Answer:** Use `NavigationStack` with value-based `NavigationLink` and `navigationDestination(for:)`:
 
@@ -131,7 +131,7 @@ VStack { /* content */ }
 ---
 
 ## Q8. Adding a Border to a Filled Shape
-**Question:** I want to add a stroke border around a `RoundedRectangle` — should I use an `.overlay` with a stroked shape on top?
+**Question:** How do I give a filled rounded rectangle both a fill and a separate border stroke?
 
 **Answer:** Since iOS 17, you can chain `.fill()` and `.stroke()` directly on a shape:
 
@@ -146,7 +146,7 @@ RoundedRectangle(cornerRadius: 12)
 ---
 
 ## Q9. Smooth Apple-Style Rounded Corners
-**Question:** I want smooth, Apple-style rounded corners on my card shapes. Do I need to pass a corner style parameter to get the continuous rounding effect?
+**Question:** How do I get the smooth rounded corners Apple uses on cards?
 
 **Answer:** No. The default corner style for `RoundedRectangle` is already `.continuous`:
 
@@ -212,7 +212,7 @@ class UserSettings {
 ---
 
 ## Q13. Saving on Every Keystroke
-**Question:** Can I create a custom binding inline so I can intercept and save on every keystroke?
+**Question:** I want text field changes to save as the user types. What's a clean SwiftUI pattern for that?
 
 **Answer:** Avoid inline `Binding(get:set:)` — it's fragile. Use a standard binding from `@State` with `onChange()`:
 
@@ -330,7 +330,7 @@ Manual format strings with `"yyyy"` can produce wrong years in some calendar loc
 ---
 
 ## Q20. Reacting to State Changes
-**Question:** I need to run code whenever a search field's value changes. How do I observe state changes in SwiftUI, and what parameters does the change callback receive?
+**Question:** I need to run code when a bound value changes in SwiftUI. What's the right hook for that?
 
 **Answer:** Use `onChange` with either the 0-parameter or 2-parameter variant:
 
@@ -351,9 +351,9 @@ Manual format strings with `"yyyy"` can produce wrong years in some calendar loc
 ---
 
 ## Q21. Animating a Specific Value Change
-**Question:** I want to animate whenever `score` changes — can I just add `.animation(.bouncy)` to my view without specifying a value?
+**Question:** I want a score label to animate when the score changes. How should I wire that up?
 
-**Answer:** No. Always specify which value to watch:
+**Answer:** Specify which value should trigger the animation:
 
 ```swift
 Text("\(score)")
@@ -521,7 +521,7 @@ TextField("Enter your notes...", text: $notes, axis: .vertical)
 ---
 
 ## Q31. Presenting a Detail Sheet from an Optional
-**Question:** I have an optional selected item that should open a detail sheet when non-nil. What's the cleanest way to present it?
+**Question:** I have a selected item that should open a detail sheet. What's the cleanest way to present that in SwiftUI?
 
 **Answer:** Use `sheet(item:)`:
 
@@ -660,7 +660,7 @@ if/else creates `_ConditionalContent`, destroying structural identity — SwiftU
 ---
 
 ## Q39. Returning Different View Types from a Function
-**Question:** I have a function that returns different view types depending on a condition, and I'm getting type errors. How do I handle heterogeneous return types from a view-building function?
+**Question:** I have a helper that needs to return different views depending on state, and I'm getting type errors. How should I structure it?
 
 **Answer:** Use `@ViewBuilder`:
 
@@ -874,7 +874,7 @@ struct BrowserView: View {
 ---
 
 ## Q52. Storing Sensitive Data Across Launches
-**Question:** Can I store the user's authentication token in `@AppStorage` so it persists across launches?
+**Question:** Where should I keep a login token if I need it after app relaunches?
 
 **Answer:** Never store secrets in `@AppStorage` — it uses `UserDefaults`, which is unencrypted. Use the Keychain:
 
@@ -954,7 +954,7 @@ if let image = renderer.uiImage {
 ---
 
 ## Q57. Unique Constraints in SwiftData with CloudKit
-**Question:** I want to enforce uniqueness on my SwiftData model's `email` property. Should I add `@Attribute(.unique)` to it?
+**Question:** I'm syncing a SwiftData model through CloudKit and need emails to be unique. What's the safe way to handle that?
 
 **Answer:** If using CloudKit sync, never use `@Attribute(.unique)` — CloudKit doesn't support unique constraints and sync will fail. Handle uniqueness in application logic or check before insert.
 
@@ -1234,9 +1234,9 @@ Available: `.primary`, `.secondary`, `.tertiary`, `.quaternary`. These adapt to 
 ---
 
 ## Q73. Mixing Old and New Navigation APIs
-**Question:** Can I nest a `NavigationStack` inside a `NavigationView` to get the best of both APIs during a migration?
+**Question:** I'm migrating an older screen to SwiftUI's newer navigation model. What migration path should I follow?
 
-**Answer:** No. Replace `NavigationView` entirely with `NavigationStack`. Nesting them causes undefined behavior, double navigation bars, and broken push/pop animations. `NavigationStack` is the complete replacement, not a supplement.
+**Answer:** Replace `NavigationView` entirely with `NavigationStack` (or `NavigationSplitView` where the layout is multi-column). Nesting the old and new containers causes undefined behavior, double navigation bars, and broken push/pop animations. The newer navigation APIs are the replacement, not a supplement.
 
 **Pitfall:** Wrapping `NavigationStack` inside `NavigationView` during an incremental migration.
 
@@ -1265,7 +1265,7 @@ var body: some View {
 ---
 
 ## Q75. Calling Async Code from a Button
-**Question:** Can I call an async function directly inside a button's action closure?
+**Question:** What's the best way to start async work from a button tap?
 
 **Answer:** Button action closures are synchronous. Wrap async calls in `Task`:
 
@@ -1282,3 +1282,76 @@ For async work tied to state changes, prefer `.task()` with a trigger value. Avo
 **Pitfall:** Attempting to use `await` in a synchronous button closure.
 
 *(Source: mercury2)*
+
+
+---
+
+## Q76. Bringing Liquid Glass into an App
+**Question:** How can I bring the new Liquid Glass look into my app without making everything muddy? I'm trying to understand what SwiftUI gives me automatically, what I need to do for custom views, and what to watch for with performance.
+
+**Answer:** Start by letting system components carry as much of the effect as possible — toolbars and standard controls already pick up the system's Liquid Glass styling in the right contexts. For custom elements, use `glassEffect(_:in:)` and choose the shape, tint, and interactivity that fit the component. When multiple glass elements should blend or morph together, put them in a `GlassEffectContainer`, and use `glassEffectID(_:in:)` or `glassEffectUnion(id:namespace:)` when you need coordinated transitions or a unified capsule. If a hero image needs to blur and extend under a sidebar or inspector, use `backgroundExtensionEffect()` on the image layer instead of the whole card. Keep the effect focused: too many separate glass containers or too many onscreen glass effects will hurt rendering performance.
+
+**Pitfall:** Sprinkling Liquid Glass across every layer, or using separate containers when a group of controls should blend and animate together.
+
+---
+
+## Q77. Structuring Navigation for a Multi-Screen App
+**Question:** I'm building a SwiftUI app with tabs, drill-down detail screens, and some deep links. How should I structure navigation so it scales cleanly across iPhone, iPad, and Mac?
+
+**Answer:** Use the modern navigation stack end-to-end. Put top-level sections in `TabView` when tabs make sense, use `NavigationStack` for push-style flows, and move to `NavigationSplitView` for multi-column layouts on larger screens. Prefer value-based `NavigationLink` plus `navigationDestination(for:)` so navigation state stays data-driven. Reach for `NavigationPath` when you need programmatic navigation, deep-link restoration, or more flexible serialized state. Keep one navigation model per flow instead of mixing old `NavigationView` patterns with new stack/split APIs.
+
+**Pitfall:** Mixing deprecated and modern navigation APIs, or encoding navigation state ad hoc instead of using value-based destinations and paths.
+
+---
+
+## Q78. Designing Search for a Larger SwiftUI App
+**Question:** I need search in a larger SwiftUI app with split views and a few different result types. How do placement, scopes, suggestions, and programmatic control fit together?
+
+**Answer:** Start by deciding which container or column owns search, then apply `searchable` there — attaching it to the whole `NavigationSplitView` gives automatic placement, while attaching it to a specific column makes the ownership explicit. Treat `SearchFieldPlacement` as a hint rather than a guarantee, because placement changes with platform and collapsed layouts. Layer in `searchScopes`, `searchSuggestions`, and `searchCompletion` when the search experience needs filtering or guided discovery. Use environment values like `isSearching` and `dismissSearch`, plus search focus APIs, when you need to reveal, focus, or dismiss the field programmatically. The prompt text should clarify what the search actually covers when the app has multiple result domains.
+
+**Pitfall:** Assuming one `searchable` placement behaves identically across macOS, iPad, and collapsed navigation states.
+
+---
+
+## Q79. Choosing Container Views for a Complex Screen
+**Question:** I'm building a screen that mixes settings-style controls, long scrolling sections, and some grid-like content. How do I choose between stacks, lazy stacks, lists, forms, and grids?
+
+**Answer:** Use stacks as the basic layout tool, and only move to lazy stacks when profiling shows a real performance win for large scrollable content. Choose `List` when you want system-standard collection behavior like row affordances, edit actions, and lazy loading, and choose `Form` for settings or data-entry surfaces that should adopt platform conventions automatically. Use grids when the content is genuinely two-dimensional or should scale up more naturally on larger devices. For highly custom scrolling experiences, combine `ScrollView` with lazy stacks or grids rather than forcing everything through `List`. In general, let the container express the interaction model, not only the visual arrangement.
+
+**Pitfall:** Defaulting to one container everywhere — especially hand-rolling settings screens in generic stacks or using lazy containers before measuring whether they help.
+
+---
+
+## Q80. Making a Custom Interface Accessible
+**Question:** I have a custom SwiftUI interface that looks good visually, but I want it to work well with VoiceOver, keyboard focus, and other accessibility navigation. What should I be thinking about?
+
+**Answer:** Start with the basics: interactive elements need clear labels, values, and traits on the control itself, not on decorative children. Then make focus behavior intentional with APIs like `focusable`, `FocusState`, `defaultFocus`, and focused values/objects when keyboard or scene focus matters. Use grouping, headings, and sort priority to make reading order predictable, and add custom rotors or linked groups when people need to jump across structured or off-screen content. For status and animation, also respect environment settings like Reduce Motion and Differentiate Without Color so important meaning is not carried only by motion or color. Accessibility in SwiftUI is as much about navigation structure as it is about labels.
+
+**Pitfall:** Treating accessibility as a layer of labels added at the end, while leaving focus order, grouping, and alternate navigation paths undefined.
+
+---
+
+## Q81. Structuring a Document-Based Cross-Platform App
+**Question:** If I were building a document-based SwiftUI app today, what should the top-level app structure look like across document windows, shared app state, and settings?
+
+**Answer:** Define a single `@main App` entry point and compose the app's scenes explicitly. Use `DocumentGroup` for document windows, add `Settings` for app preferences where appropriate, and add other scenes like `WindowGroup` only for non-document flows. Pick the document model that matches the app: `FileDocument`, `ReferenceFileDocument`, or the SwiftData-oriented document initializers when the model lives there. Keep truly shared app state at the app level and inject it into scenes, while letting each document window own its own document instance. If you want a polished launch experience, use the document-launch APIs rather than baking launch behavior into a regular content window.
+
+**Pitfall:** Treating document windows like ordinary app windows, which leads to the wrong scene structure and duplicated or misplaced shared state.
+
+---
+
+## Q82. Bridging UIKit or AppKit into SwiftUI
+**Question:** I need to wrap an existing UIKit or AppKit control inside SwiftUI. How do I do that without fighting layout, update cycles, or accessibility?
+
+**Answer:** Use the bridge that matches the direction of integration. When native views or view controllers need to live inside SwiftUI, use representable wrappers and keep state flowing from SwiftUI into the wrapped object through the make/update lifecycle. Add a coordinator when you need delegates, target-action callbacks, or other imperative plumbing. When SwiftUI needs to live inside an existing UIKit or AppKit surface, use hosting controllers or hosting configuration APIs so sizing and environment propagation stay consistent. In both directions, let the framework own sizing as much as possible and make sure accessibility labels, values, and semantics are surfaced at the interactive boundary instead of getting lost inside the wrapped control.
+
+**Pitfall:** Manually forcing frames and one-off callbacks around the wrapped control instead of using representables, coordinators, and hosting APIs as the bridge.
+
+---
+
+## Q83. Building a Native Menu Bar for a Mac App
+**Question:** I'm building a Mac app in SwiftUI. What's the right way to add app-specific menu bar commands, keyboard shortcuts, and dynamic menu state without rebuilding the system menus from scratch?
+
+**Answer:** Let your scenes provide the default menu structure, then extend it with the commands system. Attach `.commands` to the relevant scene, use `CommandMenu` for top-level app-specific menus, and use `CommandGroup` when you want to insert, replace, or extend standard system menu groups. Pull in built-in command sets like `SidebarCommands`, `ToolbarCommands`, or text-formatting commands when the app supports those capabilities, rather than recreating them manually. Add `keyboardShortcut` where it improves discoverability, and use focused values or other scene-aware state so menu titles and enablement follow the active window and selection.
+
+**Pitfall:** Treating the menu bar like a pile of custom buttons, or replacing standard command groups when the app really just needs to extend them.

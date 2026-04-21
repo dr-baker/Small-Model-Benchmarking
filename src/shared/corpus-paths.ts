@@ -1,5 +1,5 @@
 import { basename, normalize, relative, resolve, sep } from "node:path";
-import type { BenchmarkQuestionType, CorpusSnapshotRef, DatasetQuestion } from "./contracts.js";
+import type { BenchmarkEvidenceBasis, CorpusSnapshotRef, DatasetQuestion } from "./contracts.js";
 
 function normalizeForComparison(value: string): string {
   return normalize(value).replace(/\\/g, "/");
@@ -58,8 +58,8 @@ export function normalizeCitationFilePath(filePath: string | undefined, corpusRo
   return normalizeCorpusRelativePath(filePath, corpusRoot);
 }
 
-export function inferQuestionType(question: Pick<DatasetQuestion, "goldEvidence">): BenchmarkQuestionType {
-  return question.goldEvidence.length > 0 ? "corpus_backed" : "best_practice";
+export function inferEvidenceBasis(question: Pick<DatasetQuestion, "goldEvidence">): BenchmarkEvidenceBasis {
+  return question.goldEvidence.length > 0 ? "corpus" : "curated";
 }
 
 export function buildCorpusSnapshotWithRelativeRoot(corpus: CorpusSnapshotRef): CorpusSnapshotRef {

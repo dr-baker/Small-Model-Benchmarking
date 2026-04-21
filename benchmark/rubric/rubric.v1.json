@@ -1,6 +1,6 @@
 {
   "version": "rubric.v1",
-  "description": "Deterministic grading rubric. Question-specific must-mention and groundedness rules for keyword-based scoring.",
+  "description": "Deterministic grading rubric. Supports exact phrase checks for targeted questions plus concept-group coverage for broader synthesis questions.",
   "failureTaxonomy": [
     "no_relevant_doc_found",
     "relevant_doc_found_wrong_synthesis",
@@ -13,202 +13,329 @@
   "questions": [
     {
       "questionId": "q01-tab-definition",
-      "mustMention": ["Tab(", "systemImage"],
-      "mustNotMention": ["tabItem("]
+      "mustMention": [
+        "Tab(",
+        "systemImage"
+      ],
+      "mustNotMention": [
+        "tabItem("
+      ]
     },
     {
       "questionId": "q02-programmatic-tab-selection",
-      "mustMention": ["selection:", "enum"],
-      "mustNotMention": ["tag("]
+      "mustMention": [
+        "selection:",
+        "enum"
+      ],
+      "mustNotMention": [
+        "tag("
+      ]
     },
     {
       "questionId": "q03-hierarchical-navigation-setup",
-      "mustMention": ["NavigationStack", "navigationDestination"],
-      "mustNotMention": ["NavigationView"]
+      "mustMention": [
+        "NavigationStack",
+        "navigationDestination"
+      ],
+      "mustNotMention": [
+        "NavigationView"
+      ]
     },
     {
       "questionId": "q04-toolbar-button-in-top-right-corner",
-      "mustMention": ["topBarTrailing", "ToolbarItem"],
-      "mustNotMention": ["navigationBarTrailing", "navigationBarLeading"]
+      "mustMention": [
+        "topBarTrailing",
+        "ToolbarItem"
+      ],
+      "mustNotMention": [
+        "navigationBarTrailing",
+        "navigationBarLeading"
+      ]
     },
     {
       "questionId": "q05-styling-text-with-a-custom-color",
-      "mustMention": ["foregroundStyle"],
-      "mustNotMention": ["foregroundColor("]
+      "mustMention": [
+        "foregroundStyle"
+      ],
+      "mustNotMention": [
+        "foregroundColor("
+      ]
     },
     {
       "questionId": "q06-differently-styled-text-on-one-line",
-      "mustMention": ["Text(\"\\("],
+      "mustMention": [
+        "Text(\"\\("
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q07-rounding-corners-on-a-container",
-      "mustMention": ["clipShape"],
-      "mustNotMention": ["cornerRadius("]
+      "mustMention": [
+        "clipShape"
+      ],
+      "mustNotMention": [
+        "cornerRadius("
+      ]
     },
     {
       "questionId": "q08-adding-a-border-to-a-filled-shape",
-      "mustMention": [".fill(", ".stroke("],
+      "mustMention": [
+        ".fill(",
+        ".stroke("
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q09-smooth-apple-style-rounded-corners",
-      "mustMention": ["RoundedRectangle", ".continuous"],
+      "mustMention": [
+        "RoundedRectangle",
+        ".continuous"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q10-shared-data-model-for-multiple-views",
-      "mustMention": ["@Observable", ".environment("],
-      "mustNotMention": ["ObservableObject", "@StateObject"]
+      "mustMention": [
+        "@Observable",
+        ".environment("
+      ],
+      "mustNotMention": [
+        "ObservableObject",
+        "@StateObject"
+      ]
     },
     {
       "questionId": "q11-thread-safety-for-observable-classes",
-      "mustMention": ["@Observable", "@MainActor"],
+      "mustMention": [
+        "@Observable",
+        "@MainActor"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q12-persisting-userdefaults-in-an-observable-class",
-      "mustMention": ["UserDefaults"],
+      "mustMention": [
+        "UserDefaults"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q13-saving-on-every-keystroke",
-      "mustMention": ["onChange"],
-      "mustNotMention": ["Binding(get:"]
+      "mustMention": [
+        "onChange"
+      ],
+      "mustNotMention": [
+        "Binding(get:"
+      ]
     },
     {
       "questionId": "q14-numeric-input-field",
-      "mustMention": ["TextField", "format:"],
+      "mustMention": [
+        "TextField",
+        "format:"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q15-user-facing-search-text-matching",
-      "mustMention": ["localizedStandardContains"],
+      "mustMention": [
+        "localizedStandardContains"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q16-empty-search-state",
-      "mustMention": ["ContentUnavailableView"],
+      "mustMention": [
+        "ContentUnavailableView"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q17-displaying-prices-and-currency",
-      "mustMention": [".currency(code:"],
-      "mustNotMention": ["String(format:"]
+      "mustMention": [
+        ".currency(code:"
+      ],
+      "mustNotMention": [
+        "String(format:"
+      ]
     },
     {
       "questionId": "q18-formatting-dates-for-display",
-      "mustMention": [".dateTime"],
-      "mustNotMention": ["DateFormatter"]
+      "mustMention": [
+        ".dateTime"
+      ],
+      "mustNotMention": [
+        "DateFormatter"
+      ]
     },
     {
       "questionId": "q19-locale-safe-date-display",
-      "mustMention": [".dateTime"],
+      "mustMention": [
+        ".dateTime"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q20-reacting-to-state-changes",
-      "mustMention": ["onChange"],
+      "mustMention": [
+        "onChange"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q21-animating-a-specific-value-change",
-      "mustMention": [".animation(", "value:"],
+      "mustMention": [
+        ".animation(",
+        "value:"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q22-chaining-sequential-animations",
-      "mustMention": ["withAnimation", "completion"],
-      "mustNotMention": ["asyncAfter"]
+      "mustMention": [
+        "withAnimation",
+        "completion"
+      ],
+      "mustNotMention": [
+        "asyncAfter"
+      ]
     },
     {
       "questionId": "q23-making-a-custom-shape-animatable",
-      "mustMention": ["@Animatable"],
-      "mustNotMention": ["animatableData"]
+      "mustMention": [
+        "@Animatable"
+      ],
+      "mustNotMention": [
+        "animatableData"
+      ]
     },
     {
       "questionId": "q24-sizing-a-view-to-half-the-available-width",
-      "mustMention": ["containerRelativeFrame"],
-      "mustNotMention": ["UIScreen.main"]
+      "mustMention": [
+        "containerRelativeFrame"
+      ],
+      "mustNotMention": [
+        "UIScreen.main"
+      ]
     },
     {
       "questionId": "q25-reading-a-parent-view-s-size",
-      "mustMention": ["containerRelativeFrame"],
+      "mustMention": [
+        "containerRelativeFrame"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q26-accessibility-of-an-icon-only-button",
-      "mustMention": ["Button(", "systemImage"],
+      "mustMention": [
+        "Button(",
+        "systemImage"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q27-making-an-image-interactive",
-      "mustMention": ["Button"],
+      "mustMention": [
+        "Button"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q28-custom-font-size-that-respects-user-preferences",
-      "mustMention": ["@ScaledMetric"],
-      "mustNotMention": [".system(size:"]
+      "mustMention": [
+        "@ScaledMetric"
+      ],
+      "mustNotMention": [
+        ".system(size:"
+      ]
     },
     {
       "questionId": "q29-slider-layout-in-a-form",
-      "mustMention": ["LabeledContent"],
+      "mustMention": [
+        "LabeledContent"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q30-multiline-text-input-with-placeholder",
-      "mustMention": ["TextField", "axis: .vertical"],
+      "mustMention": [
+        "TextField",
+        "axis: .vertical"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q31-presenting-a-detail-sheet-from-an-optional",
-      "mustMention": ["sheet(item:"],
+      "mustMention": [
+        "sheet(item:"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q32-where-to-attach-a-confirmation-dialog",
-      "mustMention": ["confirmationDialog"],
+      "mustMention": [
+        "confirmationDialog"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q33-slow-loading-scrollview-with-many-items",
-      "mustMention": ["LazyVStack"],
+      "mustMention": [
+        "LazyVStack"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q34-controlling-scroll-indicator-visibility",
-      "mustMention": ["scrollIndicators"],
-      "mustNotMention": ["showsIndicators"]
+      "mustMention": [
+        "scrollIndicators"
+      ],
+      "mustNotMention": [
+        "showsIndicators"
+      ]
     },
     {
       "questionId": "q35-optimizing-scroll-edge-rendering",
-      "mustMention": ["scrollContentBackground"],
+      "mustMention": [
+        "scrollContentBackground"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q36-loading-data-when-a-view-appears",
-      "mustMention": [".task"],
+      "mustMention": [
+        ".task"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q37-expensive-work-in-a-view-initializer",
-      "mustMention": [".task"],
+      "mustMention": [
+        ".task"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q38-toggling-modifiers-with-if-else",
-      "mustMention": ["ternary"],
+      "mustMention": [
+        "ternary"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q39-returning-different-view-types-from-a-function",
-      "mustMention": ["@ViewBuilder"],
-      "mustNotMention": ["AnyView"]
+      "mustMention": [
+        "@ViewBuilder"
+      ],
+      "mustNotMention": [
+        "AnyView"
+      ]
     },
     {
       "questionId": "q40-breaking-up-a-long-view-body",
-      "mustMention": ["struct"],
+      "mustMention": [
+        "struct"
+      ],
       "mustNotMention": []
     },
     {
@@ -218,179 +345,506 @@
     },
     {
       "questionId": "q42-defining-a-custom-environment-value",
-      "mustMention": ["@Entry"],
-      "mustNotMention": ["EnvironmentKey"]
+      "mustMention": [
+        "@Entry"
+      ],
+      "mustNotMention": [
+        "EnvironmentKey"
+      ]
     },
     {
       "questionId": "q43-triggering-haptic-feedback",
-      "mustMention": ["sensoryFeedback"],
-      "mustNotMention": ["UIImpactFeedbackGenerator", "UINotificationFeedbackGenerator"]
+      "mustMention": [
+        "sensoryFeedback"
+      ],
+      "mustNotMention": [
+        "UIImpactFeedbackGenerator",
+        "UINotificationFeedbackGenerator"
+      ]
     },
     {
       "questionId": "q44-updating-the-ui-after-a-background-task",
-      "mustMention": ["@MainActor"],
-      "mustNotMention": ["DispatchQueue.main"]
+      "mustMention": [
+        "@MainActor"
+      ],
+      "mustNotMention": [
+        "DispatchQueue.main"
+      ]
     },
     {
       "questionId": "q45-adding-a-delay-in-an-async-context",
-      "mustMention": ["Task.sleep(for:"],
-      "mustNotMention": ["nanoseconds"]
+      "mustMention": [
+        "Task.sleep(for:"
+      ],
+      "mustNotMention": [
+        "nanoseconds"
+      ]
     },
     {
       "questionId": "q46-thread-safe-shared-cache",
-      "mustMention": ["actor"],
-      "mustNotMention": ["DispatchQueue"]
+      "mustMention": [
+        "actor"
+      ],
+      "mustNotMention": [
+        "DispatchQueue"
+      ]
     },
     {
       "questionId": "q47-getting-the-user-s-documents-directory",
-      "mustMention": ["documentsDirectory"],
-      "mustNotMention": ["FileManager"]
+      "mustMention": [
+        "documentsDirectory"
+      ],
+      "mustNotMention": [
+        "FileManager"
+      ]
     },
     {
       "questionId": "q48-replacing-substrings-in-a-string",
-      "mustMention": ["replacing("],
-      "mustNotMention": ["replacingOccurrences"]
+      "mustMention": [
+        "replacing("
+      ],
+      "mustNotMention": [
+        "replacingOccurrences"
+      ]
     },
     {
       "questionId": "q49-foreach-with-index-and-item",
-      "mustMention": ["enumerated(", "\\.element"],
-      "mustNotMention": ["\\.offset"]
+      "mustMention": [
+        "enumerated(",
+        "\\.element"
+      ],
+      "mustNotMention": [
+        "\\.offset"
+      ]
     },
     {
       "questionId": "q50-avoiding-repeated-id-parameters",
-      "mustMention": ["Identifiable"],
+      "mustMention": [
+        "Identifiable"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q51-displaying-a-web-page-in-swiftui",
-      "mustMention": ["WebView"],
-      "mustNotMention": ["UIViewRepresentable"]
+      "mustMention": [
+        "WebView"
+      ],
+      "mustNotMention": [
+        "UIViewRepresentable"
+      ]
     },
     {
       "questionId": "q52-storing-sensitive-data-across-launches",
-      "mustMention": ["Keychain"],
+      "mustMention": [
+        "Keychain"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q53-displaying-an-icon-next-to-a-label",
-      "mustMention": ["Label("],
+      "mustMention": [
+        "Label("
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q54-large-animations-and-user-sensitivity",
-      "mustMention": ["accessibilityReduceMotion"],
+      "mustMention": [
+        "accessibilityReduceMotion"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q55-counting-items-that-match-a-condition",
-      "mustMention": ["count(where:"],
+      "mustMention": [
+        "count(where:"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q56-capturing-a-swiftui-view-as-a-bitmap",
-      "mustMention": ["ImageRenderer"],
-      "mustNotMention": ["UIGraphicsImageRenderer"]
+      "mustMention": [
+        "ImageRenderer"
+      ],
+      "mustNotMention": [
+        "UIGraphicsImageRenderer"
+      ]
     },
     {
       "questionId": "q57-unique-constraints-in-swiftdata-with-cloudkit",
-      "mustMention": ["CloudKit"],
+      "mustMention": [
+        "CloudKit"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q58-swiftdata-relationships-with-cloudkit",
-      "mustMention": ["optional"],
+      "mustMention": [
+        "optional"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q59-displaying-a-person-s-full-name",
-      "mustMention": ["PersonNameComponents"],
+      "mustMention": [
+        "PersonNameComponents"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q60-overlaying-a-badge-on-an-image",
-      "mustMention": [".overlay(alignment:"],
+      "mustMention": [
+        ".overlay(alignment:"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q61-sharing-mutable-state-with-a-child-view",
-      "mustMention": ["@Binding"],
+      "mustMention": [
+        "@Binding"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q62-setting-up-swiftui-previews",
-      "mustMention": ["#Preview"],
-      "mustNotMention": ["PreviewProvider"]
+      "mustMention": [
+        "#Preview"
+      ],
+      "mustNotMention": [
+        "PreviewProvider"
+      ]
     },
     {
       "questionId": "q63-menu-with-only-an-icon-label",
-      "mustMention": ["Menu(", "systemImage"],
+      "mustMention": [
+        "Menu(",
+        "systemImage"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q64-color-only-status-indicators",
-      "mustMention": ["accessibilityDifferentiateWithoutColor"],
+      "mustMention": [
+        "accessibilityDifferentiateWithoutColor"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q65-type-safe-asset-catalog-references",
-      "mustMention": ["Image(."],
+      "mustMention": [
+        "Image(."
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q66-accepting-child-content-in-a-custom-view",
-      "mustMention": ["@ViewBuilder", "Content"],
+      "mustMention": [
+        "@ViewBuilder",
+        "Content"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q67-parsing-an-iso-8601-date-string",
-      "mustMention": ["strategy:", ".iso8601"],
-      "mustNotMention": ["ISO8601DateFormatter"]
+      "mustMention": [
+        "strategy:",
+        ".iso8601"
+      ],
+      "mustNotMention": [
+        "ISO8601DateFormatter"
+      ]
     },
     {
       "questionId": "q68-handling-errors-from-user-actions",
-      "mustMention": [".alert"],
+      "mustMention": [
+        ".alert"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q69-missing-combine-at-runtime",
-      "mustMention": ["import Combine"],
+      "mustMention": [
+        "import Combine"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q70-subtle-text-hierarchy-with-transparency",
-      "mustMention": [".secondary"],
-      "mustNotMention": [".opacity("]
+      "mustMention": [
+        ".secondary"
+      ],
+      "mustNotMention": [
+        ".opacity("
+      ]
     },
     {
       "questionId": "q71-where-to-attach-an-accessibility-label",
-      "mustMention": ["Button("],
+      "mustMention": [
+        "Button("
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q72-hiding-an-interactive-element-from-voiceover",
       "mustMention": [],
-      "mustNotMention": ["accessibilityHidden(true)"]
+      "mustNotMention": [
+        "accessibilityHidden(true)"
+      ]
     },
     {
       "questionId": "q73-mixing-old-and-new-navigation-apis",
-      "mustMention": ["NavigationStack"],
-      "mustNotMention": ["NavigationView"]
+      "mustMention": [
+        "NavigationStack"
+      ],
+      "mustNotMention": [
+        "NavigationView"
+      ]
     },
     {
       "questionId": "q74-heavy-computation-in-a-view-body",
-      "mustMention": [".task"],
+      "mustMention": [
+        ".task"
+      ],
       "mustNotMention": []
     },
     {
       "questionId": "q75-calling-async-code-from-a-button",
-      "mustMention": ["Task {"],
+      "mustMention": [
+        "Task {"
+      ],
       "mustNotMention": []
+    },
+    {
+      "questionId": "q76-bringing-liquid-glass-into-an-app",
+      "mustMention": [],
+      "mustMentionAnyOf": [
+        [
+          "system-provided",
+          "system provided",
+          "toolbar"
+        ],
+        [
+          "glassEffect",
+          "glass effect"
+        ],
+        [
+          "GlassEffectContainer",
+          "glass effect container"
+        ],
+        [
+          "backgroundExtensionEffect",
+          "background extension effect",
+          "performance"
+        ]
+      ],
+      "mustNotMention": [],
+      "passThreshold": 0.75
+    },
+    {
+      "questionId": "q77-structuring-navigation-for-a-multi-screen-app",
+      "mustMention": [],
+      "mustMentionAnyOf": [
+        [
+          "NavigationStack"
+        ],
+        [
+          "NavigationSplitView"
+        ],
+        [
+          "navigationDestination",
+          "value-based NavigationLink",
+          "value based NavigationLink"
+        ],
+        [
+          "NavigationPath",
+          "deep link",
+          "state restoration"
+        ]
+      ],
+      "mustNotMention": [],
+      "passThreshold": 0.75
+    },
+    {
+      "questionId": "q78-designing-search-for-a-larger-swiftui-app",
+      "mustMention": [],
+      "mustMentionAnyOf": [
+        [
+          "searchable"
+        ],
+        [
+          "SearchFieldPlacement",
+          "placement"
+        ],
+        [
+          "searchScopes",
+          "search scopes"
+        ],
+        [
+          "searchSuggestions",
+          "searchCompletion",
+          "suggestions"
+        ],
+        [
+          "dismissSearch",
+          "isSearching",
+          "searchFocused"
+        ]
+      ],
+      "mustNotMention": [],
+      "passThreshold": 0.75
+    },
+    {
+      "questionId": "q79-choosing-container-views-for-a-complex-screen",
+      "mustMention": [],
+      "mustMentionAnyOf": [
+        [
+          "VStack",
+          "HStack",
+          "stack"
+        ],
+        [
+          "LazyVStack",
+          "lazy stack"
+        ],
+        [
+          "List",
+          "Form"
+        ],
+        [
+          "LazyVGrid",
+          "grid"
+        ]
+      ],
+      "mustNotMention": [],
+      "passThreshold": 0.75
+    },
+    {
+      "questionId": "q80-making-a-custom-interface-accessible",
+      "mustMention": [],
+      "mustMentionAnyOf": [
+        [
+          "accessibility label",
+          "labels",
+          "traits"
+        ],
+        [
+          "FocusState",
+          "focusable",
+          "defaultFocus"
+        ],
+        [
+          "accessibilityRotor",
+          "rotor",
+          "sort priority",
+          "heading"
+        ],
+        [
+          "Reduce Motion",
+          "Differentiate Without Color",
+          "accessibilityReduceMotion",
+          "accessibilityDifferentiateWithoutColor"
+        ]
+      ],
+      "mustNotMention": [
+        "accessibilityHidden(true)"
+      ],
+      "passThreshold": 0.75
+    },
+    {
+      "questionId": "q81-structuring-a-document-based-cross-platform-app",
+      "mustMention": [],
+      "mustMentionAnyOf": [
+        [
+          "@main App",
+          "App entry point",
+          "scenes"
+        ],
+        [
+          "DocumentGroup"
+        ],
+        [
+          "Settings",
+          "WindowGroup"
+        ],
+        [
+          "FileDocument",
+          "ReferenceFileDocument",
+          "SwiftData"
+        ],
+        [
+          "shared state",
+          "inject",
+          "environment"
+        ]
+      ],
+      "mustNotMention": [],
+      "passThreshold": 0.75
+    },
+    {
+      "questionId": "q82-bridging-uikit-or-appkit-into-swiftui",
+      "mustMention": [],
+      "mustMentionAnyOf": [
+        [
+          "UIViewRepresentable",
+          "NSViewRepresentable",
+          "representable"
+        ],
+        [
+          "Coordinator",
+          "delegate"
+        ],
+        [
+          "UIHostingController",
+          "NSHostingController",
+          "hosting configuration",
+          "hosting controller"
+        ],
+        [
+          "layout",
+          "sizing",
+          "sizeThatFits"
+        ],
+        [
+          "accessibility"
+        ]
+      ],
+      "mustNotMention": [],
+      "passThreshold": 0.75
+    },
+    {
+      "questionId": "q83-building-a-native-menu-bar-for-a-mac-app",
+      "mustMention": [],
+      "mustMentionAnyOf": [
+        [
+          ".commands",
+          "commands("
+        ],
+        [
+          "CommandMenu"
+        ],
+        [
+          "CommandGroup"
+        ],
+        [
+          "SidebarCommands",
+          "ToolbarCommands",
+          "TextFormattingCommands"
+        ],
+        [
+          "keyboardShortcut",
+          "FocusedValue",
+          "focused value"
+        ]
+      ],
+      "mustNotMention": [],
+      "passThreshold": 0.75
     }
   ],
   "notes": [
     "This file versions the rubric module independently from the dataset.",
     "mustMention/mustNotMention use case-insensitive substring matching.",
-    "Questions with empty mustMention/mustNotMention rely on LLM judge scoring only.",
-    "Some questions (Q40, Q41, Q58, Q72) are design-practice answers where keyword grading is weak — treat deterministic scores as low-confidence for these."
+    "mustMentionAnyOf groups require at least one phrase from each satisfied group; passThreshold controls how much grouped coverage counts as correct.",
+    "Questions with empty mustMention/mustNotMention arrays rely more heavily on concept groups or judge scoring.",
+    "Some questions (Q40, Q41, Q58, Q72) are design-practice answers where deterministic scores stay lower-confidence than direct API questions."
   ]
 }

@@ -10,6 +10,7 @@ const DEFAULT_SOURCE_RELATIVE = 'benchmark/dataset/source/final-qa-bank.md';
 const DEFAULT_SOURCE = path.join(REPO_ROOT, DEFAULT_SOURCE_RELATIVE);
 const DEFAULT_OUTPUT = path.join(REPO_ROOT, 'benchmark', 'dataset', 'swiftui-docs-chatbot-benchmark.v1.json');
 const DEFAULT_GOLD_EVIDENCE = path.join(REPO_ROOT, 'benchmark', 'dataset', 'gold-evidence.v1.json');
+const DEFAULT_QUESTION_METADATA = path.join(REPO_ROOT, 'benchmark', 'dataset', 'question-metadata.v1.json');
 
 function parseArgs(argv) {
   const args = { source: DEFAULT_SOURCE, out: DEFAULT_OUTPUT, check: false };
@@ -90,6 +91,11 @@ function inferTaxonomyTags(title, question, pitfall) {
   if (/navigationstack|navigationview|navigationlink|navigation/.test(haystack)) add('navigation');
   if (/toolbar/.test(haystack)) add('navigation', 'toolbars');
   if (/sheet|dialog|alert|menu|confirmation/.test(haystack)) add('presentation');
+  if (/liquid glass|glass effect|glasseffect|glasseffectcontainer|backgroundextensioneffect/.test(haystack)) add('styling', 'animation', 'performance');
+  if (/menu bar|commandmenu|commandgroup|commands\(|sidebarcommands|toolbarcommands/.test(haystack)) add('commands', 'macos');
+  if (/documentgroup|filedocument|referencefiledocument|document-based|document window/.test(haystack)) add('documents', 'persistence');
+  if (/appkit|uikit|representable|hosting controller|hosting configuration/.test(haystack)) add('interop');
+  if (/focusstate|focusable|voiceover|rotor|focused value|focused object/.test(haystack)) add('accessibility');
   if (/button|tap|gesture/.test(haystack)) add('interaction');
   if (/textfield|slider|searchable|search text|input/.test(haystack)) add('input');
   if (/search|filtered|filtering/.test(haystack)) add('search');
@@ -112,7 +118,7 @@ function inferTaxonomyTags(title, question, pitfall) {
   if (/foreach|enumerated|identifiable|collection|array|count\(where\)/.test(haystack)) add('collections');
   if (/view body|view builder|some view|custom view|content closure|extract into separate/.test(haystack)) add('composition');
   if (/geometryreader|visualeffect|containerrelativeframe|layout protocol/.test(haystack)) add('layout');
-  if (/webview|uiimage|uikit|wkwebview/.test(haystack)) add('interop');
+  if (/webview|uiimage|uikit|wkwebview|appkit/.test(haystack)) add('interop');
   if (/performance|expensive|lazy|diffing|caching|initial load/.test(haystack)) add('performance');
 
   return Array.from(tags).sort();
@@ -144,7 +150,9 @@ function parseQuestions(markdown) {
       referenceAnswer: answer,
       pitfall,
       taxonomyTags: inferTaxonomyTags(title, question, pitfall),
-      questionType: 'best_practice',
+      platformScope: 'all',
+      questionShape: 'targeted',
+      evidenceBasis: 'curated',
       goldEvidence: [],
       source: {
         file: DEFAULT_SOURCE_RELATIVE,
@@ -160,8 +168,37 @@ function parseQuestions(markdown) {
   return questions;
 }
 
-function classifyQuestionType(question) {
-  return question.goldEvidence.length > 0 ? 'corpus_backed' : 'best_practice';
+function classifyEvidenceBasis(question) {
+  return question.goldEvidence.length > 0 ? 'corpus' : 'curated';
+}
+
+function mergeQuestionMetadata(questions, metadataPath) {
+  let metadata = {
+    defaults: {
+      platformScope: 'all',
+      questionShape: 'targeted',
+    },
+    overrides: {},
+  };
+
+  try {
+    const raw = JSON.parse(readFileSync(metadataPath, 'utf8'));
+    metadata = {
+      defaults: {
+        platformScope: raw.defaults?.platformScope ?? 'all',
+        questionShape: raw.defaults?.questionShape ?? 'targeted',
+      },
+      overrides: raw.overrides ?? {},
+    };
+  } catch {
+    // No metadata file — keep defaults.
+  }
+
+  for (const question of questions) {
+    const override = metadata.overrides[question.id] ?? {};
+    question.platformScope = override.platformScope ?? metadata.defaults.platformScope;
+    question.questionShape = override.questionShape ?? metadata.defaults.questionShape;
+  }
 }
 
 function mergeGoldEvidence(questions, goldEvidencePath) {
@@ -175,14 +212,14 @@ function mergeGoldEvidence(questions, goldEvidencePath) {
 
   for (const question of questions) {
     question.goldEvidence = evidenceMap[question.id] ?? [];
-    question.questionType = classifyQuestionType(question);
+    question.evidenceBasis = classifyEvidenceBasis(question);
   }
 
   const covered = questions.filter((q) => q.goldEvidence.length > 0).length;
   return { covered, total: questions.length };
 }
 
-function buildDataset(markdown, goldEvidencePath) {
+function buildDataset(markdown, goldEvidencePath, metadataPath) {
   const questions = parseQuestions(markdown);
   const questionNumbers = questions.map((question) => question.source.questionNumber);
   const expected = Array.from({ length: questions.length }, (_, index) => index + 1);
@@ -191,13 +228,14 @@ function buildDataset(markdown, goldEvidencePath) {
     throw new Error('Question numbers are not contiguous starting from 1');
   }
 
+  mergeQuestionMetadata(questions, metadataPath);
   const { covered, total } = mergeGoldEvidence(questions, goldEvidencePath);
 
   return {
     schemaVersion: 'dataset.v1',
     datasetId: 'swiftui-docs-chatbot-benchmark',
     datasetVersion: 'v1',
-    generatedAt: '2026-04-10',
+    generatedAt: '2026-04-21',
     source: {
       file: DEFAULT_SOURCE_RELATIVE,
       format: 'markdown',
@@ -205,7 +243,7 @@ function buildDataset(markdown, goldEvidencePath) {
     },
     goldEvidenceCurationRequired: covered < total,
     notes:
-      `goldEvidence populated for ${covered}/${total} questions from benchmark/dataset/gold-evidence.v1.json. Questions with corpus evidence are marked corpus_backed; questions without direct corpus evidence are marked best_practice.`,
+      `goldEvidence populated for ${covered}/${total} questions from benchmark/dataset/gold-evidence.v1.json, and platform/question-shape metadata merged from benchmark/dataset/question-metadata.v1.json. Questions with corpus evidence are marked corpus; questions without direct corpus evidence are marked curated.`,
     questions,
   };
 }
@@ -213,7 +251,7 @@ function buildDataset(markdown, goldEvidencePath) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const markdown = await readFile(args.source, 'utf8');
-  const dataset = buildDataset(markdown, DEFAULT_GOLD_EVIDENCE);
+  const dataset = buildDataset(markdown, DEFAULT_GOLD_EVIDENCE, DEFAULT_QUESTION_METADATA);
   const output = `${JSON.stringify(dataset, null, 2)}\n`;
 
   if (args.check) {

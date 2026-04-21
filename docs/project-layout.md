@@ -5,7 +5,7 @@ Very short map of the repo.
 ## Benchmark definition
 
 - `benchmark/` — benchmark definition assets grouped by concern:
-  - `dataset/` — 75-question source bank, gold evidence, and derived dataset JSON
+  - `dataset/` — 83-question source bank, gold evidence, metadata tags, and derived dataset JSON
   - `prompts/` — versioned collect and judge prompts
   - `tool-sets/` — named tool configurations
   - `rubric/` — deterministic grading rules only

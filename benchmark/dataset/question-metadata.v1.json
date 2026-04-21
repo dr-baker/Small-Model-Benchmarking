@@ -1,0 +1,44 @@
+{
+  "version": "question-metadata.v1",
+  "description": "Question platform/question-shape metadata merged into the dataset at build time.",
+  "defaults": {
+    "platformScope": "all",
+    "questionShape": "targeted"
+  },
+  "overrides": {
+    "q04-toolbar-button-in-top-right-corner": {
+      "platformScope": "ios"
+    },
+    "q32-where-to-attach-a-confirmation-dialog": {
+      "platformScope": "ios"
+    },
+    "q51-displaying-a-web-page-in-swiftui": {
+      "platformScope": "ios"
+    },
+    "q76-bringing-liquid-glass-into-an-app": {
+      "questionShape": "synthesis"
+    },
+    "q77-structuring-navigation-for-a-multi-screen-app": {
+      "questionShape": "synthesis"
+    },
+    "q78-designing-search-for-a-larger-swiftui-app": {
+      "questionShape": "synthesis"
+    },
+    "q79-choosing-container-views-for-a-complex-screen": {
+      "questionShape": "synthesis"
+    },
+    "q80-making-a-custom-interface-accessible": {
+      "questionShape": "synthesis"
+    },
+    "q81-structuring-a-document-based-cross-platform-app": {
+      "questionShape": "synthesis"
+    },
+    "q82-bridging-uikit-or-appkit-into-swiftui": {
+      "questionShape": "synthesis"
+    },
+    "q83-building-a-native-menu-bar-for-a-mac-app": {
+      "platformScope": "macos",
+      "questionShape": "synthesis"
+    }
+  }
+}

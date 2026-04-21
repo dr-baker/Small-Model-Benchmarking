@@ -57,7 +57,7 @@ async function main() {
   console.log("Wrote:");
   console.log(`- ${resolve(executionDirectory, "aggregate.json")}`);
   console.log(`- ${resolve(executionDirectory, "aggregate-summary.csv")}`);
-  console.log(`- ${resolve(executionDirectory, "aggregate-question-types.csv")}`);
+  console.log(`- ${resolve(executionDirectory, "aggregate-evidence-basis.csv")}`);
   console.log(`- ${resolve(executionDirectory, "aggregate-runs.csv")}`);
   console.log(`- ${resolve(executionDirectory, "aggregate-runs.jsonl")}`);
   console.log("\nSummaries:");

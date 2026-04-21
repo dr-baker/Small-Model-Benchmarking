@@ -310,6 +310,163 @@
       {
         "filePath": "pages/documentation/swiftui/button.md"
       }
+    ],
+    "q76-bringing-liquid-glass-into-an-app": [
+      {
+        "filePath": "pages/documentation/swiftui/applying-liquid-glass-to-custom-views.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/landmarks-building-an-app-with-liquid-glass.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/landmarks-refining-the-system-provided-glass-effect-in-toolbars.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/glasseffectcontainer.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/view/glasseffect(_:in:).md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/view/backgroundextensioneffect().md"
+      }
+    ],
+    "q77-structuring-navigation-for-a-multi-screen-app": [
+      {
+        "filePath": "pages/documentation/swiftui/migrating-to-new-navigation-types.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/bringing-robust-navigation-structure-to-your-swiftui-app.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/navigationstack.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/navigationsplitview.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/navigationpath.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/view/navigationdestination(for:destination:).md"
+      }
+    ],
+    "q78-designing-search-for-a-larger-swiftui-app": [
+      {
+        "filePath": "pages/documentation/swiftui/adding-a-search-interface-to-your-app.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/managing-search-interface-activation.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/searchfieldplacement.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/view/searchscopes(_:activation:_:).md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/view/searchsuggestions(_:).md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/view/searchcompletion(_:).md"
+      }
+    ],
+    "q79-choosing-container-views-for-a-complex-screen": [
+      {
+        "filePath": "pages/documentation/swiftui/picking-container-views-for-your-content.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/layout-fundamentals.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/building-layouts-with-stack-views.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/layout-adjustments.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/grouping-data-with-lazy-stack-views.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/view-layout.md"
+      }
+    ],
+    "q80-making-a-custom-interface-accessible": [
+      {
+        "filePath": "pages/documentation/swiftui/accessibility-fundamentals.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/creating-accessible-views.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/accessible-controls.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/accessible-navigation.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/focus.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/focus-cookbook-sample.md"
+      }
+    ],
+    "q81-structuring-a-document-based-cross-platform-app": [
+      {
+        "filePath": "pages/documentation/swiftui/app-organization.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/documents.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/documentgroup.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/building-a-document-based-app-with-swiftui.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/building-a-document-based-app-using-swiftdata.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/scenes.md"
+      }
+    ],
+    "q82-bridging-uikit-or-appkit-into-swiftui": [
+      {
+        "filePath": "pages/documentation/swiftui/uikit-integration.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/appkit-integration.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/nsviewrepresentable.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/nsviewcontrollerrepresentable.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/nshostingcontroller.md"
+      }
+    ],
+    "q83-building-a-native-menu-bar-for-a-mac-app": [
+      {
+        "filePath": "pages/documentation/swiftui/menus-and-commands.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/building-and-customizing-the-menu-bar-with-swiftui.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/commandmenu.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/commandgroup.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/sidebarcommands.md"
+      },
+      {
+        "filePath": "pages/documentation/swiftui/toolbarcommands.md"
+      }
     ]
   }
 }

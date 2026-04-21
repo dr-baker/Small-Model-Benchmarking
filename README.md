@@ -1,6 +1,6 @@
 # SwiftUI Docs Chatbot Benchmark
 
-A reproducible benchmark for testing LLM-powered SwiftUI docs assistants against a **75-question** dataset of modern SwiftUI QA tasks.
+A reproducible benchmark for testing LLM-powered SwiftUI docs assistants against a curated **83-question** dataset of modern SwiftUI QA tasks.
 
 It can run models in closed-book mode, corpus-backed open-book mode, or optional local Swift Docs hybrid-search mode, then score and compare them with a trace-first pipeline:
 
@@ -8,7 +8,7 @@ It can run models in closed-book mode, corpus-backed open-book mode, or optional
 
 ## What it can do
 
-- Benchmark candidate models across the same 75-question dataset
+- Benchmark candidate models across the same 83-question dataset
 - Compare open-book vs. closed-book behavior and different tool sets
 - Capture immutable per-run artifacts: prompts, tool calls, traces, normalized answers, judge outputs, costs, and manifests
 - Re-grade or re-aggregate from saved traces without recollecting runs
@@ -33,7 +33,7 @@ Each execution writes to `benchmark-results/<benchmark-name>--<run-id>/` and inc
 
 - `aggregate.json`
 - `aggregate-summary.csv`
-- `aggregate-question-types.csv`
+- `aggregate-evidence-basis.csv`
 - `aggregate-runs.csv`
 - `aggregate-runs.jsonl`
 

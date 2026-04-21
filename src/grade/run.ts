@@ -11,7 +11,7 @@ import type {
   ToolInvocationTrace,
 } from "../shared/contracts.js";
 import { readJsonFile, writeJsonFile } from "../shared/io.js";
-import { inferQuestionType, normalizeCorpusRelativePath } from "../shared/corpus-paths.js";
+import { inferEvidenceBasis, normalizeCorpusRelativePath } from "../shared/corpus-paths.js";
 import { collectSwiftDocsRetrievedPaths, parseSwiftDocsHybridToolResult } from "../shared/swift-docs-search.js";
 
 interface GradeRunOptions {
@@ -204,6 +204,8 @@ export async function gradeRun(options: GradeRunOptions): Promise<GradeArtifact>
 
   const mustMentionPassed: string[] = [];
   const mustMentionFailed: string[] = [];
+  const mustMentionAnyOfPassed: string[][] = [];
+  const mustMentionAnyOfFailed: string[][] = [];
   const mustNotMentionViolated: string[] = [];
   let correct = false;
   let score = 0;
@@ -220,14 +222,38 @@ export async function gradeRun(options: GradeRunOptions): Promise<GradeArtifact>
       }
     }
 
+    for (const group of questionRubric.mustMentionAnyOf ?? []) {
+      const matchedPhrase = group.find((phrase) => finalAnswer.includes(phrase.toLowerCase()));
+      if (matchedPhrase) {
+        mustMentionAnyOfPassed.push(group);
+      } else {
+        mustMentionAnyOfFailed.push(group);
+      }
+    }
+
     for (const phrase of questionRubric.mustNotMention) {
       if (finalAnswer.includes(phrase.toLowerCase()) && !isDeprecatedMentionContext(finalAnswer, phrase.toLowerCase())) {
         mustNotMentionViolated.push(phrase);
       }
     }
 
-    correct = mustMentionFailed.length === 0 && mustNotMentionViolated.length === 0;
-    score = correct ? 1.0 : 0.0;
+    const coverageScores: number[] = [];
+    if (questionRubric.mustMention.length > 0) {
+      coverageScores.push(mustMentionPassed.length / questionRubric.mustMention.length);
+    }
+    const anyOfGroups = questionRubric.mustMentionAnyOf ?? [];
+    if (anyOfGroups.length > 0) {
+      coverageScores.push(mustMentionAnyOfPassed.length / anyOfGroups.length);
+    }
+
+    score = mustNotMentionViolated.length > 0
+      ? 0
+      : coverageScores.length === 0
+        ? 1.0
+        : coverageScores.reduce((sum, value) => sum + value, 0) / coverageScores.length;
+
+    const passThreshold = questionRubric.passThreshold ?? 1.0;
+    correct = score >= passThreshold && mustNotMentionViolated.length === 0;
 
     if (answer.mode === "open_book") {
       const retrievedPaths = collectRetrievedPaths(trace, corpusRoot);
@@ -247,7 +273,9 @@ export async function gradeRun(options: GradeRunOptions): Promise<GradeArtifact>
     runId: trace.runId,
     rubricVersion: rubric.version,
     questionId,
-    questionType: question?.questionType ?? inferQuestionType({ goldEvidence: question?.goldEvidence ?? [] }),
+    evidenceBasis: question?.evidenceBasis ?? inferEvidenceBasis({ goldEvidence: question?.goldEvidence ?? [] }),
+    platformScope: question?.platformScope ?? "all",
+    questionShape: question?.questionShape ?? "targeted",
     answer: {
       score,
       correct,
@@ -255,10 +283,12 @@ export async function gradeRun(options: GradeRunOptions): Promise<GradeArtifact>
       gradingMethod: "deterministic",
       mustMentionPassed,
       mustMentionFailed,
+      ...(questionRubric?.mustMentionAnyOf?.length ? { mustMentionAnyOfPassed, mustMentionAnyOfFailed } : {}),
       mustNotMentionViolated,
       notes: [
         "Answer graded via deterministic text matching over final text.",
         "Deprecated APIs mentioned only as warnings are ignored by must-not-match checks.",
+        "When mustMentionAnyOf groups are present, score reflects concept-group coverage instead of binary exact-match only grading.",
         "This artifact intentionally does not consume judge.json; LLM judging is a separate stage for later comparison.",
       ],
     },

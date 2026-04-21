@@ -282,7 +282,7 @@ async function writeExecutionArtifacts(params: {
     aggregateOutputs: {
       json: join(params.executionDirectory, "aggregate.json"),
       summaryCsv: join(params.executionDirectory, "aggregate-summary.csv"),
-      questionTypesCsv: join(params.executionDirectory, "aggregate-question-types.csv"),
+      evidenceBasisCsv: join(params.executionDirectory, "aggregate-evidence-basis.csv"),
       runsCsv: join(params.executionDirectory, "aggregate-runs.csv"),
       runsJsonl: join(params.executionDirectory, "aggregate-runs.jsonl"),
     },
@@ -515,7 +515,7 @@ async function main() {
   console.log(`- ${join(executionDirectory, "execution-metadata.json")}`);
   console.log(`- ${join(executionDirectory, "aggregate.json")}`);
   console.log(`- ${join(executionDirectory, "aggregate-summary.csv")}`);
-  console.log(`- ${join(executionDirectory, "aggregate-question-types.csv")}`);
+  console.log(`- ${join(executionDirectory, "aggregate-evidence-basis.csv")}`);
   console.log(`- ${join(executionDirectory, "aggregate-runs.csv")}`);
   console.log(`- ${join(executionDirectory, "aggregate-runs.jsonl")}`);
 
