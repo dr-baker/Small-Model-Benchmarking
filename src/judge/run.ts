@@ -97,6 +97,14 @@ function rollUpVerdict(r: ParsedJudgeResponse): JudgeVerdictLabel {
   return "partially_correct";
 }
 
+function deriveLegacyCodeExample(r: ParsedJudgeResponse): 0 | 1 | 2 {
+  return r.observations.hasCode ? (r.completeness === 1 ? 2 : 1) : 0;
+}
+
+function deriveLegacyExplanation(r: ParsedJudgeResponse): 0 | 1 | 2 {
+  return r.observations.hasExplanation ? (r.completeness === 1 ? 2 : 1) : 0;
+}
+
 function buildSearchTraceSummary(trace: CollectTrace): string | undefined {
   const searchCalls = trace.toolInvocations.filter((tool) => tool.toolName === "swift_docs_search_hybrid" && !tool.isError);
   if (searchCalls.length === 0) return undefined;
@@ -231,27 +239,21 @@ export async function judgeRun(options: JudgeRunOptions): Promise<JudgeRunOutput
     : undefined;
   const scored = !("parseError" in parsed) && modeMismatch === undefined;
   const hasError = llmResult.error !== undefined;
+  const artifactStatus: JudgeArtifact["status"] = !hasError && scored ? "scored" : "error";
 
-  const artifact: JudgeArtifact = {
-    schemaVersion: JUDGE_VERDICT_SCHEMA_VERSION, runId, questionId,
-    ...(scored ? {
-      correctness: parsed.correctness,
-      completeness: parsed.completeness,
-      deprecatedPatternUse: parsed.deprecatedPatternUse,
-      referenceVerified: parsed.referenceVerified,
-      observations: parsed.observations,
-      recommendsCorrectPattern: parsed.correctness === 1,
-      recommendsDeprecatedPattern: parsed.deprecatedPatternUse === "primary" || parsed.deprecatedPatternUse === "fallback",
-      codeExample: parsed.observations.hasCode ? (parsed.completeness === 1 ? 2 : 1) : 0,
-      explanation: parsed.observations.hasExplanation ? (parsed.completeness === 1 ? 2 : 1) : 0,
-      verdict: rollUpVerdict(parsed),
-      reasoning: parsed.reasoning,
-    } : {}),
-    status: !hasError && scored ? "scored" : "error",
+  const commonArtifactFields = {
+    schemaVersion: JUDGE_VERDICT_SCHEMA_VERSION,
+    runId,
+    questionId,
+    status: artifactStatus,
     judgedAt,
-    judgeProfileId: judgeProfile.id, judgeProfileVersion: judgeProfile.version,
-    judgeModel: effectiveJudgeModel, judgeTransport: options.transport, toolSet: judgeToolSet,
-    promptTemplateId: judgeProfile.promptTemplateId, promptTemplateVersion: judgeProfile.promptTemplateVersion,
+    judgeProfileId: judgeProfile.id,
+    judgeProfileVersion: judgeProfile.version,
+    judgeModel: effectiveJudgeModel,
+    judgeTransport: options.transport,
+    toolSet: judgeToolSet,
+    promptTemplateId: judgeProfile.promptTemplateId,
+    promptTemplateVersion: judgeProfile.promptTemplateVersion,
     answerSha256,
     prompt: { systemPrompt, userPrompt, messages: promptMessages, availableTools: tools.map((t) => ({ name: t.name, description: t.description })) },
     toolInvocations: llmResult.toolInvocations,
@@ -266,13 +268,42 @@ export async function judgeRun(options: JudgeRunOptions): Promise<JudgeRunOutput
         ? "Structured output enforced via response_format."
         : "Pi SDK transport used prompt-level schema enforcement (no response_format support).",
       ...(hasError ? ["Judge model call failed."] : []),
-      ...(scored ? [`Judge v2 artifact written to judge.v2.json (mirrored in judge.json for compatibility): correctness=${parsed.correctness}, completeness=${parsed.completeness}, deprecatedPatternUse=${parsed.deprecatedPatternUse}, referenceVerified=${parsed.referenceVerified}.`] : []),
+      ...(scored ? [`Judge writes judge.json for compatibility and judge.v2.json as the slimmer authoritative artifact: correctness=${parsed.correctness}, completeness=${parsed.completeness}, deprecatedPatternUse=${parsed.deprecatedPatternUse}, referenceVerified=${parsed.referenceVerified}.`] : []),
       ...(modeMismatch ? [modeMismatch] : []),
       ...(scored || modeMismatch ? [] : [`Judge output parse failure: ${(parsed as { parseError: string }).parseError}`]),
     ],
   };
 
+  const artifact: JudgeArtifact = {
+    ...commonArtifactFields,
+    ...(scored ? {
+      correctness: parsed.correctness,
+      completeness: parsed.completeness,
+      deprecatedPatternUse: parsed.deprecatedPatternUse,
+      referenceVerified: parsed.referenceVerified,
+      observations: parsed.observations,
+      recommendsCorrectPattern: parsed.correctness === 1,
+      recommendsDeprecatedPattern: parsed.deprecatedPatternUse === "primary" || parsed.deprecatedPatternUse === "fallback",
+      codeExample: deriveLegacyCodeExample(parsed),
+      explanation: deriveLegacyExplanation(parsed),
+      verdict: rollUpVerdict(parsed),
+      reasoning: parsed.reasoning,
+    } : {}),
+  };
+
+  const v2Artifact: JudgeArtifact = {
+    ...commonArtifactFields,
+    ...(scored ? {
+      correctness: parsed.correctness,
+      completeness: parsed.completeness,
+      deprecatedPatternUse: parsed.deprecatedPatternUse,
+      referenceVerified: parsed.referenceVerified,
+      observations: parsed.observations,
+      reasoning: parsed.reasoning,
+    } : {}),
+  };
+
   await writeJsonFile(judgePath, artifact);
-  await writeJsonFile(judgeV2Path, artifact);
+  await writeJsonFile(judgeV2Path, v2Artifact);
   return { judgePath, artifact };
 }

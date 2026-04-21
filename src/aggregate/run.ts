@@ -276,6 +276,42 @@ function judgeCompletenessValue(judge: JudgeArtifact): -1 | 0 | 1 | undefined {
   return undefined;
 }
 
+function judgeDerivedVerdict(judge: JudgeArtifact): "correct" | "partially_correct" | "incorrect" | undefined {
+  if (judge.verdict !== undefined) return judge.verdict;
+  const correctness = judgeCorrectnessValue(judge);
+  const completeness = judgeCompletenessValue(judge);
+  if (correctness === undefined || completeness === undefined) return undefined;
+  if (correctness === -1) return "incorrect";
+  if (correctness === 1 && completeness === 1) return "correct";
+  return "partially_correct";
+}
+
+function judgeDerivedRecommendsCorrectPattern(judge: JudgeArtifact): boolean | undefined {
+  if (judge.recommendsCorrectPattern !== undefined) return judge.recommendsCorrectPattern;
+  const correctness = judgeCorrectnessValue(judge);
+  return correctness === undefined ? undefined : correctness === 1;
+}
+
+function judgeDerivedRecommendsDeprecatedPattern(judge: JudgeArtifact): boolean | undefined {
+  if (judge.recommendsDeprecatedPattern !== undefined) return judge.recommendsDeprecatedPattern;
+  if (judge.deprecatedPatternUse === undefined) return undefined;
+  return judge.deprecatedPatternUse === "primary" || judge.deprecatedPatternUse === "fallback";
+}
+
+function judgeDerivedCodeExample(judge: JudgeArtifact): 0 | 1 | 2 | undefined {
+  if (judge.codeExample !== undefined) return judge.codeExample;
+  const completeness = judgeCompletenessValue(judge);
+  if (judge.observations?.hasCode === undefined || completeness === undefined) return undefined;
+  return judge.observations.hasCode ? (completeness === 1 ? 2 : 1) : 0;
+}
+
+function judgeDerivedExplanation(judge: JudgeArtifact): 0 | 1 | 2 | undefined {
+  if (judge.explanation !== undefined) return judge.explanation;
+  const completeness = judgeCompletenessValue(judge);
+  if (judge.observations?.hasExplanation === undefined || completeness === undefined) return undefined;
+  return judge.observations.hasExplanation ? (completeness === 1 ? 2 : 1) : 0;
+}
+
 function toJudgeMetrics(accumulator: Pick<EvidenceBasisAccumulator, "judgeRuns" | "judgeCorrectCount" | "judgePartiallyCorrectCount" | "judgeIncorrectCount" | "judgeCorrectnessTotal" | "judgeCorrectnessNegativeCount" | "judgeCorrectnessZeroCount" | "judgeCorrectnessPositiveCount" | "judgeCompletenessTotal" | "judgeCompletenessNegativeCount" | "judgeCompletenessZeroCount" | "judgeCompletenessPositiveCount" | "judgeCodeExampleTotal" | "judgeExplanationTotal" | "judgeRetrievalQualityTotal" | "judgeRetrievalQualityRuns" | "judgeReferenceVerifiedCount" | "judgeReferenceVerifiedRuns" | "judgeRecommendsCorrectCount" | "judgeRecommendsDeprecatedCount" | "judgeRetrievalSupportsCount" | "judgeRetrievalSupportsRuns">): AggregateJudgeMetrics | undefined {
   if (accumulator.judgeRuns === 0) return undefined;
   return {
@@ -383,6 +419,11 @@ function createAggregateRunDetails(records: RunRecord[]): AggregateRunDetail[] {
         : undefined;
       const judgeCorrectness = judge ? judgeCorrectnessValue(judge) : undefined;
       const judgeCompleteness = judge ? judgeCompletenessValue(judge) : undefined;
+      const judgeVerdict = judge ? judgeDerivedVerdict(judge) : undefined;
+      const judgeCodeExample = judge ? judgeDerivedCodeExample(judge) : undefined;
+      const judgeExplanation = judge ? judgeDerivedExplanation(judge) : undefined;
+      const judgeRecommendsCorrectPattern = judge ? judgeDerivedRecommendsCorrectPattern(judge) : undefined;
+      const judgeRecommendsDeprecatedPattern = judge ? judgeDerivedRecommendsDeprecatedPattern(judge) : undefined;
 
       return {
         runDirectory,
@@ -422,17 +463,17 @@ function createAggregateRunDetails(records: RunRecord[]): AggregateRunDetail[] {
           ? {
               judge: {
                 status: judge.status,
-                ...(judge.verdict ? { verdict: judge.verdict } : {}),
+                ...(judgeVerdict !== undefined ? { verdict: judgeVerdict } : {}),
                 ...(judgeCorrectness !== undefined ? { correctness: judgeCorrectness } : {}),
                 ...(judgeCompleteness !== undefined ? { completeness: judgeCompleteness } : {}),
                 ...(judge.deprecatedPatternUse !== undefined ? { deprecatedPatternUse: judge.deprecatedPatternUse } : {}),
                 ...(judge.referenceVerified !== undefined ? { referenceVerified: judge.referenceVerified } : {}),
                 ...(judge.observations !== undefined ? { observations: judge.observations } : {}),
-                ...(judge.codeExample !== undefined ? { codeExample: judge.codeExample } : {}),
-                ...(judge.explanation !== undefined ? { explanation: judge.explanation } : {}),
+                ...(judgeCodeExample !== undefined ? { codeExample: judgeCodeExample } : {}),
+                ...(judgeExplanation !== undefined ? { explanation: judgeExplanation } : {}),
                 ...(judge.retrievalQuality !== undefined ? { retrievalQuality: judge.retrievalQuality } : {}),
-                ...(judge.recommendsCorrectPattern !== undefined ? { recommendsCorrectPattern: judge.recommendsCorrectPattern } : {}),
-                ...(judge.recommendsDeprecatedPattern !== undefined ? { recommendsDeprecatedPattern: judge.recommendsDeprecatedPattern } : {}),
+                ...(judgeRecommendsCorrectPattern !== undefined ? { recommendsCorrectPattern: judgeRecommendsCorrectPattern } : {}),
+                ...(judgeRecommendsDeprecatedPattern !== undefined ? { recommendsDeprecatedPattern: judgeRecommendsDeprecatedPattern } : {}),
                 ...(judge.retrievalSupportsReferenceAnswer !== undefined ? { retrievalSupportsReferenceAnswer: judge.retrievalSupportsReferenceAnswer } : {}),
                 ...(judge.reasoning ? { reasoning: judge.reasoning } : {}),
                 ...(judge.costUsd !== undefined ? { costUsd: judge.costUsd } : {}),
@@ -733,13 +774,14 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
         }
       }
 
-      if (judge.verdict === "correct") {
+      const derivedVerdict = judgeDerivedVerdict(judge);
+      if (derivedVerdict === "correct") {
         existing.judgeCorrectCount += 1;
         evidenceBasisAccumulator.judgeCorrectCount += 1;
-      } else if (judge.verdict === "partially_correct") {
+      } else if (derivedVerdict === "partially_correct") {
         existing.judgePartiallyCorrectCount += 1;
         evidenceBasisAccumulator.judgePartiallyCorrectCount += 1;
-      } else if (judge.verdict === "incorrect") {
+      } else if (derivedVerdict === "incorrect") {
         existing.judgeIncorrectCount += 1;
         evidenceBasisAccumulator.judgeIncorrectCount += 1;
       }
@@ -769,13 +811,15 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
         }
       }
 
-      if (judge.codeExample !== undefined) {
-        existing.judgeCodeExampleTotal += judge.codeExample;
-        evidenceBasisAccumulator.judgeCodeExampleTotal += judge.codeExample;
+      const derivedCodeExample = judgeDerivedCodeExample(judge);
+      if (derivedCodeExample !== undefined) {
+        existing.judgeCodeExampleTotal += derivedCodeExample;
+        evidenceBasisAccumulator.judgeCodeExampleTotal += derivedCodeExample;
       }
-      if (judge.explanation !== undefined) {
-        existing.judgeExplanationTotal += judge.explanation;
-        evidenceBasisAccumulator.judgeExplanationTotal += judge.explanation;
+      const derivedExplanation = judgeDerivedExplanation(judge);
+      if (derivedExplanation !== undefined) {
+        existing.judgeExplanationTotal += derivedExplanation;
+        evidenceBasisAccumulator.judgeExplanationTotal += derivedExplanation;
       }
       if (judge.retrievalQuality !== undefined) {
         existing.judgeRetrievalQualityTotal += judge.retrievalQuality;
@@ -783,11 +827,13 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
         evidenceBasisAccumulator.judgeRetrievalQualityTotal += judge.retrievalQuality;
         evidenceBasisAccumulator.judgeRetrievalQualityRuns += 1;
       }
-      if (judge.recommendsCorrectPattern) {
+      const derivedRecommendsCorrectPattern = judgeDerivedRecommendsCorrectPattern(judge);
+      if (derivedRecommendsCorrectPattern) {
         existing.judgeRecommendsCorrectCount += 1;
         evidenceBasisAccumulator.judgeRecommendsCorrectCount += 1;
       }
-      if (judge.recommendsDeprecatedPattern) {
+      const derivedRecommendsDeprecatedPattern = judgeDerivedRecommendsDeprecatedPattern(judge);
+      if (derivedRecommendsDeprecatedPattern) {
         existing.judgeRecommendsDeprecatedCount += 1;
         evidenceBasisAccumulator.judgeRecommendsDeprecatedCount += 1;
       }

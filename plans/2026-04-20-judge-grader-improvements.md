@@ -86,12 +86,19 @@ Landed in the first slice:
 - closed-book handling is now explicit in the judge prompt
 - old retrieval-scored judge axes were removed from the response schema
 
+Landed in the second slice:
+- separate `judge.v2.json` now writes alongside legacy `judge.json`
+- aggregate prefers v2 and reports mean/distribution metrics for correctness and completeness
+- `referenceVerified` is carried into run and summary outputs
+
+Landed in the third cleanup slice:
+- `judge.v2.json` is now slimmer and no longer mirrors the legacy compatibility fields
+- smoke-run reporting in `scripts/test-run.ts` now foregrounds the authoritative judge metrics
+
 Not landed yet:
-- separate `judge.v2.json` artifact alongside legacy `judge.json`
-- aggregate preference for v2 plus mean correctness/completeness reporting
 - question-shape-aware tool budgets
 - calibration/tests around the new scoring surface
-- cleaner downstream migration away from legacy compatibility fields
+- cleaner downstream migration away from legacy compatibility fields in `judge.json`
 
 ## Proposed judge v2 surface
 
@@ -297,8 +304,9 @@ The deterministic grader should remain visible, but not as the benchmark authori
 
 ## Progress Notes
 - 2026-04-21: Implemented the initial judge-v2 slice in the core judge path: new authoritative fields, explicit closed-book guidance, and schema/prompt updates. Retrieval-scored judge axes remain a downstream migration item.
-- 2026-04-21: This is not fully migrated yet. The working tree still uses compatibility fields, and broader cleanup away from legacy/mirrored judge fields is still pending.
+- 2026-04-21: This is not fully migrated yet. The working tree still uses compatibility fields in `judge.json`, and broader cleanup away from legacy judge fields is still pending.
 - 2026-04-21: Landed the migration slice: judge now writes `judge.v2.json` alongside compatible `judge.json`, and aggregate prefers v2 while surfacing mean/distribution reporting for correctness/completeness plus `referenceVerified` and deterministic-agreement fields.
+- 2026-04-21: Landed the cleanup slice: `judge.v2.json` is slimmer than `judge.json`, `scripts/test-run.ts` now reports the authoritative numeric surface, and a small smoke run validated the new end-to-end outputs.
 
 ## Non-goals
 

@@ -284,6 +284,7 @@ async function writeExecutionArtifacts(params: {
       summaryCsv: join(params.executionDirectory, "aggregate-summary.csv"),
       evidenceBasisCsv: join(params.executionDirectory, "aggregate-evidence-basis.csv"),
       runsCsv: join(params.executionDirectory, "aggregate-runs.csv"),
+      disagreementCsv: join(params.executionDirectory, "aggregate-disagreement.csv"),
       runsJsonl: join(params.executionDirectory, "aggregate-runs.jsonl"),
     },
   });
@@ -497,12 +498,11 @@ async function main() {
       ? ` | Cost: $${summary.cost.totalCostUsd.toFixed(4)} total ($${summary.cost.meanTotalCostUsdPerRun.toFixed(4)}/run; collect $${summary.cost.totalCollectCostUsd.toFixed(4)}, judge $${summary.cost.totalJudgeCostUsd.toFixed(4)})`
       : " | Cost: unavailable";
     const judgeLine = summary.judge
-      ? ` | Judge: ${summary.judge.judgeCorrectCount}/${summary.judge.judgeRuns} correct, ${summary.judge.judgePartiallyCorrectCount} partial, ${summary.judge.judgeIncorrectCount} incorrect`
-        + ` | Completeness: ${summary.judge.meanCompleteness.toFixed(1)}`
-        + ` | Code: ${summary.judge.meanCodeExample.toFixed(1)}`
-        + ` | Explanation: ${summary.judge.meanExplanation.toFixed(1)}`
-        + (summary.judge.meanRetrievalQuality !== undefined ? ` | RetrievalQuality: ${summary.judge.meanRetrievalQuality.toFixed(1)}` : "")
+      ? ` | Judge correctness: ${summary.judge.meanCorrectness.toFixed(2)} (-1:${summary.judge.correctnessNegativeCount} 0:${summary.judge.correctnessZeroCount} 1:${summary.judge.correctnessPositiveCount})`
+        + ` | Completeness: ${summary.judge.meanCompleteness.toFixed(2)} (-1:${summary.judge.completenessNegativeCount} 0:${summary.judge.completenessZeroCount} 1:${summary.judge.completenessPositiveCount})`
+        + (summary.judge.referenceVerifiedRate !== undefined ? ` | ReferenceVerified: ${(summary.judge.referenceVerifiedRate * 100).toFixed(0)}%` : "")
         + ` | DeprecatedRate: ${(summary.judge.recommendsDeprecatedPatternRate * 100).toFixed(0)}%`
+        + ` | Legacy verdicts c/p/i: ${summary.judge.judgeCorrectCount}/${summary.judge.judgePartiallyCorrectCount}/${summary.judge.judgeIncorrectCount}`
       : " | Judge: (no scored runs)";
     const errorLine = summary.errors
       ? ` | Errors: any=${summary.errors.runsWithAnyError}/${summary.runs}, collect=${summary.errors.collectErrorRuns}, judge=${summary.errors.judgeErrorRuns}`
@@ -517,6 +517,7 @@ async function main() {
   console.log(`- ${join(executionDirectory, "aggregate-summary.csv")}`);
   console.log(`- ${join(executionDirectory, "aggregate-evidence-basis.csv")}`);
   console.log(`- ${join(executionDirectory, "aggregate-runs.csv")}`);
+  console.log(`- ${join(executionDirectory, "aggregate-disagreement.csv")}`);
   console.log(`- ${join(executionDirectory, "aggregate-runs.jsonl")}`);
 
   if (observedErrors) {
