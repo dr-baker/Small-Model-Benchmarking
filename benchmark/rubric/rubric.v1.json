@@ -110,7 +110,8 @@
         "@Observable",
         "@MainActor"
       ],
-      "mustNotMention": []
+      "mustNotMention": [],
+      "expectedStance": "affirmative"
     },
     {
       "questionId": "q12-persisting-userdefaults-in-an-observable-class",
@@ -179,6 +180,22 @@
       "questionId": "q20-reacting-to-state-changes",
       "mustMention": [
         "onChange"
+      ],
+      "mustMentionAnyOf": [
+        [
+          "/\\.onChange\\(of:\\s*[^)]*\\)\\s*\\{(?:(?!\\bin\\b)[^{}])*\\}/",
+          "/\\.onChange\\(of:\\s*[^)]*\\)\\s*\\{\\s*[^{}]*,\\s*[^{}]*\\s+in\\b/",
+          "zero-parameter",
+          "zero parameter",
+          "0-parameter",
+          "0 parameter",
+          "two-parameter",
+          "two parameter",
+          "2-parameter",
+          "2 parameter",
+          "old and new values",
+          "old value and new value"
+        ]
       ],
       "mustNotMention": []
     },
@@ -299,7 +316,10 @@
       "mustMention": [
         "scrollContentBackground"
       ],
-      "mustNotMention": []
+      "mustNotMention": [
+        "/scrollContentBackground\\(\\s*\\.hidden\\s*\\)/"
+      ],
+      "expectedStance": "affirmative"
     },
     {
       "questionId": "q36-loading-data-when-a-view-appears",
@@ -482,7 +502,8 @@
       "mustMention": [
         "optional"
       ],
-      "mustNotMention": []
+      "mustNotMention": [],
+      "expectedStance": "affirmative"
     },
     {
       "questionId": "q59-displaying-a-person-s-full-name",
@@ -589,7 +610,8 @@
       "mustMention": [],
       "mustNotMention": [
         "accessibilityHidden(true)"
-      ]
+      ],
+      "expectedStance": "negative"
     },
     {
       "questionId": "q73-mixing-old-and-new-navigation-apis",

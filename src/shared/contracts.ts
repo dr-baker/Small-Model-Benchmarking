@@ -10,7 +10,21 @@ export type PromptTemplateId = "benchmark-answer-v1";
 export type JudgePromptTemplateId = "judge-answer-v1";
 export type JudgeVerdictLabel = "correct" | "partially_correct" | "incorrect";
 export type JudgeQualitativeScore = 0 | 1 | 2;
+export type JudgeAxisScore = -1 | 0 | 1;
+export type JudgeDeprecatedPatternUse = "primary" | "fallback" | "warning_only" | "not_mentioned";
+export interface JudgeObservations {
+  hasCode: boolean;
+  hasExplanation: boolean;
+  mode: BenchmarkMode;
+}
 export type GradingMethod = "deterministic";
+export type RubricStrength = "low" | "medium" | "high";
+export type DeterministicAgreement =
+  | "agree_correct"
+  | "agree_incorrect"
+  | "det_only_positive"
+  | "judge_only_positive"
+  | "det_advisory";
 export type JudgeArtifactStatus = "scored" | "skipped" | "error";
 export type BenchmarkEvidenceBasis = "corpus" | "curated";
 export type PlatformScope = "ios" | "macos" | "all";
@@ -251,6 +265,7 @@ export interface QuestionRubric {
   mustMention: string[];
   mustMentionAnyOf?: string[][];
   mustNotMention: string[];
+  expectedStance?: "affirmative" | "negative" | "neutral";
   passThreshold?: number;
 }
 
@@ -277,9 +292,13 @@ export interface JudgeArtifact {
   schemaVersion: typeof JUDGE_VERDICT_SCHEMA_VERSION;
   runId: string;
   questionId: string;
+  correctness?: JudgeAxisScore;
+  completeness?: JudgeAxisScore;
+  deprecatedPatternUse?: JudgeDeprecatedPatternUse;
+  referenceVerified?: boolean;
+  observations?: JudgeObservations;
   recommendsCorrectPattern?: boolean;
   recommendsDeprecatedPattern?: boolean;
-  completeness?: JudgeQualitativeScore;
   codeExample?: JudgeQualitativeScore;
   explanation?: JudgeQualitativeScore;
   retrievalSupportsReferenceAnswer?: boolean;
@@ -327,6 +346,7 @@ export interface GradeArtifact {
   evidenceBasis: BenchmarkEvidenceBasis;
   platformScope: PlatformScope;
   questionShape: QuestionShape;
+  rubricStrength?: RubricStrength;
   answer: AnswerGrade;
   retrieval?: RetrievalMetrics;
   failures: FailureTaxonomyId[];
@@ -337,10 +357,18 @@ export interface AggregateJudgeMetrics {
   judgeCorrectCount: number;
   judgePartiallyCorrectCount: number;
   judgeIncorrectCount: number;
+  meanCorrectness: number;
+  correctnessNegativeCount: number;
+  correctnessZeroCount: number;
+  correctnessPositiveCount: number;
   meanCompleteness: number;
+  completenessNegativeCount: number;
+  completenessZeroCount: number;
+  completenessPositiveCount: number;
   meanCodeExample: number;
   meanExplanation: number;
   meanRetrievalQuality?: number;
+  referenceVerifiedRate?: number;
   recommendsCorrectPatternRate: number;
   recommendsDeprecatedPatternRate: number;
   retrievalSupportsReferenceAnswerRate?: number;
@@ -409,7 +437,11 @@ export interface AggregateRunAnswerDetail {
 export interface AggregateRunJudgeDetail {
   status: JudgeArtifact["status"];
   verdict?: JudgeArtifact["verdict"];
-  completeness?: number;
+  correctness?: JudgeAxisScore;
+  completeness?: JudgeAxisScore;
+  deprecatedPatternUse?: JudgeDeprecatedPatternUse;
+  referenceVerified?: boolean;
+  observations?: JudgeObservations;
   codeExample?: number;
   explanation?: number;
   retrievalQuality?: number;
@@ -433,6 +465,8 @@ export interface AggregateRunDetail {
     score: number;
     correct: boolean;
     grounded?: boolean;
+    rubricStrength?: RubricStrength;
+    agreement?: DeterministicAgreement;
     mustMentionPassed: string[];
     mustMentionFailed: string[];
     mustNotMentionViolated: string[];

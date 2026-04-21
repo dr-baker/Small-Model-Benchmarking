@@ -7,6 +7,7 @@ import type {
   GradeArtifact,
   RetrievalMetrics,
   RubricDefinition,
+  RubricStrength,
   RunManifest,
   ToolInvocationTrace,
 } from "../shared/contracts.js";
@@ -151,41 +152,93 @@ function collectRetrievedPaths(trace: CollectTrace, corpusRoot: string): Set<str
   return paths;
 }
 
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+type SentenceClassification = "warning_only" | "fallback" | "recommended" | "unclear";
+
+function splitSentences(text: string): string[] {
+  return text
+    .split(/(?<=[.!?])\s+|[\r\n]+/g)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
 }
 
-function isDeprecatedMentionContext(finalAnswer: string, phrase: string): boolean {
-  const escapedPhrase = escapeRegex(phrase);
-  const pattern = new RegExp(`.{0,80}${escapedPhrase}.{0,80}`, "gi");
-  const contexts = finalAnswer.match(pattern) ?? [];
-  if (contexts.length === 0) return false;
+function isDelimitedRegexMatcher(matcher: string): boolean {
+  return matcher.length >= 2 && matcher.startsWith("/") && matcher.endsWith("/");
+}
 
-  const warningMarkers = [
-    "deprecated",
-    "legacy",
-    "avoid",
-    "do not use",
-    "don't use",
-    "should not use",
-    "shouldn't use",
-    "never use",
-    "instead of",
-    "rather than",
-    "replace",
-    "replaces",
-    "replaced by",
-    "warning",
-    "wrong pattern",
-    "old way",
-    "older pattern",
-    "not ",
+function buildRubricMatcherRegex(matcher: string): RegExp | undefined {
+  if (!isDelimitedRegexMatcher(matcher)) return undefined;
+
+  try {
+    return new RegExp(matcher.slice(1, -1), "i");
+  } catch {
+    return undefined;
+  }
+}
+
+export function matchesRubricMatcher(text: string, matcher: string): boolean {
+  const regex = buildRubricMatcherRegex(matcher);
+  if (regex) return regex.test(text);
+  return text.toLowerCase().includes(matcher.toLowerCase());
+}
+
+function classifySentenceContainingPhrase(sentence: string): SentenceClassification {
+  const normalizedSentence = sentence.toLowerCase().replace(/\s+/g, " ").trim();
+  const warningOnlyMarkers = [
+    /^(?:no[,.]?|don'?t\b|do not\b|avoid\b|never\b|prefer\b|deprecated\b)/,
+    /\b(?:don't use|do not use|should not use|shouldn't use|never use|avoid using)\b/,
+    /\b(?:will not|won't|does not|doesn't|is not|isn't|are not|aren't|cannot|can't|shouldn't|wouldn't|mustn't)\b/,
+    /\b(?:deprecated|legacy|warning|wrong pattern|old way|older pattern)\b/,
+  ];
+  if (warningOnlyMarkers.some((marker) => marker.test(normalizedSentence))) return "warning_only";
+
+  const fallbackMarkers = [
+    /\b(?:instead of|rather than|replace(?:s|d by)?|replaced by|alternative|fallback)\b/,
+  ];
+  if (fallbackMarkers.some((marker) => marker.test(normalizedSentence))) return "fallback";
+
+  const recommendedMarkers = [
+    /\b(?:use|should|recommend(?:ed)?|choose|prefer)\b/,
+  ];
+  if (recommendedMarkers.some((marker) => marker.test(normalizedSentence))) return "recommended";
+
+  return "unclear";
+}
+
+function collectSentenceClassificationsForMatcher(finalAnswer: string, matcher: string): SentenceClassification[] {
+  return splitSentences(finalAnswer)
+    .filter((sentence) => matchesRubricMatcher(sentence, matcher))
+    .map((sentence) => classifySentenceContainingPhrase(sentence));
+}
+
+export function isWarningOnlyMention(finalAnswer: string, matcher: string): boolean {
+  const classifications = collectSentenceClassificationsForMatcher(finalAnswer, matcher);
+  return classifications.length > 0 && classifications.every((classification) => classification === "warning_only");
+}
+
+function isNonNegatedMention(finalAnswer: string, matcher: string): boolean {
+  const negativeMarkers = [
+    /^(?:no[,.]?|don'?t\b|do not\b|avoid\b|never\b|deprecated\b)/,
+    /\b(?:don't use|do not use|should not use|shouldn't use|never use|avoid using|will not|won't|does not|doesn't|is not|isn't|are not|aren't|cannot|can't|wouldn't|mustn't|instead of|rather than|replace(?:s|d by)?|replaced by|legacy|warning|wrong pattern|old way|older pattern)\b/,
   ];
 
-  return contexts.every((context) => {
-    const normalizedContext = context.toLowerCase();
-    return warningMarkers.some((marker) => normalizedContext.includes(marker));
+  return splitSentences(finalAnswer).some((sentence) => {
+    const normalizedSentence = sentence.toLowerCase().replace(/\s+/g, " ").trim();
+    return matchesRubricMatcher(normalizedSentence, matcher) && !negativeMarkers.some((marker) => marker.test(normalizedSentence));
   });
+}
+
+function inferRubricStrength(questionRubric: RubricDefinition["questions"][number] | undefined): RubricStrength | undefined {
+  if (!questionRubric) return undefined;
+
+  const mustMentionCount = questionRubric.mustMention.length;
+  const mustNotMentionCount = questionRubric.mustNotMention.length;
+  const mustMentionAnyOfCount = questionRubric.mustMentionAnyOf?.length ?? 0;
+  const totalRules = mustMentionCount + mustNotMentionCount + mustMentionAnyOfCount;
+
+  if (totalRules === 0) return "low";
+  if (questionRubric.expectedStance !== undefined || mustMentionAnyOfCount > 0) return "high";
+  if (totalRules <= 2) return "medium";
+  return "high";
 }
 
 export async function gradeRun(options: GradeRunOptions): Promise<GradeArtifact> {
@@ -210,30 +263,32 @@ export async function gradeRun(options: GradeRunOptions): Promise<GradeArtifact>
   let correct = false;
   let score = 0;
   let grounded: boolean | undefined;
+  const rubricStrength = inferRubricStrength(questionRubric);
 
   if (!("parseError" in answer) && questionRubric) {
-    const finalAnswer = answer.finalAnswer.toLowerCase();
+    const finalAnswer = answer.finalAnswer;
+    const expectedStance = questionRubric.expectedStance ?? "neutral";
 
-    for (const phrase of questionRubric.mustMention) {
-      if (finalAnswer.includes(phrase.toLowerCase())) {
-        mustMentionPassed.push(phrase);
+    for (const matcher of questionRubric.mustMention) {
+      if (matchesRubricMatcher(finalAnswer, matcher)) {
+        mustMentionPassed.push(matcher);
       } else {
-        mustMentionFailed.push(phrase);
+        mustMentionFailed.push(matcher);
       }
     }
 
     for (const group of questionRubric.mustMentionAnyOf ?? []) {
-      const matchedPhrase = group.find((phrase) => finalAnswer.includes(phrase.toLowerCase()));
-      if (matchedPhrase) {
+      const matchedMatcher = group.find((matcher) => matchesRubricMatcher(finalAnswer, matcher));
+      if (matchedMatcher) {
         mustMentionAnyOfPassed.push(group);
       } else {
         mustMentionAnyOfFailed.push(group);
       }
     }
 
-    for (const phrase of questionRubric.mustNotMention) {
-      if (finalAnswer.includes(phrase.toLowerCase()) && !isDeprecatedMentionContext(finalAnswer, phrase.toLowerCase())) {
-        mustNotMentionViolated.push(phrase);
+    for (const matcher of questionRubric.mustNotMention) {
+      if (matchesRubricMatcher(finalAnswer, matcher) && !isWarningOnlyMention(finalAnswer, matcher)) {
+        mustNotMentionViolated.push(matcher);
       }
     }
 
@@ -246,14 +301,21 @@ export async function gradeRun(options: GradeRunOptions): Promise<GradeArtifact>
       coverageScores.push(mustMentionAnyOfPassed.length / anyOfGroups.length);
     }
 
-    score = mustNotMentionViolated.length > 0
+    const stanceSatisfied = expectedStance === "affirmative"
+      ? (questionRubric.mustMention.some((phrase) => isNonNegatedMention(finalAnswer, phrase))
+        || anyOfGroups.some((group) => group.some((phrase) => isNonNegatedMention(finalAnswer, phrase))))
+      : expectedStance === "negative"
+        ? questionRubric.mustNotMention.some((phrase) => isWarningOnlyMention(finalAnswer, phrase))
+        : true;
+
+    score = mustNotMentionViolated.length > 0 || !stanceSatisfied
       ? 0
       : coverageScores.length === 0
         ? 1.0
         : coverageScores.reduce((sum, value) => sum + value, 0) / coverageScores.length;
 
     const passThreshold = questionRubric.passThreshold ?? 1.0;
-    correct = score >= passThreshold && mustNotMentionViolated.length === 0;
+    correct = score >= passThreshold && mustNotMentionViolated.length === 0 && stanceSatisfied;
 
     if (answer.mode === "open_book") {
       const retrievedPaths = collectRetrievedPaths(trace, corpusRoot);
@@ -276,6 +338,7 @@ export async function gradeRun(options: GradeRunOptions): Promise<GradeArtifact>
     evidenceBasis: question?.evidenceBasis ?? inferEvidenceBasis({ goldEvidence: question?.goldEvidence ?? [] }),
     platformScope: question?.platformScope ?? "all",
     questionShape: question?.questionShape ?? "targeted",
+    ...(rubricStrength !== undefined ? { rubricStrength } : {}),
     answer: {
       score,
       correct,
@@ -287,7 +350,9 @@ export async function gradeRun(options: GradeRunOptions): Promise<GradeArtifact>
       mustNotMentionViolated,
       notes: [
         "Answer graded via deterministic text matching over final text.",
-        "Deprecated APIs mentioned only as warnings are ignored by must-not-match checks.",
+        "Rubric matchers may be exact phrases or slash-delimited regexes for narrow call-shape checks.",
+        "mustNotMention only forgives sentence-level warning-only mentions that explicitly frame the forbidden phrase as the wrong pattern.",
+        "expectedStance is applied only when the rubric provides it for a yes/no question.",
         "When mustMentionAnyOf groups are present, score reflects concept-group coverage instead of binary exact-match only grading.",
         "This artifact intentionally does not consume judge.json; LLM judging is a separate stage for later comparison.",
       ],

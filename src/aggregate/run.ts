@@ -15,6 +15,7 @@ import type {
   BenchmarkEvidenceBasis,
   CollectTrace,
   DatasetQuestion,
+  DeterministicAgreement,
   GradeArtifact,
   JudgeArtifact,
   RunManifest,
@@ -47,13 +48,24 @@ interface SummaryAccumulator {
   judgeCorrectCount: number;
   judgePartiallyCorrectCount: number;
   judgeIncorrectCount: number;
+  judgeCorrectnessTotal: number;
+  judgeCorrectnessNegativeCount: number;
+  judgeCorrectnessZeroCount: number;
+  judgeCorrectnessPositiveCount: number;
   judgeCompletenessTotal: number;
+  judgeCompletenessNegativeCount: number;
+  judgeCompletenessZeroCount: number;
+  judgeCompletenessPositiveCount: number;
   judgeCodeExampleTotal: number;
   judgeExplanationTotal: number;
   judgeRetrievalQualityTotal: number;
+  judgeRetrievalQualityRuns: number;
+  judgeReferenceVerifiedCount: number;
+  judgeReferenceVerifiedRuns: number;
   judgeRecommendsCorrectCount: number;
   judgeRecommendsDeprecatedCount: number;
   judgeRetrievalSupportsCount: number;
+  judgeRetrievalSupportsRuns: number;
   runsWithAnyError: number;
   collectErrorRuns: number;
   judgeErrorRuns: number;
@@ -72,13 +84,24 @@ interface EvidenceBasisAccumulator {
   judgeCorrectCount: number;
   judgePartiallyCorrectCount: number;
   judgeIncorrectCount: number;
+  judgeCorrectnessTotal: number;
+  judgeCorrectnessNegativeCount: number;
+  judgeCorrectnessZeroCount: number;
+  judgeCorrectnessPositiveCount: number;
   judgeCompletenessTotal: number;
+  judgeCompletenessNegativeCount: number;
+  judgeCompletenessZeroCount: number;
+  judgeCompletenessPositiveCount: number;
   judgeCodeExampleTotal: number;
   judgeExplanationTotal: number;
   judgeRetrievalQualityTotal: number;
+  judgeRetrievalQualityRuns: number;
+  judgeReferenceVerifiedCount: number;
+  judgeReferenceVerifiedRuns: number;
   judgeRecommendsCorrectCount: number;
   judgeRecommendsDeprecatedCount: number;
   judgeRetrievalSupportsCount: number;
+  judgeRetrievalSupportsRuns: number;
 }
 
 type NormalizedAnswerArtifact = BenchmarkAnswerResponse | { parseError: string; rawText?: string };
@@ -121,6 +144,11 @@ async function readOptionalJsonFile<T>(path: string): Promise<T | undefined> {
     return undefined;
   }
   return readJsonFile<T>(path);
+}
+
+async function readPreferredJudgeArtifact(runDirectory: string): Promise<JudgeArtifact | undefined> {
+  return (await readOptionalJsonFile<JudgeArtifact>(join(runDirectory, "judge.v2.json")))
+    ?? (await readOptionalJsonFile<JudgeArtifact>(join(runDirectory, "judge.json")));
 }
 
 async function loadQuestionLookup(executionDirectory: string): Promise<Map<string, QuestionLookupEntry>> {
@@ -200,30 +228,82 @@ function createEvidenceBasisAccumulator(evidenceBasis: BenchmarkEvidenceBasis): 
     judgeCorrectCount: 0,
     judgePartiallyCorrectCount: 0,
     judgeIncorrectCount: 0,
+    judgeCorrectnessTotal: 0,
+    judgeCorrectnessNegativeCount: 0,
+    judgeCorrectnessZeroCount: 0,
+    judgeCorrectnessPositiveCount: 0,
     judgeCompletenessTotal: 0,
+    judgeCompletenessNegativeCount: 0,
+    judgeCompletenessZeroCount: 0,
+    judgeCompletenessPositiveCount: 0,
     judgeCodeExampleTotal: 0,
     judgeExplanationTotal: 0,
     judgeRetrievalQualityTotal: 0,
+    judgeRetrievalQualityRuns: 0,
+    judgeReferenceVerifiedCount: 0,
+    judgeReferenceVerifiedRuns: 0,
     judgeRecommendsCorrectCount: 0,
     judgeRecommendsDeprecatedCount: 0,
     judgeRetrievalSupportsCount: 0,
+    judgeRetrievalSupportsRuns: 0,
   };
 }
 
-function toJudgeMetrics(accumulator: Pick<EvidenceBasisAccumulator, "judgeRuns" | "judgeCorrectCount" | "judgePartiallyCorrectCount" | "judgeIncorrectCount" | "judgeCompletenessTotal" | "judgeCodeExampleTotal" | "judgeExplanationTotal" | "judgeRetrievalQualityTotal" | "judgeRecommendsCorrectCount" | "judgeRecommendsDeprecatedCount" | "judgeRetrievalSupportsCount">): AggregateJudgeMetrics | undefined {
+function isJudgeV2Artifact(judge: JudgeArtifact): boolean {
+  return judge.correctness !== undefined
+    || judge.deprecatedPatternUse !== undefined
+    || judge.referenceVerified !== undefined
+    || judge.observations !== undefined;
+}
+
+function judgeCorrectnessValue(judge: { correctness?: -1 | 0 | 1 | undefined; verdict?: "correct" | "partially_correct" | "incorrect" | undefined }): -1 | 0 | 1 | undefined {
+  if (judge.correctness !== undefined) return judge.correctness;
+  if (judge.verdict === "correct") return 1;
+  if (judge.verdict === "incorrect") return -1;
+  if (judge.verdict === "partially_correct") return 0;
+  return undefined;
+}
+
+function judgeCompletenessValue(judge: JudgeArtifact): -1 | 0 | 1 | undefined {
+  const rawCompleteness = judge.completeness as number | undefined;
+  if (rawCompleteness === undefined) return undefined;
+  if (isJudgeV2Artifact(judge) && (rawCompleteness === -1 || rawCompleteness === 0 || rawCompleteness === 1)) {
+    return rawCompleteness;
+  }
+  if (rawCompleteness === 0 || rawCompleteness === 1 || rawCompleteness === 2) {
+    return (rawCompleteness - 1) as -1 | 0 | 1;
+  }
+  return undefined;
+}
+
+function toJudgeMetrics(accumulator: Pick<EvidenceBasisAccumulator, "judgeRuns" | "judgeCorrectCount" | "judgePartiallyCorrectCount" | "judgeIncorrectCount" | "judgeCorrectnessTotal" | "judgeCorrectnessNegativeCount" | "judgeCorrectnessZeroCount" | "judgeCorrectnessPositiveCount" | "judgeCompletenessTotal" | "judgeCompletenessNegativeCount" | "judgeCompletenessZeroCount" | "judgeCompletenessPositiveCount" | "judgeCodeExampleTotal" | "judgeExplanationTotal" | "judgeRetrievalQualityTotal" | "judgeRetrievalQualityRuns" | "judgeReferenceVerifiedCount" | "judgeReferenceVerifiedRuns" | "judgeRecommendsCorrectCount" | "judgeRecommendsDeprecatedCount" | "judgeRetrievalSupportsCount" | "judgeRetrievalSupportsRuns">): AggregateJudgeMetrics | undefined {
   if (accumulator.judgeRuns === 0) return undefined;
   return {
     judgeRuns: accumulator.judgeRuns,
     judgeCorrectCount: accumulator.judgeCorrectCount,
     judgePartiallyCorrectCount: accumulator.judgePartiallyCorrectCount,
     judgeIncorrectCount: accumulator.judgeIncorrectCount,
+    meanCorrectness: accumulator.judgeCorrectnessTotal / accumulator.judgeRuns,
+    correctnessNegativeCount: accumulator.judgeCorrectnessNegativeCount,
+    correctnessZeroCount: accumulator.judgeCorrectnessZeroCount,
+    correctnessPositiveCount: accumulator.judgeCorrectnessPositiveCount,
     meanCompleteness: accumulator.judgeCompletenessTotal / accumulator.judgeRuns,
+    completenessNegativeCount: accumulator.judgeCompletenessNegativeCount,
+    completenessZeroCount: accumulator.judgeCompletenessZeroCount,
+    completenessPositiveCount: accumulator.judgeCompletenessPositiveCount,
     meanCodeExample: accumulator.judgeCodeExampleTotal / accumulator.judgeRuns,
     meanExplanation: accumulator.judgeExplanationTotal / accumulator.judgeRuns,
-    meanRetrievalQuality: accumulator.judgeRetrievalQualityTotal / accumulator.judgeRuns,
+    ...(accumulator.judgeRetrievalQualityRuns > 0
+      ? { meanRetrievalQuality: accumulator.judgeRetrievalQualityTotal / accumulator.judgeRetrievalQualityRuns }
+      : {}),
+    ...(accumulator.judgeReferenceVerifiedRuns > 0
+      ? { referenceVerifiedRate: accumulator.judgeReferenceVerifiedCount / accumulator.judgeReferenceVerifiedRuns }
+      : {}),
     recommendsCorrectPatternRate: accumulator.judgeRecommendsCorrectCount / accumulator.judgeRuns,
     recommendsDeprecatedPatternRate: accumulator.judgeRecommendsDeprecatedCount / accumulator.judgeRuns,
-    retrievalSupportsReferenceAnswerRate: accumulator.judgeRetrievalSupportsCount / accumulator.judgeRuns,
+    ...(accumulator.judgeRetrievalSupportsRuns > 0
+      ? { retrievalSupportsReferenceAnswerRate: accumulator.judgeRetrievalSupportsCount / accumulator.judgeRetrievalSupportsRuns }
+      : {}),
   };
 }
 
@@ -260,6 +340,19 @@ function sortSummaries(summaries: AggregateModelSummary[]): AggregateModelSummar
   });
 }
 
+function deriveAgreement(grade: GradeArtifact, judge?: JudgeArtifact): DeterministicAgreement {
+  const judgeCorrectness = judge ? judgeCorrectnessValue(judge) : undefined;
+  if ((grade.rubricStrength !== "medium" && grade.rubricStrength !== "high") || !judge || judge.status !== "scored" || judgeCorrectness === undefined || judgeCorrectness === 0) {
+    return "det_advisory";
+  }
+
+  const judgePositive = judgeCorrectness === 1;
+  if (grade.answer.correct && judgePositive) return "agree_correct";
+  if (!grade.answer.correct && !judgePositive) return "agree_incorrect";
+  if (grade.answer.correct && !judgePositive) return "det_only_positive";
+  return "judge_only_positive";
+}
+
 export async function listAggregateReadyRunDirectories(executionDirectory: string): Promise<string[]> {
   const { readdir } = await import("node:fs/promises");
   const entries = await readdir(executionDirectory, { withFileTypes: true });
@@ -288,6 +381,8 @@ function createAggregateRunDetails(records: RunRecord[]): AggregateRunDetail[] {
       const totalUsd = typeof collectUsd === "number" || typeof judgeUsd === "number"
         ? (collectUsd ?? 0) + (judgeUsd ?? 0)
         : undefined;
+      const judgeCorrectness = judge ? judgeCorrectnessValue(judge) : undefined;
+      const judgeCompleteness = judge ? judgeCompletenessValue(judge) : undefined;
 
       return {
         runDirectory,
@@ -315,6 +410,8 @@ function createAggregateRunDetails(records: RunRecord[]): AggregateRunDetail[] {
           score: grade.answer.score,
           correct: grade.answer.correct,
           ...(grade.answer.grounded !== undefined ? { grounded: grade.answer.grounded } : {}),
+          ...(grade.rubricStrength !== undefined ? { rubricStrength: grade.rubricStrength } : {}),
+          agreement: deriveAgreement(grade, judge),
           mustMentionPassed: grade.answer.mustMentionPassed,
           mustMentionFailed: grade.answer.mustMentionFailed,
           mustNotMentionViolated: grade.answer.mustNotMentionViolated,
@@ -326,7 +423,11 @@ function createAggregateRunDetails(records: RunRecord[]): AggregateRunDetail[] {
               judge: {
                 status: judge.status,
                 ...(judge.verdict ? { verdict: judge.verdict } : {}),
-                ...(judge.completeness !== undefined ? { completeness: judge.completeness } : {}),
+                ...(judgeCorrectness !== undefined ? { correctness: judgeCorrectness } : {}),
+                ...(judgeCompleteness !== undefined ? { completeness: judgeCompleteness } : {}),
+                ...(judge.deprecatedPatternUse !== undefined ? { deprecatedPatternUse: judge.deprecatedPatternUse } : {}),
+                ...(judge.referenceVerified !== undefined ? { referenceVerified: judge.referenceVerified } : {}),
+                ...(judge.observations !== undefined ? { observations: judge.observations } : {}),
                 ...(judge.codeExample !== undefined ? { codeExample: judge.codeExample } : {}),
                 ...(judge.explanation !== undefined ? { explanation: judge.explanation } : {}),
                 ...(judge.retrievalQuality !== undefined ? { retrievalQuality: judge.retrievalQuality } : {}),
@@ -379,6 +480,8 @@ function createRunCsvRows(runs: AggregateRunDetail[]): Array<Record<string, unkn
     answerScore: run.grade.score,
     answerCorrect: run.grade.correct,
     grounded: run.grade.grounded,
+    rubricStrength: run.grade.rubricStrength,
+    agreement: run.grade.agreement,
     mustMentionPassedCount: run.grade.mustMentionPassed.length,
     mustMentionFailedCount: run.grade.mustMentionFailed.length,
     mustNotMentionViolatedCount: run.grade.mustNotMentionViolated.length,
@@ -400,7 +503,10 @@ function createRunCsvRows(runs: AggregateRunDetail[]): Array<Record<string, unkn
     bytesRead: run.grade.retrieval?.bytesRead,
     judgeStatus: run.judge?.status,
     judgeVerdict: run.judge?.verdict,
+    judgeCorrectness: run.judge ? judgeCorrectnessValue(run.judge) : undefined,
     judgeCompleteness: run.judge?.completeness,
+    judgeReferenceVerified: run.judge?.referenceVerified,
+    judgeDeprecatedPatternUse: run.judge?.deprecatedPatternUse,
     judgeCodeExample: run.judge?.codeExample,
     judgeExplanation: run.judge?.explanation,
     judgeRetrievalQuality: run.judge?.retrievalQuality,
@@ -445,7 +551,15 @@ function createSummaryCsvRows(summaries: AggregateModelSummary[]): Array<Record<
     judgePartiallyCorrectCount: summary.judge?.judgePartiallyCorrectCount,
     judgeIncorrectCount: summary.judge?.judgeIncorrectCount,
     judgeCorrectRate: summary.judge ? summary.judge.judgeCorrectCount / summary.judge.judgeRuns : undefined,
+    meanCorrectness: summary.judge?.meanCorrectness,
+    correctnessNegativeCount: summary.judge?.correctnessNegativeCount,
+    correctnessZeroCount: summary.judge?.correctnessZeroCount,
+    correctnessPositiveCount: summary.judge?.correctnessPositiveCount,
     meanCompleteness: summary.judge?.meanCompleteness,
+    completenessNegativeCount: summary.judge?.completenessNegativeCount,
+    completenessZeroCount: summary.judge?.completenessZeroCount,
+    completenessPositiveCount: summary.judge?.completenessPositiveCount,
+    referenceVerifiedRate: summary.judge?.referenceVerifiedRate,
     meanCodeExample: summary.judge?.meanCodeExample,
     meanExplanation: summary.judge?.meanExplanation,
     meanRetrievalQuality: summary.judge?.meanRetrievalQuality,
@@ -475,7 +589,15 @@ function createEvidenceBasisCsvRows(summaries: AggregateModelSummary[]): Array<R
       judgeCorrectCount: evidenceBasisSummary.judge?.judgeCorrectCount,
       judgePartiallyCorrectCount: evidenceBasisSummary.judge?.judgePartiallyCorrectCount,
       judgeIncorrectCount: evidenceBasisSummary.judge?.judgeIncorrectCount,
+      meanCorrectness: evidenceBasisSummary.judge?.meanCorrectness,
+      correctnessNegativeCount: evidenceBasisSummary.judge?.correctnessNegativeCount,
+      correctnessZeroCount: evidenceBasisSummary.judge?.correctnessZeroCount,
+      correctnessPositiveCount: evidenceBasisSummary.judge?.correctnessPositiveCount,
       meanCompleteness: evidenceBasisSummary.judge?.meanCompleteness,
+      completenessNegativeCount: evidenceBasisSummary.judge?.completenessNegativeCount,
+      completenessZeroCount: evidenceBasisSummary.judge?.completenessZeroCount,
+      completenessPositiveCount: evidenceBasisSummary.judge?.completenessPositiveCount,
+      referenceVerifiedRate: evidenceBasisSummary.judge?.referenceVerifiedRate,
       meanCodeExample: evidenceBasisSummary.judge?.meanCodeExample,
       meanExplanation: evidenceBasisSummary.judge?.meanExplanation,
       meanRetrievalQuality: evidenceBasisSummary.judge?.meanRetrievalQuality,
@@ -496,7 +618,7 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
     const trace = await readJsonFile<CollectTrace>(join(runDirectory, "trace.json"));
     const answer = await readJsonFile<NormalizedAnswerArtifact>(join(runDirectory, "normalized-answer.json"));
     const grade = await readJsonFile<GradeArtifact>(join(runDirectory, "grade.json"));
-    const judge = await readOptionalJsonFile<JudgeArtifact>(join(runDirectory, "judge.json"));
+    const judge = await readPreferredJudgeArtifact(runDirectory);
     records.push({
       runDirectory,
       manifest,
@@ -527,13 +649,24 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
       judgeCorrectCount: 0,
       judgePartiallyCorrectCount: 0,
       judgeIncorrectCount: 0,
+      judgeCorrectnessTotal: 0,
+      judgeCorrectnessNegativeCount: 0,
+      judgeCorrectnessZeroCount: 0,
+      judgeCorrectnessPositiveCount: 0,
       judgeCompletenessTotal: 0,
+      judgeCompletenessNegativeCount: 0,
+      judgeCompletenessZeroCount: 0,
+      judgeCompletenessPositiveCount: 0,
       judgeCodeExampleTotal: 0,
       judgeExplanationTotal: 0,
       judgeRetrievalQualityTotal: 0,
+      judgeRetrievalQualityRuns: 0,
+      judgeReferenceVerifiedCount: 0,
+      judgeReferenceVerifiedRuns: 0,
       judgeRecommendsCorrectCount: 0,
       judgeRecommendsDeprecatedCount: 0,
       judgeRetrievalSupportsCount: 0,
+      judgeRetrievalSupportsRuns: 0,
       runsWithAnyError: 0,
       collectErrorRuns: 0,
       judgeErrorRuns: 0,
@@ -583,6 +716,23 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
     if (judge?.status === "scored") {
       existing.judgeRuns += 1;
       evidenceBasisAccumulator.judgeRuns += 1;
+
+      const correctness = judgeCorrectnessValue(judge);
+      if (correctness !== undefined) {
+        existing.judgeCorrectnessTotal += correctness;
+        evidenceBasisAccumulator.judgeCorrectnessTotal += correctness;
+        if (correctness === -1) {
+          existing.judgeCorrectnessNegativeCount += 1;
+          evidenceBasisAccumulator.judgeCorrectnessNegativeCount += 1;
+        } else if (correctness === 0) {
+          existing.judgeCorrectnessZeroCount += 1;
+          evidenceBasisAccumulator.judgeCorrectnessZeroCount += 1;
+        } else {
+          existing.judgeCorrectnessPositiveCount += 1;
+          evidenceBasisAccumulator.judgeCorrectnessPositiveCount += 1;
+        }
+      }
+
       if (judge.verdict === "correct") {
         existing.judgeCorrectCount += 1;
         evidenceBasisAccumulator.judgeCorrectCount += 1;
@@ -593,10 +743,32 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
         existing.judgeIncorrectCount += 1;
         evidenceBasisAccumulator.judgeIncorrectCount += 1;
       }
-      if (judge.completeness !== undefined) {
-        existing.judgeCompletenessTotal += judge.completeness;
-        evidenceBasisAccumulator.judgeCompletenessTotal += judge.completeness;
+
+      const completeness = judgeCompletenessValue(judge);
+      if (completeness !== undefined) {
+        existing.judgeCompletenessTotal += completeness;
+        evidenceBasisAccumulator.judgeCompletenessTotal += completeness;
+        if (completeness === -1) {
+          existing.judgeCompletenessNegativeCount += 1;
+          evidenceBasisAccumulator.judgeCompletenessNegativeCount += 1;
+        } else if (completeness === 0) {
+          existing.judgeCompletenessZeroCount += 1;
+          evidenceBasisAccumulator.judgeCompletenessZeroCount += 1;
+        } else {
+          existing.judgeCompletenessPositiveCount += 1;
+          evidenceBasisAccumulator.judgeCompletenessPositiveCount += 1;
+        }
       }
+
+      if (judge.referenceVerified !== undefined) {
+        existing.judgeReferenceVerifiedRuns += 1;
+        evidenceBasisAccumulator.judgeReferenceVerifiedRuns += 1;
+        if (judge.referenceVerified) {
+          existing.judgeReferenceVerifiedCount += 1;
+          evidenceBasisAccumulator.judgeReferenceVerifiedCount += 1;
+        }
+      }
+
       if (judge.codeExample !== undefined) {
         existing.judgeCodeExampleTotal += judge.codeExample;
         evidenceBasisAccumulator.judgeCodeExampleTotal += judge.codeExample;
@@ -607,7 +779,9 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
       }
       if (judge.retrievalQuality !== undefined) {
         existing.judgeRetrievalQualityTotal += judge.retrievalQuality;
+        existing.judgeRetrievalQualityRuns += 1;
         evidenceBasisAccumulator.judgeRetrievalQualityTotal += judge.retrievalQuality;
+        evidenceBasisAccumulator.judgeRetrievalQualityRuns += 1;
       }
       if (judge.recommendsCorrectPattern) {
         existing.judgeRecommendsCorrectCount += 1;
@@ -617,9 +791,13 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
         existing.judgeRecommendsDeprecatedCount += 1;
         evidenceBasisAccumulator.judgeRecommendsDeprecatedCount += 1;
       }
-      if (judge.retrievalSupportsReferenceAnswer) {
-        existing.judgeRetrievalSupportsCount += 1;
-        evidenceBasisAccumulator.judgeRetrievalSupportsCount += 1;
+      if (judge.retrievalSupportsReferenceAnswer !== undefined) {
+        existing.judgeRetrievalSupportsRuns += 1;
+        evidenceBasisAccumulator.judgeRetrievalSupportsRuns += 1;
+        if (judge.retrievalSupportsReferenceAnswer) {
+          existing.judgeRetrievalSupportsCount += 1;
+          evidenceBasisAccumulator.judgeRetrievalSupportsCount += 1;
+        }
       }
     }
 
@@ -722,6 +900,8 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
     "answerScore",
     "answerCorrect",
     "grounded",
+    "rubricStrength",
+    "agreement",
     "mustMentionPassedCount",
     "mustMentionFailedCount",
     "mustNotMentionViolatedCount",
@@ -743,7 +923,10 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
     "bytesRead",
     "judgeStatus",
     "judgeVerdict",
+    "judgeCorrectness",
     "judgeCompleteness",
+    "judgeReferenceVerified",
+    "judgeDeprecatedPatternUse",
     "judgeCodeExample",
     "judgeExplanation",
     "judgeRetrievalQuality",
@@ -786,7 +969,15 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
     "judgePartiallyCorrectCount",
     "judgeIncorrectCount",
     "judgeCorrectRate",
+    "meanCorrectness",
+    "correctnessNegativeCount",
+    "correctnessZeroCount",
+    "correctnessPositiveCount",
     "meanCompleteness",
+    "completenessNegativeCount",
+    "completenessZeroCount",
+    "completenessPositiveCount",
+    "referenceVerifiedRate",
     "meanCodeExample",
     "meanExplanation",
     "meanRetrievalQuality",
@@ -813,7 +1004,15 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
     "judgeCorrectCount",
     "judgePartiallyCorrectCount",
     "judgeIncorrectCount",
+    "meanCorrectness",
+    "correctnessNegativeCount",
+    "correctnessZeroCount",
+    "correctnessPositiveCount",
     "meanCompleteness",
+    "completenessNegativeCount",
+    "completenessZeroCount",
+    "completenessPositiveCount",
+    "referenceVerifiedRate",
     "meanCodeExample",
     "meanExplanation",
     "meanRetrievalQuality",
@@ -822,7 +1021,10 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
     "retrievalSupportsReferenceAnswerRate",
   ];
 
-  await writeTextFile(join(executionDirectory, "aggregate-runs.csv"), toCsv(runCsvHeaders, createRunCsvRows(runDetails)));
+  const runCsvRows = createRunCsvRows(runDetails);
+  const disagreementRows = runCsvRows.filter((row) => row.agreement !== "agree_correct" && row.agreement !== "agree_incorrect");
+  await writeTextFile(join(executionDirectory, "aggregate-runs.csv"), toCsv(runCsvHeaders, runCsvRows));
+  await writeTextFile(join(executionDirectory, "aggregate-disagreement.csv"), toCsv(runCsvHeaders, disagreementRows));
   await writeTextFile(join(executionDirectory, "aggregate-runs.jsonl"), toJsonLines(runDetails));
   await writeTextFile(join(executionDirectory, "aggregate-summary.csv"), toCsv(summaryCsvHeaders, createSummaryCsvRows(artifact.summaries)));
   await writeTextFile(join(executionDirectory, "aggregate-evidence-basis.csv"), toCsv(evidenceBasisCsvHeaders, createEvidenceBasisCsvRows(artifact.summaries)));

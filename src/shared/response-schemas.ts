@@ -46,16 +46,23 @@ const ANSWER_SCHEMA = {
 const JUDGE_SCHEMA = {
   type: "object",
   properties: {
-    recommendsCorrectPattern: { type: "boolean" },
-    recommendsDeprecatedPattern: { type: "boolean" },
-    completeness: { type: "integer", enum: [0, 1, 2] },
-    codeExample: { type: "integer", enum: [0, 1, 2] },
-    explanation: { type: "integer", enum: [0, 1, 2] },
-    retrievalSupportsReferenceAnswer: { type: "boolean" },
-    retrievalQuality: { type: "integer", enum: [0, 1, 2] },
+    correctness: { type: "integer", enum: [-1, 0, 1] },
+    completeness: { type: "integer", enum: [-1, 0, 1] },
+    deprecatedPatternUse: { type: "string", enum: ["primary", "fallback", "warning_only", "not_mentioned"] },
+    referenceVerified: { type: "boolean" },
     reasoning: { type: "string", description: "One-sentence judgment summary" },
+    observations: {
+      type: "object",
+      properties: {
+        hasCode: { type: "boolean" },
+        hasExplanation: { type: "boolean" },
+        mode: { type: "string", enum: ["closed_book", "open_book"] },
+      },
+      required: ["hasCode", "hasExplanation", "mode"],
+      additionalProperties: false,
+    },
   },
-  required: ["recommendsCorrectPattern", "recommendsDeprecatedPattern", "completeness", "codeExample", "explanation", "retrievalSupportsReferenceAnswer", "retrievalQuality", "reasoning"],
+  required: ["correctness", "completeness", "deprecatedPatternUse", "referenceVerified", "reasoning", "observations"],
   additionalProperties: false,
 };
 

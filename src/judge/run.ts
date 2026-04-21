@@ -7,8 +7,9 @@ import {
   type CollectTrace,
   type DatasetQuestion,
   type JudgeArtifact,
+  type JudgeAxisScore,
+  type JudgeDeprecatedPatternUse,
   type JudgeProfile,
-  type JudgeQualitativeScore,
   type JudgeVerdictLabel,
   type ModelRef,
   type ModelTransportConfig,
@@ -27,14 +28,16 @@ import { parseSwiftDocsHybridToolResult } from "../shared/swift-docs-search.js";
 const REPO_ROOT = resolve(import.meta.dirname ?? ".", "../..");
 
 interface ParsedJudgeResponse {
-  recommendsCorrectPattern: boolean;
-  recommendsDeprecatedPattern: boolean;
-  completeness: JudgeQualitativeScore;
-  codeExample: JudgeQualitativeScore;
-  explanation: JudgeQualitativeScore;
-  retrievalSupportsReferenceAnswer: boolean;
-  retrievalQuality: JudgeQualitativeScore;
+  correctness: JudgeAxisScore;
+  completeness: JudgeAxisScore;
+  deprecatedPatternUse: JudgeDeprecatedPatternUse;
+  referenceVerified: boolean;
   reasoning: string;
+  observations: {
+    hasCode: boolean;
+    hasExplanation: boolean;
+    mode: "closed_book" | "open_book";
+  };
 }
 
 export interface JudgeRunOptions {
@@ -55,34 +58,42 @@ export interface JudgeRunOutput {
 
 function sha256(value: string) { return createHash("sha256").update(value).digest("hex"); }
 
-function isQualitativeScore(v: unknown): v is JudgeQualitativeScore { return v === 0 || v === 1 || v === 2; }
+function isJudgeAxisScore(v: unknown): v is JudgeAxisScore { return v === -1 || v === 0 || v === 1; }
+function isDeprecatedPatternUse(v: unknown): v is JudgeDeprecatedPatternUse {
+  return v === "primary" || v === "fallback" || v === "warning_only" || v === "not_mentioned";
+}
+function isJudgeObservations(v: unknown): v is ParsedJudgeResponse["observations"] {
+  if (!v || typeof v !== "object") return false;
+  const o = v as Record<string, unknown>;
+  return typeof o.hasCode === "boolean"
+    && typeof o.hasExplanation === "boolean"
+    && (o.mode === "closed_book" || o.mode === "open_book");
+}
 
 function validateJudgeResponse(value: unknown): value is ParsedJudgeResponse {
   if (!value || typeof value !== "object") return false;
   const c = value as Record<string, unknown>;
-  return typeof c.recommendsCorrectPattern === "boolean"
-    && typeof c.recommendsDeprecatedPattern === "boolean"
-    && isQualitativeScore(c.completeness)
-    && isQualitativeScore(c.codeExample)
-    && isQualitativeScore(c.explanation)
-    && typeof c.retrievalSupportsReferenceAnswer === "boolean"
-    && isQualitativeScore(c.retrievalQuality)
-    && typeof c.reasoning === "string";
+  return isJudgeAxisScore(c.correctness)
+    && isJudgeAxisScore(c.completeness)
+    && isDeprecatedPatternUse(c.deprecatedPatternUse)
+    && typeof c.referenceVerified === "boolean"
+    && typeof c.reasoning === "string"
+    && isJudgeObservations(c.observations);
 }
 
 function parseJudgeResponse(rawText: string | undefined): ParsedJudgeResponse | { parseError: string; rawText?: string } {
   if (!rawText) return { parseError: "Judge produced no final text." };
   try {
     const parsed = extractJsonObject(rawText);
-    return validateJudgeResponse(parsed) ? parsed : { parseError: "Judge JSON did not match the expected qualitative verdict schema.", rawText };
+    return validateJudgeResponse(parsed) ? parsed : { parseError: "Judge JSON did not match the expected authoritative judge schema.", rawText };
   } catch (error) {
     return { parseError: error instanceof Error ? error.message : String(error), rawText };
   }
 }
 
 function rollUpVerdict(r: ParsedJudgeResponse): JudgeVerdictLabel {
-  if (!r.recommendsCorrectPattern || r.recommendsDeprecatedPattern) return "incorrect";
-  if (r.completeness === 2 && r.codeExample === 2 && r.explanation === 2) return "correct";
+  if (r.correctness === -1) return "incorrect";
+  if (r.correctness === 1 && r.completeness === 1) return "correct";
   return "partially_correct";
 }
 
@@ -111,8 +122,9 @@ function buildSearchTraceSummary(trace: CollectTrace): string | undefined {
 async function renderJudgePromptMessages(question: DatasetQuestion, answer: BenchmarkAnswerResponse, trace: CollectTrace, promptTemplatePath: string): Promise<PromptMessageSnapshot[]> {
   const template = await readFile(promptTemplatePath, "utf8");
   const evidenceBlock = answer.mode === "open_book"
-    ? `\n## Candidate answer evidence metadata\n- answer included ${answer.citations.length} citation(s)\n- answer evidence summary: ${answer.evidenceSummary}`
+    ? `\n- answer included ${answer.citations.length} citation(s)\n- answer evidence summary: ${answer.evidenceSummary}`
     : "";
+  const benchmarkMetadataBlock = `## Benchmark question metadata\n- evidenceBasis: ${question.evidenceBasis}\n- questionShape: ${question.questionShape}\n- platformScope: ${question.platformScope}`;
 
   const retrievalBlock = buildSearchTraceSummary(trace);
 
@@ -120,7 +132,7 @@ async function renderJudgePromptMessages(question: DatasetQuestion, answer: Benc
     { role: "user", content: template.trim() },
     {
       role: "user",
-      content: `## Benchmark question\n${question.question}\n\n## Reference answer\n${question.referenceAnswer}`,
+      content: `${benchmarkMetadataBlock}\n\n## Benchmark question\n${question.question}\n\n## Reference answer\n${question.referenceAnswer}`,
     },
     {
       role: "user",
@@ -160,6 +172,7 @@ export async function judgeRun(options: JudgeRunOptions): Promise<JudgeRunOutput
   const startedAt = Date.now();
   const judgedAt = new Date().toISOString();
   const judgePath = join(options.runDirectory, "judge.json");
+  const judgeV2Path = join(options.runDirectory, "judge.v2.json");
 
   const manifest = await readJsonFile<RunManifest>(join(options.runDirectory, "manifest.json"));
   const normalizedAnswer = await readJsonFile<BenchmarkAnswerResponse | { parseError: string; rawText?: string }>(join(options.runDirectory, "normalized-answer.json"));
@@ -179,8 +192,18 @@ export async function judgeRun(options: JudgeRunOptions): Promise<JudgeRunOutput
     answerSha256, skipReason: reason, notes, elapsedMs: Date.now() - startedAt, toolSet: judgeToolSet, systemPrompt,
   });
 
-  if (!question) { const a = skip("question_not_found_in_dataset", ["Judge skipped: question missing from dataset."]); await writeJsonFile(judgePath, a); return { judgePath, artifact: a }; }
-  if ("parseError" in normalizedAnswer) { const a = skip("answer_parse_error", ["Judge skipped: answer has parse error."]); await writeJsonFile(judgePath, a); return { judgePath, artifact: a }; }
+  if (!question) {
+    const a = skip("question_not_found_in_dataset", ["Judge skipped: question missing from dataset."]);
+    await writeJsonFile(judgePath, a);
+    await writeJsonFile(judgeV2Path, a);
+    return { judgePath, artifact: a };
+  }
+  if ("parseError" in normalizedAnswer) {
+    const a = skip("answer_parse_error", ["Judge skipped: answer has parse error."]);
+    await writeJsonFile(judgePath, a);
+    await writeJsonFile(judgeV2Path, a);
+    return { judgePath, artifact: a };
+  }
 
   const userMessages = await renderJudgePromptMessages(question, normalizedAnswer, trace, options.promptTemplatePath);
   const userPrompt = await renderJudgePrompt(question, normalizedAnswer, trace, options.promptTemplatePath);
@@ -203,20 +226,26 @@ export async function judgeRun(options: JudgeRunOptions): Promise<JudgeRunOutput
   });
 
   const parsed = parseJudgeResponse(llmResult.finalText);
-  const scored = !("parseError" in parsed);
+  const modeMismatch = !("parseError" in parsed) && parsed.observations.mode !== normalizedAnswer.mode
+    ? `Judge observations.mode (${parsed.observations.mode}) did not match candidate answer mode (${normalizedAnswer.mode}).`
+    : undefined;
+  const scored = !("parseError" in parsed) && modeMismatch === undefined;
   const hasError = llmResult.error !== undefined;
 
   const artifact: JudgeArtifact = {
     schemaVersion: JUDGE_VERDICT_SCHEMA_VERSION, runId, questionId,
     ...(scored ? {
-      recommendsCorrectPattern: parsed.recommendsCorrectPattern,
-      recommendsDeprecatedPattern: parsed.recommendsDeprecatedPattern,
+      correctness: parsed.correctness,
       completeness: parsed.completeness,
-      codeExample: parsed.codeExample,
-      explanation: parsed.explanation,
-      retrievalSupportsReferenceAnswer: parsed.retrievalSupportsReferenceAnswer,
-      retrievalQuality: parsed.retrievalQuality,
-      verdict: rollUpVerdict(parsed), reasoning: parsed.reasoning,
+      deprecatedPatternUse: parsed.deprecatedPatternUse,
+      referenceVerified: parsed.referenceVerified,
+      observations: parsed.observations,
+      recommendsCorrectPattern: parsed.correctness === 1,
+      recommendsDeprecatedPattern: parsed.deprecatedPatternUse === "primary" || parsed.deprecatedPatternUse === "fallback",
+      codeExample: parsed.observations.hasCode ? (parsed.completeness === 1 ? 2 : 1) : 0,
+      explanation: parsed.observations.hasExplanation ? (parsed.completeness === 1 ? 2 : 1) : 0,
+      verdict: rollUpVerdict(parsed),
+      reasoning: parsed.reasoning,
     } : {}),
     status: !hasError && scored ? "scored" : "error",
     judgedAt,
@@ -229,18 +258,21 @@ export async function judgeRun(options: JudgeRunOptions): Promise<JudgeRunOutput
     ...(llmResult.finalText !== undefined ? { rawResponseText: llmResult.finalText } : {}),
     ...(llmResult.usage !== undefined ? { usage: llmResult.usage } : {}),
     ...(llmResult.costUsd !== undefined ? { costUsd: llmResult.costUsd } : {}),
-    ...(!scored || hasError ? { error: llmResult.error ?? toJsonValue(parsed) } : {}),
+    ...(!scored || hasError ? { error: llmResult.error ?? toJsonValue(modeMismatch ?? parsed) } : {}),
     elapsedMs: Date.now() - startedAt,
     notes: [
-      "Corpus-assisted qualitative judgment.",
+      "Corpus-assisted qualitative judgment with explicit closed-book handling.",
       options.transport.kind === "openrouter"
         ? "Structured output enforced via response_format."
         : "Pi SDK transport used prompt-level schema enforcement (no response_format support).",
       ...(hasError ? ["Judge model call failed."] : []),
-      ...(scored ? [] : [`Judge output parse failure: ${(parsed as { parseError: string }).parseError}`]),
+      ...(scored ? [`Judge v2 artifact written to judge.v2.json (mirrored in judge.json for compatibility): correctness=${parsed.correctness}, completeness=${parsed.completeness}, deprecatedPatternUse=${parsed.deprecatedPatternUse}, referenceVerified=${parsed.referenceVerified}.`] : []),
+      ...(modeMismatch ? [modeMismatch] : []),
+      ...(scored || modeMismatch ? [] : [`Judge output parse failure: ${(parsed as { parseError: string }).parseError}`]),
     ],
   };
 
   await writeJsonFile(judgePath, artifact);
+  await writeJsonFile(judgeV2Path, artifact);
   return { judgePath, artifact };
 }
