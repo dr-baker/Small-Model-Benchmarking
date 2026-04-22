@@ -5,7 +5,7 @@ const appRoot = process.cwd();
 const repoRoot = path.resolve(appRoot, '..', '..');
 const benchmarkResultsRoot = path.join(repoRoot, 'benchmark-results');
 const datasetPath = path.join(repoRoot, 'benchmark', 'dataset', 'swiftui-docs-chatbot-benchmark.v1.json');
-const outputPath = path.join(appRoot, 'src', 'generated', 'recent-runs.json');
+const outputPath = path.join(appRoot, 'public', 'generated', 'recent-runs.json');
 const limit = 9;
 const completeRunThreshold = readExpectedQuestionCount(datasetPath);
 

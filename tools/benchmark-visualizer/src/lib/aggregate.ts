@@ -1,9 +1,8 @@
-import questionBankJson from '../generated/question-bank.json';
-import recentRunsJson from '../generated/recent-runs.json';
 import type {
   AggregateFile,
   AggregateRun,
   AggregateSummary,
+  BundledSnapshot,
   EnrichedRun,
   EvidenceBasis,
   LoadedExecution,
@@ -14,12 +13,25 @@ import type {
   RecentRunsBundle,
 } from '../types';
 
-export const questionBank = normalizeQuestionBank(questionBankJson as QuestionBankInput);
-export const recentRunsBundle = recentRunsJson as RecentRunsBundle;
+const GENERATED_ASSET_ROOT = `${import.meta.env.BASE_URL}generated`;
 
-export const questionList = Object.values(questionBank.questions).sort(
-  (left, right) => left.order - right.order,
-);
+export const EMPTY_QUESTION_BANK: QuestionBank = {
+  benchmarkName: 'benchmark',
+  datasetVersion: 'unknown',
+  rubricVersion: 'unknown',
+  generatedAt: '',
+  questions: {},
+};
+
+export const EMPTY_RECENT_RUNS_BUNDLE: RecentRunsBundle = {
+  generatedAt: '',
+  count: 0,
+  runs: [],
+};
+
+export function buildQuestionList(questionBank: QuestionBank): QuestionMeta[] {
+  return Object.values(questionBank.questions).sort((left, right) => left.order - right.order);
+}
 
 export function pickAggregateFiles(files: File[]): File[] {
   return files.filter((file) => {
@@ -31,28 +43,43 @@ export function pickAggregateFiles(files: File[]): File[] {
   });
 }
 
-export function loadBundledRecentExecutions(): LoadedExecution[] {
-  return dedupeExecutions(
+export async function loadBundledSnapshot(): Promise<BundledSnapshot> {
+  const [questionBankInput, recentRunsBundle] = await Promise.all([
+    fetchJson<QuestionBankInput>(`${GENERATED_ASSET_ROOT}/question-bank.json`),
+    fetchJson<RecentRunsBundle>(`${GENERATED_ASSET_ROOT}/recent-runs.json`),
+  ]);
+
+  const questionBank = normalizeQuestionBank(questionBankInput);
+  const questionList = buildQuestionList(questionBank);
+  const bundledExecutions = dedupeExecutions(
     (recentRunsBundle.runs ?? [])
       .map((entry) => {
         try {
-          return parseAggregateData(entry.aggregate, entry.sourceName);
+          return parseAggregateData(entry.aggregate, entry.sourceName, questionBank);
         } catch {
           return null;
         }
       })
       .filter((execution): execution is LoadedExecution => execution !== null),
   );
+
+  return {
+    questionBank,
+    questionList,
+    recentRunsBundle,
+    bundledExecutions,
+  };
 }
 
 export async function loadExecutionsFromFiles(
   files: File[],
+  questionBank: QuestionBank,
 ): Promise<{ executions: LoadedExecution[]; errors: string[] }> {
   const errors: string[] = [];
   const parsed = await Promise.all(
     files.map(async (file) => {
       try {
-        return await parseAggregateFile(file);
+        return await parseAggregateFile(file, questionBank);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         errors.push(`${file.name}: ${message}`);
@@ -67,16 +94,25 @@ export async function loadExecutionsFromFiles(
   };
 }
 
-async function parseAggregateFile(file: File): Promise<LoadedExecution> {
+async function fetchJson<T>(path: string): Promise<T> {
+  const response = await fetch(path, { cache: 'no-cache' });
+  if (!response.ok) {
+    throw new Error(`Failed to load ${path}: ${response.status} ${response.statusText}`);
+  }
+  return response.json() as Promise<T>;
+}
+
+async function parseAggregateFile(file: File, questionBank: QuestionBank): Promise<LoadedExecution> {
   const text = await file.text();
   const aggregate = JSON.parse(text) as AggregateFile;
   const sourceName = deriveSourceName(file, aggregate, aggregate.runs?.[0]);
-  return parseAggregateData(aggregate, sourceName);
+  return parseAggregateData(aggregate, sourceName, questionBank);
 }
 
 function parseAggregateData(
   aggregate: AggregateFile,
   sourceName: string,
+  questionBank: QuestionBank,
 ): LoadedExecution {
   const normalizedAggregate = normalizeAggregateFile(aggregate);
   const summary = normalizedAggregate.summaries?.[0];
@@ -90,7 +126,7 @@ function parseAggregateData(
     throw new Error('missing runs[]');
   }
 
-  const runs = rawRuns.map((run) => enrichRun(run));
+  const runs = rawRuns.map((run) => enrichRun(run, questionBank));
   const runsByQuestionId = Object.fromEntries(runs.map((run) => [run.questionId, run]));
   const label = deriveLabel(summary);
   const shortLabel = deriveShortLabel(summary);
@@ -108,7 +144,7 @@ function parseAggregateData(
   };
 }
 
-function enrichRun(run: AggregateRun): EnrichedRun {
+function enrichRun(run: AggregateRun, questionBank: QuestionBank): EnrichedRun {
   const questionId = run.question.questionId ?? run.question.id ?? 'unknown-question';
   return {
     ...run,

@@ -1,0 +1,2707 @@
+{
+  "benchmarkName": "swiftui-docs-chatbot-benchmark",
+  "datasetVersion": "v1",
+  "rubricVersion": "rubric.v1",
+  "generatedAt": "2026-04-22T06:24:47.069Z",
+  "questions": {
+    "q01-tab-definition": {
+      "id": "q01-tab-definition",
+      "order": 1,
+      "title": "Tab Definition",
+      "question": "I'm building a tab bar with icons and labels. How should I define each tab in SwiftUI?",
+      "referenceAnswer": "The `tabItem()` modifier is deprecated. Use the `Tab` view API instead:\n\n```swift\nTabView {\n    Tab(\"Home\", systemImage: \"house\") {\n        HomeView()\n    }\n    Tab(\"Search\", systemImage: \"magnifyingglass\") {\n        SearchView()\n    }\n}\n```",
+      "pitfall": "Using the deprecated `tabItem()` modifier.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "navigation",
+        "styling",
+        "swiftui",
+        "tabs"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/tabview.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "Tab(",
+          "systemImage"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "tabItem("
+        ]
+      }
+    },
+    "q02-programmatic-tab-selection": {
+      "id": "q02-programmatic-tab-selection",
+      "order": 2,
+      "title": "Programmatic Tab Selection",
+      "question": "I need to switch tabs from code and keep the selection in sync with app state. What should I bind the selected tab to?",
+      "referenceAnswer": "Use a type-safe enum instead of integers:\n\n```swift\nenum AppTab { case home, search, profile }\n@State private var selectedTab = AppTab.home\n\nTabView(selection: $selectedTab) {\n    Tab(\"Home\", systemImage: \"house\", value: .home) { HomeView() }\n    Tab(\"Search\", systemImage: \"magnifyingglass\", value: .search) { SearchView() }\n}\n```",
+      "pitfall": "Using `Int` or `String` for tab selection, which is fragile and unclear.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "data-flow",
+        "formatting",
+        "navigation",
+        "state-management",
+        "strings",
+        "swiftui",
+        "tabs"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/tabview.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "selection:",
+          "enum"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "tag("
+        ]
+      }
+    },
+    "q03-hierarchical-navigation-setup": {
+      "id": "q03-hierarchical-navigation-setup",
+      "order": 3,
+      "title": "Hierarchical Navigation Setup",
+      "question": "What's the simplest way to push from a list row into a detail screen in SwiftUI?",
+      "referenceAnswer": "Use `NavigationStack` with value-based `NavigationLink` and `navigationDestination(for:)`:\n\n```swift\nNavigationStack {\n    List(items) { item in\n        NavigationLink(item.name, value: item)\n    }\n    .navigationDestination(for: Item.self) { item in\n        DetailView(item: item)\n    }\n}\n```\n\n`NavigationView` is deprecated. Do not mix `NavigationLink(destination:)` and `navigationDestination(for:)`.",
+      "pitfall": "Using `NavigationView` with `NavigationLink(destination:)`.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "navigation",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/navigationstack.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "NavigationStack",
+          "navigationDestination"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "NavigationView"
+        ]
+      }
+    },
+    "q04-toolbar-button-in-top-right-corner": {
+      "id": "q04-toolbar-button-in-top-right-corner",
+      "order": 4,
+      "title": "Toolbar Button in Top-Right Corner",
+      "question": "I want to place an Edit button in the top-right corner of my navigation bar. What placement value should I use in a ToolbarItem?",
+      "referenceAnswer": "Use `.topBarTrailing`:\n\n```swift\n.toolbar {\n    ToolbarItem(placement: .topBarTrailing) {\n        Button(\"Edit\", action: editAction)\n    }\n}\n```",
+      "pitfall": "Using the deprecated `.navigationBarLeading` and `.navigationBarTrailing` placements.",
+      "evidenceBasis": "corpus",
+      "platformScope": "ios",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "interaction",
+        "navigation",
+        "swiftui",
+        "toolbars"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/toolbaritemplacement.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "topBarTrailing",
+          "ToolbarItem"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "navigationBarTrailing",
+          "navigationBarLeading"
+        ]
+      }
+    },
+    "q05-styling-text-with-a-custom-color": {
+      "id": "q05-styling-text-with-a-custom-color",
+      "order": 5,
+      "title": "Styling Text with a Custom Color",
+      "question": "I'm styling text with a custom color from my asset catalog. There seem to be multiple options for setting text color in SwiftUI — which modifier should I use?",
+      "referenceAnswer": "Use `foregroundStyle()`, which works with any `ShapeStyle` including colors, gradients, and hierarchical styles:\n\n```swift\nText(\"Hello\")\n    .foregroundStyle(.red)\n\nText(\"Custom\")\n    .foregroundStyle(Color(\"BrandBlue\"))\n```",
+      "pitfall": "Using the deprecated `foregroundColor()` modifier.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "assets",
+        "formatting",
+        "strings",
+        "styling",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/foregroundstyle(_:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "foregroundStyle"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "foregroundColor("
+        ]
+      }
+    },
+    "q06-differently-styled-text-on-one-line": {
+      "id": "q06-differently-styled-text-on-one-line",
+      "order": 6,
+      "title": "Differently-Styled Text on One Line",
+      "question": "I need to display \"Hello\" in red and \"World\" in blue on the same line as a single text element. How do I compose differently-styled text fragments?",
+      "referenceAnswer": "Use text interpolation with individually styled `Text` values:\n\n```swift\nvar body: some View {\n    let hello = Text(\"Hello\").foregroundStyle(.red)\n    let world = Text(\"World\").foregroundStyle(.blue)\n    Text(\"\\(hello) \\(world)\")\n}\n```",
+      "pitfall": "Using `Text` concatenation with `+`, which is deprecated.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "formatting",
+        "strings",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/text.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "Text(\"\\("
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q07-rounding-corners-on-a-container": {
+      "id": "q07-rounding-corners-on-a-container",
+      "order": 7,
+      "title": "Rounding Corners on a Container",
+      "question": "I need to round the corners of a VStack that has a background. What's the correct way to clip a view to rounded corners?",
+      "referenceAnswer": "Use `clipShape()` with a rounded rectangle:\n\n```swift\nVStack { /* content */ }\n    .clipShape(.rect(cornerRadius: 12))\n```",
+      "pitfall": "Using the deprecated `cornerRadius()` modifier.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "layout",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/clipshape(_:style:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "clipShape"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "cornerRadius("
+        ]
+      }
+    },
+    "q08-adding-a-border-to-a-filled-shape": {
+      "id": "q08-adding-a-border-to-a-filled-shape",
+      "order": 8,
+      "title": "Adding a Border to a Filled Shape",
+      "question": "How do I give a filled rounded rectangle both a fill and a separate border stroke?",
+      "referenceAnswer": "Since iOS 17, you can chain `.fill()` and `.stroke()` directly on a shape:\n\n```swift\nRoundedRectangle(cornerRadius: 12)\n    .fill(.blue)\n    .stroke(.white, lineWidth: 2)\n```",
+      "pitfall": "Using an `.overlay` with a separate stroked shape, which was required before iOS 17.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/shape.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          ".fill(",
+          ".stroke("
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q09-smooth-apple-style-rounded-corners": {
+      "id": "q09-smooth-apple-style-rounded-corners",
+      "order": 9,
+      "title": "Smooth Apple-Style Rounded Corners",
+      "question": "How do I get the smooth rounded corners Apple uses on cards?",
+      "referenceAnswer": "No. The default corner style for `RoundedRectangle` is already `.continuous`:\n\n```swift\nRoundedRectangle(cornerRadius: 12) // .continuous is the default\n```",
+      "pitfall": "Explicitly passing `style: .continuous` when it's already the default.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/roundedrectangle.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "RoundedRectangle",
+          ".continuous"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q10-shared-data-model-for-multiple-views": {
+      "id": "q10-shared-data-model-for-multiple-views",
+      "order": 10,
+      "title": "Shared Data Model for Multiple Views",
+      "question": "I'm building a shopping cart that multiple views need to read and write to. What's the modern way to create a shared data model in SwiftUI?",
+      "referenceAnswer": "Use the `@Observable` macro. The `ObservableObject`/`@Published`/`@EnvironmentObject` pattern is legacy:\n\n```swift\n@Observable\n@MainActor\nclass ShoppingCart {\n    var items: [Item] = []\n    var total: Double = 0\n}\n\n// Owner\n@State private var cart = ShoppingCart()\nvar body: some View {\n    ChildView().environment(cart)\n}\n\n// Consumer\n@Environment(ShoppingCart.self) private var cart\n```",
+      "pitfall": "Using `ObservableObject`, `@Published`, `@StateObject`, `@ObservedObject`, or `@EnvironmentObject`.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "data-flow",
+        "legacy-api",
+        "state-management",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/observation/observable().md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "@Observable",
+          ".environment("
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "ObservableObject",
+          "@StateObject"
+        ]
+      }
+    },
+    "q11-thread-safety-for-observable-classes": {
+      "id": "q11-thread-safety-for-observable-classes",
+      "order": 11,
+      "title": "Thread Safety for @Observable Classes",
+      "question": "I have an `@Observable` class — do I need to annotate it with `@MainActor`?",
+      "referenceAnswer": "Yes. `@Observable` classes must be marked `@MainActor` to ensure properties are accessed on the main thread for safe UI updates. Exception: projects using Main Actor default actor isolation (Swift 6 build setting).\n\n```swift\n@Observable\n@MainActor\nclass UserSettings {\n    var theme: Theme = .system\n}\n```",
+      "pitfall": "Omitting `@MainActor`, which can lead to data races and concurrency warnings.",
+      "evidenceBasis": "curated",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "concurrency",
+        "data-flow",
+        "formatting",
+        "state-management",
+        "strings",
+        "swiftui",
+        "thread-safety"
+      ],
+      "goldEvidence": [],
+      "rubric": {
+        "mustMention": [
+          "@Observable",
+          "@MainActor"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q12-persisting-userdefaults-in-an-observable-class": {
+      "id": "q12-persisting-userdefaults-in-an-observable-class",
+      "order": 12,
+      "title": "Persisting UserDefaults in an Observable Class",
+      "question": "Can I put an `@AppStorage` property inside my `@Observable` class so the view updates when UserDefaults changes?",
+      "referenceAnswer": "No. `@AppStorage` inside an `@Observable` class will not trigger view updates. `@AppStorage` is designed for views, not classes. Read from `UserDefaults` directly in the class and use `@AppStorage` in the view layer.",
+      "pitfall": "Placing `@AppStorage` inside an `@Observable` class and expecting it to drive view refreshes.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "data-flow",
+        "formatting",
+        "persistence",
+        "state-management",
+        "strings",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/appstorage.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "UserDefaults"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q13-saving-on-every-keystroke": {
+      "id": "q13-saving-on-every-keystroke",
+      "order": 13,
+      "title": "Saving on Every Keystroke",
+      "question": "I want text field changes to save as the user types. What's a clean SwiftUI pattern for that?",
+      "referenceAnswer": "Avoid inline `Binding(get:set:)` — it's fragile. Use a standard binding from `@State` with `onChange()`:\n\n```swift\n@State private var username = \"\"\n\nvar body: some View {\n    TextField(\"Username\", text: $username)\n        .onChange(of: username) {\n            model.save()\n        }\n}\n```",
+      "pitfall": "Creating `Binding(get: { model.username }, set: { model.username = $0; model.save() })` inline in the view body. *(Source: gpt54minihigh phrasing)*",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "composition",
+        "data-flow",
+        "formatting",
+        "state-management",
+        "strings",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/onchange(of:perform:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "onChange"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "Binding(get:"
+        ]
+      }
+    },
+    "q14-numeric-input-field": {
+      "id": "q14-numeric-input-field",
+      "order": 14,
+      "title": "Numeric Input Field",
+      "question": "I need a `TextField` for the user to enter their age as a number. Should I bind it to a `String` and convert with `Int()` afterward?",
+      "referenceAnswer": "Use the numeric `TextField` initializer with a `format` parameter:\n\n```swift\n@State private var age = 0\n\nTextField(\"Enter your age\", value: $age, format: .number)\n    .keyboardType(.numberPad)\n```",
+      "pitfall": "Binding to a `String`, manually converting, and losing type safety.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "data-flow",
+        "formatting",
+        "input",
+        "state-management",
+        "strings",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/textfield.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "TextField",
+          "format:"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q15-user-facing-search-text-matching": {
+      "id": "q15-user-facing-search-text-matching",
+      "order": 15,
+      "title": "User-Facing Search Text Matching",
+      "question": "I'm filtering an array of names using `name.contains(searchText)`. Is this the right approach for user-facing search?",
+      "referenceAnswer": "No. Use `localizedStandardContains()` for user-facing search — it handles case, diacritics, and locale correctly:\n\n```swift\nlet results = names.filter { $0.localizedStandardContains(searchText) }\n```\n\nThis lets \"cafe\" match \"Cafe\" and \"Caf\\u00e9\".",
+      "pitfall": "Using `contains()` which is case-sensitive and doesn't handle diacritics.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "collections",
+        "formatting",
+        "input",
+        "search",
+        "security",
+        "strings",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/adding-a-search-interface-to-your-app.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "localizedStandardContains"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q16-empty-search-state": {
+      "id": "q16-empty-search-state",
+      "order": 16,
+      "title": "Empty Search State",
+      "question": "When the search returns no results, I want to show a \"No results found\" message with the user's query. What's the best way to build that?",
+      "referenceAnswer": "Use `ContentUnavailableView.search`, which reads the search term from the `searchable()` context automatically:\n\n```swift\n.overlay {\n    if results.isEmpty {\n        ContentUnavailableView.search\n    }\n}\n```\n\nNo need to pass the search text manually.",
+      "pitfall": "Building a custom empty-state view or passing the search text explicitly.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "data-flow",
+        "formatting",
+        "input",
+        "search",
+        "state-management",
+        "strings",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/contentunavailableview/search.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "ContentUnavailableView"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q17-displaying-prices-and-currency": {
+      "id": "q17-displaying-prices-and-currency",
+      "order": 17,
+      "title": "Displaying Prices and Currency",
+      "question": "I need to display a price with proper currency formatting and two decimal places. What's the best approach in SwiftUI?",
+      "referenceAnswer": "Use SwiftUI's built-in format styles:\n\n```swift\nText(price, format: .currency(code: \"USD\"))\n\n// Or for a plain number:\nText(price, format: .number.precision(.fractionLength(2)))\n```\n\nThese handle localization (decimal separators, currency symbols) automatically.",
+      "pitfall": "Using `String(format: \"%.2f\", price)` which doesn't localize.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "formatting",
+        "strings",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/text/init(_:format:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          ".currency(code:"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "String(format:"
+        ]
+      }
+    },
+    "q18-formatting-dates-for-display": {
+      "id": "q18-formatting-dates-for-display",
+      "order": 18,
+      "title": "Formatting Dates for Display",
+      "question": "I need to show dates in my app in a user-friendly format. Should I create a date formatter property and store it on my view?",
+      "referenceAnswer": "No. Use `Text` with a `format` parameter directly:\n\n```swift\nText(event.date, format: .dateTime.day().month().year())\n```\n\nThis is cleaner, more performant, and automatically localizes.",
+      "pitfall": "Creating and managing `DateFormatter` instances when SwiftUI's format-style `Text` initializer handles it natively.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "formatting",
+        "strings",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/text/init(_:format:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          ".dateTime"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "DateFormatter"
+        ]
+      }
+    },
+    "q19-locale-safe-date-display": {
+      "id": "q19-locale-safe-date-display",
+      "order": 19,
+      "title": "Locale-Safe Date Display",
+      "question": "I want to display a date in the user's local format. Is it safe to hardcode a date format string like \"MM/dd/yyyy\"?",
+      "referenceAnswer": "Prefer `FormatStyle` APIs:\n\n```swift\nText(date, format: .dateTime.month(.twoDigits).day(.twoDigits).year())\n```\n\nManual format strings with `\"yyyy\"` can produce wrong years in some calendar localizations. `FormatStyle` handles localization automatically.",
+      "pitfall": "Using manual date format strings that don't adapt to user locale.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "formatting",
+        "strings",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/text/init(_:format:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          ".dateTime"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q20-reacting-to-state-changes": {
+      "id": "q20-reacting-to-state-changes",
+      "order": 20,
+      "title": "Reacting to State Changes",
+      "question": "I need to run code when a bound value changes in SwiftUI. What's the right hook for that?",
+      "referenceAnswer": "Use `onChange` with either the 0-parameter or 2-parameter variant:\n\n```swift\n// 0-parameter: just react\n.onChange(of: searchText) {\n    performSearch()\n}\n\n// 2-parameter: access old and new\n.onChange(of: searchText) { oldValue, newValue in\n    if newValue.count > oldValue.count { showSuggestions() }\n}\n```",
+      "pitfall": "Using `.onChange(of: value) { newValue in ... }` — the 1-parameter variant is deprecated.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "data-flow",
+        "state-management",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/onchange(of:perform:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "onChange"
+        ],
+        "mustMentionAnyOf": [
+          [
+            "/\\.onChange\\(of:\\s*[^)]*\\)\\s*\\{(?:(?!\\bin\\b)[^{}])*\\}/",
+            "/\\.onChange\\(of:\\s*[^)]*\\)\\s*\\{\\s*[^{}]*,\\s*[^{}]*\\s+in\\b/",
+            "zero-parameter",
+            "zero parameter",
+            "0-parameter",
+            "0 parameter",
+            "two-parameter",
+            "two parameter",
+            "2-parameter",
+            "2 parameter",
+            "old and new values",
+            "old value and new value"
+          ]
+        ],
+        "mustNotMention": []
+      }
+    },
+    "q21-animating-a-specific-value-change": {
+      "id": "q21-animating-a-specific-value-change",
+      "order": 21,
+      "title": "Animating a Specific Value Change",
+      "question": "I want a score label to animate when the score changes. How should I wire that up?",
+      "referenceAnswer": "Specify which value should trigger the animation:\n\n```swift\nText(\"\\(score)\")\n    .animation(.bouncy, value: score)\n```\n\nThe value-less variant is deprecated and causes unpredictable animations on unrelated state changes.",
+      "pitfall": "Using `.animation(.bouncy)` without `value:`.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "animation",
+        "styling",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/animation(_:value:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          ".animation(",
+          "value:"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q22-chaining-sequential-animations": {
+      "id": "q22-chaining-sequential-animations",
+      "order": 22,
+      "title": "Chaining Sequential Animations",
+      "question": "I want to chain two animations — scale up, then scale back down. Should I use a delayed dispatch to time the second animation after the first finishes?",
+      "referenceAnswer": "Use the `completion` closure on `withAnimation()`:\n\n```swift\nwithAnimation {\n    scale = 2\n} completion: {\n    withAnimation {\n        scale = 1\n    }\n}\n```",
+      "pitfall": "Using `DispatchQueue.main.asyncAfter` with a guessed delay, which doesn't align with actual animation duration.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "animation",
+        "concurrency",
+        "swiftui",
+        "thread-safety"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/withanimation(_:_:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "withAnimation",
+          "completion"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "asyncAfter"
+        ]
+      }
+    },
+    "q23-making-a-custom-shape-animatable": {
+      "id": "q23-making-a-custom-shape-animatable",
+      "order": 23,
+      "title": "Making a Custom Shape Animatable",
+      "question": "I'm creating a custom shape that animates between states. What's the modern way to make a shape's properties animate smoothly?",
+      "referenceAnswer": "Use the `@Animatable` macro:\n\n```swift\n@Animatable\nstruct PieSlice: Shape {\n    var endAngle: Double\n\n    func path(in rect: CGRect) -> Path { /* draw using endAngle */ }\n}\n```\n\nMark non-animatable properties with `@AnimatableIgnored`.",
+      "pitfall": "Manually implementing the `Animatable` protocol and writing `var animatableData`.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "animation",
+        "data-flow",
+        "state-management",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/animatable().md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "@Animatable"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "animatableData"
+        ]
+      }
+    },
+    "q24-sizing-a-view-to-half-the-available-width": {
+      "id": "q24-sizing-a-view-to-half-the-available-width",
+      "order": 24,
+      "title": "Sizing a View to Half the Available Width",
+      "question": "I need to size a view to exactly half the available width. How do I measure the container's dimensions in SwiftUI?",
+      "referenceAnswer": "Use `containerRelativeFrame()`:\n\n```swift\nImage(\"hero\")\n    .containerRelativeFrame(.horizontal) { width, _ in\n        width / 2\n    }\n```\n\nFor complex needs, consider `visualEffect()`. Only use `GeometryReader` as a last resort.",
+      "pitfall": "Using `UIScreen.main.bounds` which is deprecated, doesn't account for multitasking, and doesn't adapt to container changes.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "layout",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/containerrelativeframe(_:alignment:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "containerRelativeFrame"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "UIScreen.main"
+        ]
+      }
+    },
+    "q25-reading-a-parent-view-s-size": {
+      "id": "q25-reading-a-parent-view-s-size",
+      "order": 25,
+      "title": "Reading a Parent View's Size",
+      "question": "I need to position child elements based on how much space the parent has. What are my options for reading container dimensions?",
+      "referenceAnswer": "Modern alternatives (prefer in order):\n\n1. `containerRelativeFrame()` — size relative to container\n2. `visualEffect()` — apply effects based on geometry without affecting layout\n3. `Layout` protocol — custom layout logic\n4. `GeometryReader` — last resort (greedily expands, can cause layout issues)",
+      "pitfall": "Reaching for `GeometryReader` as a first choice.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "layout",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/containerrelativeframe(_:alignment:).md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/view/visualeffect(_:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "containerRelativeFrame"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q26-accessibility-of-an-icon-only-button": {
+      "id": "q26-accessibility-of-an-icon-only-button",
+      "order": 26,
+      "title": "Accessibility of an Icon-Only Button",
+      "question": "I have a button that only shows an SF Symbol icon. Does this need any special accessibility work?",
+      "referenceAnswer": "Yes — include a text label even if only the icon is displayed:\n\n```swift\nButton(\"Delete\", systemImage: \"trash\", action: delete)\n```\n\nSwiftUI shows the icon and uses the text for VoiceOver.",
+      "pitfall": "Creating icon-only buttons without text labels, invisible to VoiceOver and Voice Control.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "accessibility",
+        "formatting",
+        "interaction",
+        "strings",
+        "styling",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/button/init(_:systemimage:action:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "Button(",
+          "systemImage"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q27-making-an-image-interactive": {
+      "id": "q27-making-an-image-interactive",
+      "order": 27,
+      "title": "Making an Image Interactive",
+      "question": "I want users to tap on a photo to open it full-screen. What's the best way to make an image tappable?",
+      "referenceAnswer": "Use a `Button`, not `onTapGesture`:\n\n```swift\nButton(\"View Photo\", systemImage: \"photo\") {\n    showPhoto()\n}\n```\n\n`onTapGesture` doesn't convey interactivity to assistive technologies. Only use it when you need tap location or count.",
+      "pitfall": "Using `onTapGesture()` for interactive elements, lacking button semantics.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "interaction",
+        "styling",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/button.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/view/ontapgesture(count:perform:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "Button"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q28-custom-font-size-that-respects-user-preferences": {
+      "id": "q28-custom-font-size-that-respects-user-preferences",
+      "order": 28,
+      "title": "Custom Font Size That Respects User Preferences",
+      "question": "I need text at a specific point size that's larger than body. How do I set a custom font size that still respects the user's text size preferences?",
+      "referenceAnswer": "Use `@ScaledMetric` (iOS 18 and earlier) or `.scaled(by:)` (iOS 26+):\n\n```swift\n@ScaledMetric private var iconSize = 24.0\n\n// iOS 26+\n.font(.body.scaled(by: 1.5))\n```\n\nPrefer built-in Dynamic Type sizes (`.title`, `.headline`, `.body`) when possible.",
+      "pitfall": "Using `.font(.system(size: 24))` which ignores Dynamic Type.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "formatting",
+        "layout",
+        "strings",
+        "styling",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/scaledmetric.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "@ScaledMetric"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          ".system(size:"
+        ]
+      }
+    },
+    "q29-slider-layout-in-a-form": {
+      "id": "q29-slider-layout-in-a-form",
+      "order": 29,
+      "title": "Slider Layout in a Form",
+      "question": "I have a Slider inside a Form with a Text label in an HStack. How do I get the label and slider to lay out correctly?",
+      "referenceAnswer": "Use `LabeledContent`:\n\n```swift\nForm {\n    LabeledContent(\"Volume\") {\n        Slider(value: $volume, in: 0...100)\n    }\n}\n```",
+      "pitfall": "Using `HStack { Text(\"Volume\"); Slider(...) }` which doesn't follow Form layout conventions.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "formatting",
+        "input",
+        "layout",
+        "strings",
+        "styling",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/labeledcontent.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "LabeledContent"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q30-multiline-text-input-with-placeholder": {
+      "id": "q30-multiline-text-input-with-placeholder",
+      "order": 30,
+      "title": "Multiline Text Input with Placeholder",
+      "question": "I need a multiline text input with placeholder text for user notes. What's the simplest SwiftUI approach?",
+      "referenceAnswer": "Use `TextField` with `axis: .vertical`:\n\n```swift\nTextField(\"Enter your notes...\", text: $notes, axis: .vertical)\n    .lineLimit(5...)\n```\n\n`TextEditor` doesn't support placeholder text. Only use it for full-screen editing.",
+      "pitfall": "Using `TextEditor` which lacks placeholder support.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "formatting",
+        "input",
+        "strings",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/textfield.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "TextField",
+          "axis: .vertical"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q31-presenting-a-detail-sheet-from-an-optional": {
+      "id": "q31-presenting-a-detail-sheet-from-an-optional",
+      "order": 31,
+      "title": "Presenting a Detail Sheet from an Optional",
+      "question": "I have a selected item that should open a detail sheet. What's the cleanest way to present that in SwiftUI?",
+      "referenceAnswer": "Use `sheet(item:)`:\n\n```swift\n.sheet(item: $selectedItem) { item in\n    DetailView(item: item)\n}\n```",
+      "pitfall": "Using `sheet(isPresented:)` with manual `if let` unwrapping inside.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "presentation",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/sheet(item:ondismiss:content:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "sheet(item:"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q32-where-to-attach-a-confirmation-dialog": {
+      "id": "q32-where-to-attach-a-confirmation-dialog",
+      "order": 32,
+      "title": "Where to Attach a Confirmation Dialog",
+      "question": "Where should I attach my `confirmationDialog()` modifier — on the root NavigationStack, or on the button that triggers it?",
+      "referenceAnswer": "Attach to the specific element that triggers it. In iOS 26, the dialog animates from its source element (Liquid Glass):\n\n```swift\nButton(\"Delete\", role: .destructive) {\n    showDeleteConfirmation = true\n}\n.confirmationDialog(\"Are you sure?\", isPresented: $showDeleteConfirmation) {\n    Button(\"Delete\", role: .destructive, action: deleteItem)\n}\n```",
+      "pitfall": "Attaching to a parent container, which breaks the source animation.",
+      "evidenceBasis": "corpus",
+      "platformScope": "ios",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "animation",
+        "interaction",
+        "navigation",
+        "presentation",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/confirmationdialog(_:ispresented:titlevisibility:actions:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "confirmationDialog"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q33-slow-loading-scrollview-with-many-items": {
+      "id": "q33-slow-loading-scrollview-with-many-items",
+      "order": 33,
+      "title": "Slow-Loading ScrollView with Many Items",
+      "question": "I have 500 items in a ScrollView with a VStack. The initial load is slow — what's going wrong?",
+      "referenceAnswer": "`VStack` renders all 500 items immediately. Use `LazyVStack`:\n\n```swift\nScrollView {\n    LazyVStack {\n        ForEach(items) { item in\n            ItemRow(item: item)\n        }\n    }\n}\n```\n\nOnly use eager `VStack` for small, fixed numbers of children.",
+      "pitfall": "Using `VStack` inside `ScrollView` for large data sets.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "layout",
+        "performance",
+        "scrolling",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/lazyvstack.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "LazyVStack"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q34-controlling-scroll-indicator-visibility": {
+      "id": "q34-controlling-scroll-indicator-visibility",
+      "order": 34,
+      "title": "Controlling Scroll Indicator Visibility",
+      "question": "I want to hide scroll indicators in my ScrollView. What's the modern modifier for controlling indicator visibility?",
+      "referenceAnswer": "Use `.scrollIndicators(.hidden)`:\n\n```swift\nScrollView { /* content */ }\n    .scrollIndicators(.hidden)\n```",
+      "pitfall": "Using the old `ScrollView(showsIndicators: false)` initializer parameter.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "performance",
+        "scrolling",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/scrollindicators(_:axes:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "scrollIndicators"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "showsIndicators"
+        ]
+      }
+    },
+    "q35-optimizing-scroll-edge-rendering": {
+      "id": "q35-optimizing-scroll-edge-rendering",
+      "order": 35,
+      "title": "Optimizing Scroll-Edge Rendering",
+      "question": "My ScrollView has a solid, opaque background. Is there anything I can do to optimize its scroll-edge rendering?",
+      "referenceAnswer": "Use `scrollContentBackground(.visible)`:\n\n```swift\nScrollView { /* content */ }\n    .scrollContentBackground(.visible)\n```\n\nThis tells SwiftUI the background is opaque so it can optimize edge effects.",
+      "pitfall": "Not applying this when the background is known to be solid.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "performance",
+        "scrolling",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/scrollcontentbackground(_:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "scrollContentBackground"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "/scrollContentBackground\\(\\s*\\.hidden\\s*\\)/"
+        ]
+      }
+    },
+    "q36-loading-data-when-a-view-appears": {
+      "id": "q36-loading-data-when-a-view-appears",
+      "order": 36,
+      "title": "Loading Data When a View Appears",
+      "question": "I need to fetch data from an API when a view first appears. What's the recommended way to kick off async work tied to a view's lifecycle?",
+      "referenceAnswer": "Use `.task()`:\n\n```swift\n.task {\n    await loadData()\n}\n```\n\nIt supports `async`/`await` natively and automatically cancels when the view disappears.",
+      "pitfall": "Using `onAppear` for async work, requiring manual `Task` creation and lacking auto-cancellation.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "concurrency",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/task(name:priority:file:line:_:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          ".task"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q37-expensive-work-in-a-view-initializer": {
+      "id": "q37-expensive-work-in-a-view-initializer",
+      "order": 37,
+      "title": "Expensive Work in a View Initializer",
+      "question": "My view initializer fetches data from Core Data and sorts it. Is there a better place to put this work?",
+      "referenceAnswer": "View initializers should be trivial. Move work to `.task()`:\n\n```swift\nstruct ItemListView: View {\n    @State private var items: [Item] = []\n\n    var body: some View {\n        List(items) { item in Text(item.name) }\n            .task { items = try? await fetchAndSort() }\n    }\n}\n```\n\nSwiftUI may recreate views frequently, repeating expensive init work.",
+      "pitfall": "Performing fetching, sorting, or other non-trivial work in `init()`.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "performance",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/task(name:priority:file:line:_:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          ".task"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q38-toggling-modifiers-with-if-else": {
+      "id": "q38-toggling-modifiers-with-if-else",
+      "order": 38,
+      "title": "Toggling Modifiers with if/else",
+      "question": "I want to change a view's opacity based on a boolean. Should I use `if isActive { view.opacity(1) } else { view.opacity(0.5) }` in my body?",
+      "referenceAnswer": "Use a ternary expression:\n\n```swift\nMyView()\n    .opacity(isActive ? 1 : 0.5)\n```\n\nif/else creates `_ConditionalContent`, destroying structural identity — SwiftUI treats the branches as different views, losing state and animations.",
+      "pitfall": "Using if/else branching to toggle modifier values.",
+      "evidenceBasis": "curated",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "swiftui"
+      ],
+      "goldEvidence": [],
+      "rubric": {
+        "mustMention": [
+          "ternary"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q39-returning-different-view-types-from-a-function": {
+      "id": "q39-returning-different-view-types-from-a-function",
+      "order": 39,
+      "title": "Returning Different View Types from a Function",
+      "question": "I have a helper that needs to return different views depending on state, and I'm getting type errors. How should I structure it?",
+      "referenceAnswer": "Use `@ViewBuilder`:\n\n```swift\n@ViewBuilder\nfunc makeView(isRed: Bool) -> some View {\n    if isRed {\n        Text(\"Red\").foregroundStyle(.red)\n    } else {\n        Text(\"Blue\").foregroundStyle(.blue)\n    }\n}\n```\n\nOr extract into a separate `View` struct.",
+      "pitfall": "Wrapping views in `AnyView`, which erases type information and hurts SwiftUI's diffing performance.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "data-flow",
+        "performance",
+        "state-management",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/viewbuilder.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "@ViewBuilder"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "AnyView"
+        ]
+      }
+    },
+    "q40-breaking-up-a-long-view-body": {
+      "id": "q40-breaking-up-a-long-view-body",
+      "order": 40,
+      "title": "Breaking Up a Long View Body",
+      "question": "My view body is very long. Should I extract parts into computed properties that return `some View`, decorated with `@ViewBuilder`?",
+      "referenceAnswer": "Extract into separate `View` structs, each in its own file:\n\n```swift\n// HeaderView.swift\nstruct HeaderView: View {\n    var body: some View { /* header content */ }\n}\n```\n\nComputed properties and methods don't get the same SwiftUI optimization as dedicated `View` structs.",
+      "pitfall": "Extracting into `@ViewBuilder` computed properties, which loses performance benefits.",
+      "evidenceBasis": "curated",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "composition",
+        "performance",
+        "swiftui"
+      ],
+      "goldEvidence": [],
+      "rubric": {
+        "mustMention": [
+          "struct"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q41-multiple-view-types-in-one-file": {
+      "id": "q41-multiple-view-types-in-one-file",
+      "order": 41,
+      "title": "Multiple View Types in One File",
+      "question": "I have my ContentView, HeaderView, and FooterView all in the same Swift file. Is that OK?",
+      "referenceAnswer": "Each type should be in its own file (`ContentView.swift`, `HeaderView.swift`, `FooterView.swift`). This improves discoverability, reduces merge conflicts, and follows Swift project conventions.",
+      "pitfall": "Placing multiple type definitions in a single file.",
+      "evidenceBasis": "curated",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "swiftui"
+      ],
+      "goldEvidence": [],
+      "rubric": {
+        "mustMention": [],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q42-defining-a-custom-environment-value": {
+      "id": "q42-defining-a-custom-environment-value",
+      "order": 42,
+      "title": "Defining a Custom Environment Value",
+      "question": "I want to pass a custom theme value through the SwiftUI environment to all child views. What's the modern way to define a custom environment value?",
+      "referenceAnswer": "Use the `@Entry` macro:\n\n```swift\nextension EnvironmentValues {\n    @Entry var accentTheme: Theme = .default\n}\n```\n\nThis replaces the old boilerplate of creating an `EnvironmentKey` struct. Also works for `FocusValues`, `Transaction`, and `ContainerValues`.",
+      "pitfall": "Manually creating an `EnvironmentKey` struct with `defaultValue` and extending `EnvironmentValues`.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "data-flow",
+        "state-management",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/entry().md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "@Entry"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "EnvironmentKey"
+        ]
+      }
+    },
+    "q43-triggering-haptic-feedback": {
+      "id": "q43-triggering-haptic-feedback",
+      "order": 43,
+      "title": "Triggering Haptic Feedback",
+      "question": "I want to trigger haptic feedback when a user completes an action. What's the SwiftUI-native way to do this without bridging to UIKit?",
+      "referenceAnswer": "Use `sensoryFeedback()`:\n\n```swift\nButton(\"Complete\", action: markComplete)\n    .sensoryFeedback(.success, trigger: isCompleted)\n```\n\nAvailable types: `.success`, `.warning`, `.error`, `.impact`, `.selection`.",
+      "pitfall": "Using UIKit's `UIImpactFeedbackGenerator` or `UINotificationFeedbackGenerator`.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "animation",
+        "interop",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/sensoryfeedback(_:trigger:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "sensoryFeedback"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "UIImpactFeedbackGenerator",
+          "UINotificationFeedbackGenerator"
+        ]
+      }
+    },
+    "q44-updating-the-ui-after-a-background-task": {
+      "id": "q44-updating-the-ui-after-a-background-task",
+      "order": 44,
+      "title": "Updating the UI After a Background Task",
+      "question": "After a background network call completes, I need to update the UI. How do I ensure code runs on the main thread in modern Swift?",
+      "referenceAnswer": "Use `async`/`await` with `@MainActor`:\n\n```swift\nfunc fetchData() async {\n    let data = await networkService.load()\n    await MainActor.run { self.items = data }\n}\n```\n\nOr mark the property/class as `@MainActor` so updates happen automatically.",
+      "pitfall": "Using `DispatchQueue.main.async` or `DispatchQueue.global().async` instead of Swift concurrency.",
+      "evidenceBasis": "curated",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "concurrency",
+        "formatting",
+        "strings",
+        "swiftui",
+        "thread-safety"
+      ],
+      "goldEvidence": [],
+      "rubric": {
+        "mustMention": [
+          "@MainActor"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "DispatchQueue.main"
+        ]
+      }
+    },
+    "q45-adding-a-delay-in-an-async-context": {
+      "id": "q45-adding-a-delay-in-an-async-context",
+      "order": 45,
+      "title": "Adding a Delay in an Async Context",
+      "question": "I need to add a 2-second delay before retrying a failed network request. How do I pause execution in an async function?",
+      "referenceAnswer": "Use `Task.sleep(for:)` with a `Duration`:\n\n```swift\ntry await Task.sleep(for: .seconds(2))\n```",
+      "pitfall": "Using `Task.sleep(nanoseconds:)` which is hard to read and error-prone.",
+      "evidenceBasis": "curated",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "concurrency",
+        "formatting",
+        "strings",
+        "swiftui"
+      ],
+      "goldEvidence": [],
+      "rubric": {
+        "mustMention": [
+          "Task.sleep(for:"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "nanoseconds"
+        ]
+      }
+    },
+    "q46-thread-safe-shared-cache": {
+      "id": "q46-thread-safe-shared-cache",
+      "order": 46,
+      "title": "Thread-Safe Shared Cache",
+      "question": "I have a shared mutable cache that multiple concurrent tasks read from and write to. How do I make this thread-safe in modern Swift?",
+      "referenceAnswer": "Use an `actor`:\n\n```swift\nactor Cache {\n    private var store: [String: Data] = [:]\n\n    func get(_ key: String) -> Data? { store[key] }\n    func set(_ key: String, data: Data) { store[key] = data }\n}\n```\n\nActors provide compile-time data race protection.",
+      "pitfall": "Using `DispatchQueue` with sync/async for manual synchronization.",
+      "evidenceBasis": "curated",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "concurrency",
+        "swiftui",
+        "thread-safety"
+      ],
+      "goldEvidence": [],
+      "rubric": {
+        "mustMention": [
+          "actor"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "DispatchQueue"
+        ]
+      }
+    },
+    "q47-getting-the-user-s-documents-directory": {
+      "id": "q47-getting-the-user-s-documents-directory",
+      "order": 47,
+      "title": "Getting the User's Documents Directory",
+      "question": "I need to save a file to the user's documents directory. What's the simplest way to get the documents URL in modern Swift?",
+      "referenceAnswer": "Use the `URL` static property:\n\n```swift\nlet documentsURL = URL.documentsDirectory\nlet fileURL = URL.documentsDirectory.appending(path: \"data.json\")\n```",
+      "pitfall": "Using the verbose `FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!`.",
+      "evidenceBasis": "curated",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "persistence",
+        "swiftui"
+      ],
+      "goldEvidence": [],
+      "rubric": {
+        "mustMention": [
+          "documentsDirectory"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "FileManager"
+        ]
+      }
+    },
+    "q48-replacing-substrings-in-a-string": {
+      "id": "q48-replacing-substrings-in-a-string",
+      "order": 48,
+      "title": "Replacing Substrings in a String",
+      "question": "I need to replace all occurrences of a substring. What's the preferred Swift-native string method?",
+      "referenceAnswer": "Use `replacing()`:\n\n```swift\nlet result = myString.replacing(\"a\", with: \"b\")\n```\n\nPrefer Swift-native string methods over Foundation equivalents.",
+      "pitfall": "Using the Foundation method `replacingOccurrences(of:with:)`.",
+      "evidenceBasis": "curated",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "formatting",
+        "strings",
+        "swiftui"
+      ],
+      "goldEvidence": [],
+      "rubric": {
+        "mustMention": [
+          "replacing("
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "replacingOccurrences"
+        ]
+      }
+    },
+    "q49-foreach-with-index-and-item": {
+      "id": "q49-foreach-with-index-and-item",
+      "order": 49,
+      "title": "ForEach with Index and Item",
+      "question": "I want to iterate over an array with indices using `ForEach`. Should I convert `items.enumerated()` to an `Array` first, like `Array(items.enumerated())`?",
+      "referenceAnswer": "Don't convert to an array — use `enumerated()` directly, and identify by the element, not the offset:\n\n```swift\nForEach(items.enumerated(), id: \\.element.id) { index, item in\n    Text(\"\\(index + 1). \\(item.name)\")\n}\n```",
+      "pitfall": "Wrapping in `Array()` unnecessarily and using `\\.offset` for identity, which is fragile when the array changes.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "collections",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/foreach.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "enumerated(",
+          "\\.element"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "\\.offset"
+        ]
+      }
+    },
+    "q50-avoiding-repeated-id-parameters": {
+      "id": "q50-avoiding-repeated-id-parameters",
+      "order": 50,
+      "title": "Avoiding Repeated id: Parameters",
+      "question": "My data types don't have a dedicated ID property. I've been specifying `id: \\.name` at every ForEach and List call site. Is there a better pattern?",
+      "referenceAnswer": "Conform your type to `Identifiable`:\n\n```swift\nstruct Item: Identifiable {\n    let id = UUID()\n    var name: String\n}\n\nForEach(items) { item in Text(item.name) }\n```",
+      "pitfall": "Repeating `id: \\.someProperty` at every call site instead of conforming once.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "collections",
+        "formatting",
+        "strings",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/foreach.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "Identifiable"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q51-displaying-a-web-page-in-swiftui": {
+      "id": "q51-displaying-a-web-page-in-swiftui",
+      "order": 51,
+      "title": "Displaying a Web Page in SwiftUI",
+      "question": "I need to display a web page inside my SwiftUI app. What's the simplest approach on iOS 26?",
+      "referenceAnswer": "iOS 26 has a native `WebView`:\n\n```swift\nimport WebKit\n\nstruct BrowserView: View {\n    var body: some View {\n        WebView(url: URL(string: \"https://example.com\")!)\n    }\n}\n```",
+      "pitfall": "Creating a `UIViewRepresentable` wrapper around `WKWebView` when a native view exists.",
+      "evidenceBasis": "corpus",
+      "platformScope": "ios",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "interop",
+        "swiftui",
+        "web"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/webkit/webview-swift.struct.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "WebView"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "UIViewRepresentable"
+        ]
+      }
+    },
+    "q52-storing-sensitive-data-across-launches": {
+      "id": "q52-storing-sensitive-data-across-launches",
+      "order": 52,
+      "title": "Storing Sensitive Data Across Launches",
+      "question": "Where should I keep a login token if I need it after app relaunches?",
+      "referenceAnswer": "Never store secrets in `@AppStorage` — it uses `UserDefaults`, which is unencrypted. Use the Keychain:\n\n```swift\nlet query: [String: Any] = [\n    kSecClass as String: kSecClassGenericPassword,\n    kSecAttrAccount as String: \"authToken\",\n    kSecValueData as String: tokenData\n]\nSecItemAdd(query as CFDictionary, nil)\n```\n\n`@AppStorage` is fine for non-sensitive preferences (theme, font size).",
+      "pitfall": "Storing secrets in unencrypted `UserDefaults`.",
+      "evidenceBasis": "curated",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "persistence",
+        "security",
+        "swiftui"
+      ],
+      "goldEvidence": [],
+      "rubric": {
+        "mustMention": [
+          "Keychain"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q53-displaying-an-icon-next-to-a-label": {
+      "id": "q53-displaying-an-icon-next-to-a-label",
+      "order": 53,
+      "title": "Displaying an Icon Next to a Label",
+      "question": "Should I use an HStack with an Image and Text to show an icon next to a label?",
+      "referenceAnswer": "Use `Label`:\n\n```swift\nLabel(\"Downloads\", systemImage: \"arrow.down.circle\")\n```\n\n`Label` handles layout across contexts (list rows, menus, buttons) and provides proper accessibility semantics.",
+      "pitfall": "Using `HStack { Image(systemName:); Text() }` which doesn't adapt to context.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "formatting",
+        "layout",
+        "strings",
+        "styling",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/label.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "Label("
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q54-large-animations-and-user-sensitivity": {
+      "id": "q54-large-animations-and-user-sensitivity",
+      "order": 54,
+      "title": "Large Animations and User Sensitivity",
+      "question": "I have a large slide-in animation when my view appears. Do I need to check any user settings before playing it?",
+      "referenceAnswer": "Check `accessibilityReduceMotion` and replace large motion with opacity fades:\n\n```swift\n@Environment(\\.accessibilityReduceMotion) private var reduceMotion\n\nContentView()\n    .transition(reduceMotion ? .opacity : .slide)\n```",
+      "pitfall": "Playing large animations without checking user preferences, causing discomfort for motion-sensitive users.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "animation",
+        "security",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/environmentvalues/accessibilityreducemotion.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "accessibilityReduceMotion"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q55-counting-items-that-match-a-condition": {
+      "id": "q55-counting-items-that-match-a-condition",
+      "order": 55,
+      "title": "Counting Items That Match a Condition",
+      "question": "I need to count how many items in an array match a condition. Is filtering then counting the best approach?",
+      "referenceAnswer": "Use `count(where:)`:\n\n```swift\nlet completedCount = tasks.count(where: \\.isCompleted)\n```",
+      "pitfall": "Using `filter { }.count` which allocates an intermediate array.",
+      "evidenceBasis": "curated",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "collections",
+        "search",
+        "swiftui"
+      ],
+      "goldEvidence": [],
+      "rubric": {
+        "mustMention": [
+          "count(where:"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q56-capturing-a-swiftui-view-as-a-bitmap": {
+      "id": "q56-capturing-a-swiftui-view-as-a-bitmap",
+      "order": 56,
+      "title": "Capturing a SwiftUI View as a Bitmap",
+      "question": "I need to capture a SwiftUI view as a bitmap image for sharing. What's the SwiftUI-native approach?",
+      "referenceAnswer": "Use `ImageRenderer`:\n\n```swift\nlet renderer = ImageRenderer(content: MyView())\nif let image = renderer.uiImage {\n    // use the UIImage\n}\n```",
+      "pitfall": "Using UIKit's `UIGraphicsImageRenderer`, which requires bridging through a hosting controller.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "interop",
+        "styling",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/imagerenderer.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "ImageRenderer"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "UIGraphicsImageRenderer"
+        ]
+      }
+    },
+    "q57-unique-constraints-in-swiftdata-with-cloudkit": {
+      "id": "q57-unique-constraints-in-swiftdata-with-cloudkit",
+      "order": 57,
+      "title": "Unique Constraints in SwiftData with CloudKit",
+      "question": "I'm syncing a SwiftData model through CloudKit and need emails to be unique. What's the safe way to handle that?",
+      "referenceAnswer": "If using CloudKit sync, never use `@Attribute(.unique)` — CloudKit doesn't support unique constraints and sync will fail. Handle uniqueness in application logic or check before insert.",
+      "pitfall": "Using `@Attribute(.unique)` in a CloudKit-synced model.",
+      "evidenceBasis": "curated",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "persistence",
+        "swiftdata",
+        "swiftui"
+      ],
+      "goldEvidence": [],
+      "rubric": {
+        "mustMention": [
+          "CloudKit"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q58-swiftdata-relationships-with-cloudkit": {
+      "id": "q58-swiftdata-relationships-with-cloudkit",
+      "order": 58,
+      "title": "SwiftData Relationships with CloudKit",
+      "question": "My SwiftData model has a `tags` relationship defined as `var tags: [Tag]`. Does it need to be optional for CloudKit?",
+      "referenceAnswer": "Yes. All CloudKit-synced SwiftData relationships must be optional, and all properties must have defaults:\n\n```swift\n@Model\nclass Article {\n    var title: String = \"\"\n    var tags: [Tag]? // Must be optional for CloudKit\n}\n```",
+      "pitfall": "Non-optional relationships causing CloudKit sync failures.",
+      "evidenceBasis": "curated",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "persistence",
+        "swiftdata",
+        "swiftui"
+      ],
+      "goldEvidence": [],
+      "rubric": {
+        "mustMention": [
+          "optional"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q59-displaying-a-person-s-full-name": {
+      "id": "q59-displaying-a-person-s-full-name",
+      "order": 59,
+      "title": "Displaying a Person's Full Name",
+      "question": "I have `firstName` and `lastName` strings. Should I display them as `Text(\"\\(firstName) \\(lastName)\")`?",
+      "referenceAnswer": "Use `PersonNameComponents` — name order varies by culture:\n\n```swift\nvar name: PersonNameComponents {\n    var c = PersonNameComponents()\n    c.givenName = firstName\n    c.familyName = lastName\n    return c\n}\n\nText(name.formatted(.name(style: .long)))\n```",
+      "pitfall": "String interpolation assumes Western name ordering, breaking for other cultures.",
+      "evidenceBasis": "curated",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "formatting",
+        "strings",
+        "swiftui"
+      ],
+      "goldEvidence": [],
+      "rubric": {
+        "mustMention": [
+          "PersonNameComponents"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q60-overlaying-a-badge-on-an-image": {
+      "id": "q60-overlaying-a-badge-on-an-image",
+      "order": 60,
+      "title": "Overlaying a Badge on an Image",
+      "question": "I want to overlay a notification badge on the top-right corner of a product image. What's the correct overlay syntax in modern SwiftUI?",
+      "referenceAnswer": "Use the trailing-closure form:\n\n```swift\nImage(\"product\")\n    .overlay(alignment: .topTrailing) {\n        BadgeView()\n    }\n```",
+      "pitfall": "Using the deprecated `.overlay(SomeView(), alignment:)` syntax where the view is the first argument.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "styling",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/overlay(alignment:content:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          ".overlay(alignment:"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q61-sharing-mutable-state-with-a-child-view": {
+      "id": "q61-sharing-mutable-state-with-a-child-view",
+      "order": 61,
+      "title": "Sharing Mutable State with a Child View",
+      "question": "I declared `@State var count = 0` in my view. A child view also needs to mutate it — should the child also declare `@State var count`?",
+      "referenceAnswer": "No. `@State` is private and owned by one view. Pass a binding:\n\n```swift\n// Parent\n@State private var count = 0\nvar body: some View { ChildView(count: $count) }\n\n// Child\nstruct ChildView: View {\n    @Binding var count: Int\n}\n```\n\nIf the child only reads, pass the value as `let`.",
+      "pitfall": "Declaring `@State` in multiple views for the same data, creating independent copies.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "data-flow",
+        "state-management",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/binding.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "@Binding"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q62-setting-up-swiftui-previews": {
+      "id": "q62-setting-up-swiftui-previews",
+      "order": 62,
+      "title": "Setting Up SwiftUI Previews",
+      "question": "I need to set up previews for my view. What's the modern preview syntax?",
+      "referenceAnswer": "Use the `#Preview` macro:\n\n```swift\n#Preview {\n    ContentView()\n}\n\n#Preview(\"Dark Mode\") {\n    ContentView()\n        .preferredColorScheme(.dark)\n}\n```",
+      "pitfall": "Using the legacy `PreviewProvider` protocol with `static var previews`.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "previews",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/previews-in-xcode.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "#Preview"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "PreviewProvider"
+        ]
+      }
+    },
+    "q63-menu-with-only-an-icon-label": {
+      "id": "q63-menu-with-only-an-icon-label",
+      "order": 63,
+      "title": "Menu with Only an Icon Label",
+      "question": "I'm creating a `Menu` with just an SF Symbol icon as its label. Is that sufficient?",
+      "referenceAnswer": "No — include a text label:\n\n```swift\nMenu(\"Options\", systemImage: \"ellipsis.circle\") {\n    Button(\"Edit\", action: edit)\n    Button(\"Delete\", role: .destructive, action: delete)\n}\n```\n\nThe text label is used by VoiceOver even if only the icon is displayed.",
+      "pitfall": "Icon-only Menu labels, invisible to assistive technology.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "presentation",
+        "styling",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/menu.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "Menu(",
+          "systemImage"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q64-color-only-status-indicators": {
+      "id": "q64-color-only-status-indicators",
+      "order": 64,
+      "title": "Color-Only Status Indicators",
+      "question": "I'm using colored circles to indicate status: red for error, yellow for warning, green for OK. Is this enough?",
+      "referenceAnswer": "Color alone isn't sufficient. Check `accessibilityDifferentiateWithoutColor` and provide secondary indicators:\n\n```swift\n@Environment(\\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor\n\nHStack {\n    Circle().fill(statusColor).frame(width: 12, height: 12)\n    if differentiateWithoutColor {\n        Image(systemName: statusIcon)\n    }\n    Text(statusLabel)\n}\n```",
+      "pitfall": "Using only color to convey meaning — unusable for colorblind users.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "styling",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/environmentvalues/accessibilitydifferentiatewithoutcolor.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "accessibilityDifferentiateWithoutColor"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q65-type-safe-asset-catalog-references": {
+      "id": "q65-type-safe-asset-catalog-references",
+      "order": 65,
+      "title": "Type-Safe Asset Catalog References",
+      "question": "I'm loading images from my asset catalog using string names. Is there a safer way to reference assets that catches errors at compile time?",
+      "referenceAnswer": "Use generated asset symbols:\n\n```swift\nImage(.avatar)  // instead of Image(\"avatar\")\n```\n\nThis provides compile-time safety — errors surface if the asset is renamed or deleted.",
+      "pitfall": "String-based `Image(\"avatar\")` which fails silently at runtime.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "assets",
+        "formatting",
+        "strings",
+        "styling",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/image/init(_:).md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/images.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "Image(."
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q66-accepting-child-content-in-a-custom-view": {
+      "id": "q66-accepting-child-content-in-a-custom-view",
+      "order": 66,
+      "title": "Accepting Child Content in a Custom View",
+      "question": "I'm building a `CardView<Content: View>` that accepts child content via a `let content: () -> Content` closure property. Is this the right way?",
+      "referenceAnswer": "Store the built view value instead of an escaping closure:\n\n```swift\nstruct CardView<Content: View>: View {\n    @ViewBuilder let content: Content\n\n    var body: some View {\n        VStack(alignment: .leading) { content }\n            .padding()\n            .background(.ultraThinMaterial)\n            .clipShape(.rect(cornerRadius: 8))\n    }\n}\n```",
+      "pitfall": "Storing `() -> Content` as an escaping closure, which has overhead and is called repeatedly.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "composition",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/viewbuilder.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "@ViewBuilder",
+          "Content"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q67-parsing-an-iso-8601-date-string": {
+      "id": "q67-parsing-an-iso-8601-date-string",
+      "order": 67,
+      "title": "Parsing an ISO 8601 Date String",
+      "question": "I have an ISO 8601 date string from an API that I need to convert to a `Date`. What's the cleanest approach?",
+      "referenceAnswer": "Use the modern `Date` initializer with a parse strategy:\n\n```swift\nlet date = try Date(\"2026-04-07T12:00:00Z\", strategy: .iso8601)\n```",
+      "pitfall": "Creating an `ISO8601DateFormatter` instance when a one-line initializer exists.",
+      "evidenceBasis": "curated",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "formatting",
+        "strings",
+        "swiftui"
+      ],
+      "goldEvidence": [],
+      "rubric": {
+        "mustMention": [
+          "strategy:",
+          ".iso8601"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "ISO8601DateFormatter"
+        ]
+      }
+    },
+    "q68-handling-errors-from-user-actions": {
+      "id": "q68-handling-errors-from-user-actions",
+      "order": 68,
+      "title": "Handling Errors from User Actions",
+      "question": "In my `catch` block, I'm calling `print(error.localizedDescription)` to log the error. Is there anything else I should do?",
+      "referenceAnswer": "Errors from user actions must be surfaced to the user, not silently swallowed:\n\n```swift\n@State private var errorMessage: String?\n@State private var showError = false\n\nfunc save() {\n    do { try dataStore.save() }\n    catch {\n        errorMessage = error.localizedDescription\n        showError = true\n    }\n}\n\n// In body:\n.alert(\"Save Failed\", isPresented: $showError) { }\n    message: { Text(errorMessage ?? \"Unknown error\") }\n```\n\n`print()` in a catch is only appropriate for development debugging.",
+      "pitfall": "Using `print()` as the only error handling for user-initiated actions.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/alert(_:ispresented:presenting:actions:message:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          ".alert"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q69-missing-combine-at-runtime": {
+      "id": "q69-missing-combine-at-runtime",
+      "order": 69,
+      "title": "Missing Combine at Runtime",
+      "question": "I'm using a Combine publisher for debouncing in my ObservableObject, but I'm getting a runtime error about missing Combine. What's wrong?",
+      "referenceAnswer": "You need to explicitly `import Combine`. It's no longer provided implicitly through SwiftUI:\n\n```swift\nimport SwiftUI\nimport Combine\n\nclass SearchDebouncer: ObservableObject {\n    @Published var searchText = \"\"\n    // Combine publisher setup...\n}\n```\n\nNote: `ObservableObject` is legacy but is still appropriate when you need Combine publishers for debouncing.",
+      "pitfall": "Assuming `import SwiftUI` provides Combine implicitly.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "data-flow",
+        "legacy-api",
+        "state-management",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/combine/observableobject.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "import Combine"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q70-subtle-text-hierarchy-with-transparency": {
+      "id": "q70-subtle-text-hierarchy-with-transparency",
+      "order": 70,
+      "title": "Subtle Text Hierarchy with Transparency",
+      "question": "I want my subtitle text to be slightly transparent to create visual hierarchy. Should I use `.opacity(0.6)` on the Text?",
+      "referenceAnswer": "Use hierarchical styles which adapt to context automatically:\n\n```swift\nText(\"Subtitle\")\n    .foregroundStyle(.secondary)\n```\n\nAvailable: `.primary`, `.secondary`, `.tertiary`, `.quaternary`. These adapt to light/dark mode and accessibility settings.",
+      "pitfall": "Using `.opacity(0.6)` which doesn't adapt to different appearances.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "formatting",
+        "strings",
+        "styling",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/hierarchicalshapestyle.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          ".secondary"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          ".opacity("
+        ]
+      }
+    },
+    "q71-where-to-attach-an-accessibility-label": {
+      "id": "q71-where-to-attach-an-accessibility-label",
+      "order": 71,
+      "title": "Where to Attach an Accessibility Label",
+      "question": "Can I add a hidden `accessibilityLabel` to the Image inside my button instead of labeling the button itself?",
+      "referenceAnswer": "No. The accessibility label should be attached to the interactive element — the button — not the decorative image inside it. Use `Button(\"Delete\", systemImage: \"trash\", action: delete)` which provides the label to the button itself. If you label only the image, VoiceOver may not associate the label with the tappable control.",
+      "pitfall": "Attaching accessibility labels to decorative child views instead of the interactive parent.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "accessibility",
+        "interaction",
+        "styling",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/accessibilitylabel(_:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "Button("
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q72-hiding-an-interactive-element-from-voiceover": {
+      "id": "q72-hiding-an-interactive-element-from-voiceover",
+      "order": 72,
+      "title": "Hiding an Interactive Element from VoiceOver",
+      "question": "Is it okay to use `accessibilityHidden(true)` on an interactive control to stop VoiceOver from reading it?",
+      "referenceAnswer": "Never hide interactive elements from VoiceOver. This makes the control completely invisible to users who rely on assistive technology. Instead, provide a proper text label. If VoiceOver reads something unexpected, fix the label rather than hiding the element.",
+      "pitfall": "Using `accessibilityHidden(true)` on buttons or other interactive controls.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "accessibility",
+        "interaction",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/accessibilityhidden(_:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "accessibilityHidden(true)"
+        ]
+      }
+    },
+    "q73-mixing-old-and-new-navigation-apis": {
+      "id": "q73-mixing-old-and-new-navigation-apis",
+      "order": 73,
+      "title": "Mixing Old and New Navigation APIs",
+      "question": "I'm migrating an older screen to SwiftUI's newer navigation model. What migration path should I follow?",
+      "referenceAnswer": "Replace `NavigationView` entirely with `NavigationStack` (or `NavigationSplitView` where the layout is multi-column). Nesting the old and new containers causes undefined behavior, double navigation bars, and broken push/pop animations. The newer navigation APIs are the replacement, not a supplement.",
+      "pitfall": "Wrapping `NavigationStack` inside `NavigationView` during an incremental migration.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "navigation",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/navigationstack.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "NavigationStack"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": [
+          "NavigationView"
+        ]
+      }
+    },
+    "q74-heavy-computation-in-a-view-body": {
+      "id": "q74-heavy-computation-in-a-view-body",
+      "order": 74,
+      "title": "Heavy Computation in a View Body",
+      "question": "Is it okay to do expensive work like JSON parsing in the view body, since SwiftUI caches view values between renders?",
+      "referenceAnswer": "No. SwiftUI does not cache view body evaluations. The `body` property is re-evaluated on every state change. Expensive work like parsing, sorting, or network calls should be in `.task()` or your data model layer:\n\n```swift\n@State private var items: [Item] = []\n\nvar body: some View {\n    List(items) { item in Text(item.name) }\n        .task { items = try? await parseAndLoad() }\n}\n```",
+      "pitfall": "Assuming SwiftUI caches body computations. It doesn't — body runs on every state change.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "composition",
+        "data-flow",
+        "performance",
+        "state-management",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/view/task(id:name:priority:file:line:_:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          ".task"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q75-calling-async-code-from-a-button": {
+      "id": "q75-calling-async-code-from-a-button",
+      "order": 75,
+      "title": "Calling Async Code from a Button",
+      "question": "What's the best way to start async work from a button tap?",
+      "referenceAnswer": "Button action closures are synchronous. Wrap async calls in `Task`:\n\n```swift\nButton(\"Load\") {\n    Task {\n        await loadData()\n    }\n}\n```\n\nFor async work tied to state changes, prefer `.task()` with a trigger value. Avoid creating tasks in `body` or `init`.",
+      "pitfall": "Attempting to use `await` in a synchronous button closure.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "targeted",
+      "taxonomyTags": [
+        "concurrency",
+        "interaction",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/button.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [
+          "Task {"
+        ],
+        "mustMentionAnyOf": [],
+        "mustNotMention": []
+      }
+    },
+    "q76-bringing-liquid-glass-into-an-app": {
+      "id": "q76-bringing-liquid-glass-into-an-app",
+      "order": 76,
+      "title": "Bringing Liquid Glass into an App",
+      "question": "How can I bring the new Liquid Glass look into my app without making everything muddy? I'm trying to understand what SwiftUI gives me automatically, what I need to do for custom views, and what to watch for with performance.",
+      "referenceAnswer": "Start by letting system components carry as much of the effect as possible — toolbars and standard controls already pick up the system's Liquid Glass styling in the right contexts. For custom elements, use `glassEffect(_:in:)` and choose the shape, tint, and interactivity that fit the component. When multiple glass elements should blend or morph together, put them in a `GlassEffectContainer`, and use `glassEffectID(_:in:)` or `glassEffectUnion(id:namespace:)` when you need coordinated transitions or a unified capsule. If a hero image needs to blur and extend under a sidebar or inspector, use `backgroundExtensionEffect()` on the image layer instead of the whole card. Keep the effect focused: too many separate glass containers or too many onscreen glass effects will hurt rendering performance.",
+      "pitfall": "Sprinkling Liquid Glass across every layer, or using separate containers when a group of controls should blend and animate together.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "synthesis",
+      "taxonomyTags": [
+        "animation",
+        "composition",
+        "performance",
+        "styling",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/applying-liquid-glass-to-custom-views.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/landmarks-building-an-app-with-liquid-glass.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/landmarks-refining-the-system-provided-glass-effect-in-toolbars.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/glasseffectcontainer.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/view/glasseffect(_:in:).md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/view/backgroundextensioneffect().md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [],
+        "mustMentionAnyOf": [
+          [
+            "system-provided",
+            "system provided",
+            "toolbar"
+          ],
+          [
+            "glassEffect",
+            "glass effect"
+          ],
+          [
+            "GlassEffectContainer",
+            "glass effect container"
+          ],
+          [
+            "backgroundExtensionEffect",
+            "background extension effect",
+            "performance"
+          ]
+        ],
+        "mustNotMention": [],
+        "passThreshold": 0.75
+      }
+    },
+    "q77-structuring-navigation-for-a-multi-screen-app": {
+      "id": "q77-structuring-navigation-for-a-multi-screen-app",
+      "order": 77,
+      "title": "Structuring Navigation for a Multi-Screen App",
+      "question": "I'm building a SwiftUI app with tabs, drill-down detail screens, and some deep links. How should I structure navigation so it scales cleanly across iPhone, iPad, and Mac?",
+      "referenceAnswer": "Use the modern navigation stack end-to-end. Put top-level sections in `TabView` when tabs make sense, use `NavigationStack` for push-style flows, and move to `NavigationSplitView` for multi-column layouts on larger screens. Prefer value-based `NavigationLink` plus `navigationDestination(for:)` so navigation state stays data-driven. Reach for `NavigationPath` when you need programmatic navigation, deep-link restoration, or more flexible serialized state. Keep one navigation model per flow instead of mixing old `NavigationView` patterns with new stack/split APIs.",
+      "pitfall": "Mixing deprecated and modern navigation APIs, or encoding navigation state ad hoc instead of using value-based destinations and paths.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "synthesis",
+      "taxonomyTags": [
+        "data-flow",
+        "navigation",
+        "state-management",
+        "swiftui",
+        "tabs"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/migrating-to-new-navigation-types.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/bringing-robust-navigation-structure-to-your-swiftui-app.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/navigationstack.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/navigationsplitview.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/navigationpath.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/view/navigationdestination(for:destination:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [],
+        "mustMentionAnyOf": [
+          [
+            "NavigationStack"
+          ],
+          [
+            "NavigationSplitView"
+          ],
+          [
+            "navigationDestination",
+            "value-based NavigationLink",
+            "value based NavigationLink"
+          ],
+          [
+            "NavigationPath",
+            "deep link",
+            "state restoration"
+          ]
+        ],
+        "mustNotMention": [],
+        "passThreshold": 0.75
+      }
+    },
+    "q78-designing-search-for-a-larger-swiftui-app": {
+      "id": "q78-designing-search-for-a-larger-swiftui-app",
+      "order": 78,
+      "title": "Designing Search for a Larger SwiftUI App",
+      "question": "I need search in a larger SwiftUI app with split views and a few different result types. How do placement, scopes, suggestions, and programmatic control fit together?",
+      "referenceAnswer": "Start by deciding which container or column owns search, then apply `searchable` there — attaching it to the whole `NavigationSplitView` gives automatic placement, while attaching it to a specific column makes the ownership explicit. Treat `SearchFieldPlacement` as a hint rather than a guarantee, because placement changes with platform and collapsed layouts. Layer in `searchScopes`, `searchSuggestions`, and `searchCompletion` when the search experience needs filtering or guided discovery. Use environment values like `isSearching` and `dismissSearch`, plus search focus APIs, when you need to reveal, focus, or dismiss the field programmatically. The prompt text should clarify what the search actually covers when the app has multiple result domains.",
+      "pitfall": "Assuming one `searchable` placement behaves identically across macOS, iPad, and collapsed navigation states.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "synthesis",
+      "taxonomyTags": [
+        "data-flow",
+        "input",
+        "navigation",
+        "search",
+        "state-management",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/adding-a-search-interface-to-your-app.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/managing-search-interface-activation.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/searchfieldplacement.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/view/searchscopes(_:activation:_:).md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/view/searchsuggestions(_:).md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/view/searchcompletion(_:).md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [],
+        "mustMentionAnyOf": [
+          [
+            "searchable"
+          ],
+          [
+            "SearchFieldPlacement",
+            "placement"
+          ],
+          [
+            "searchScopes",
+            "search scopes"
+          ],
+          [
+            "searchSuggestions",
+            "searchCompletion",
+            "suggestions"
+          ],
+          [
+            "dismissSearch",
+            "isSearching",
+            "searchFocused"
+          ]
+        ],
+        "mustNotMention": [],
+        "passThreshold": 0.75
+      }
+    },
+    "q79-choosing-container-views-for-a-complex-screen": {
+      "id": "q79-choosing-container-views-for-a-complex-screen",
+      "order": 79,
+      "title": "Choosing Container Views for a Complex Screen",
+      "question": "I'm building a screen that mixes settings-style controls, long scrolling sections, and some grid-like content. How do I choose between stacks, lazy stacks, lists, forms, and grids?",
+      "referenceAnswer": "Use stacks as the basic layout tool, and only move to lazy stacks when profiling shows a real performance win for large scrollable content. Choose `List` when you want system-standard collection behavior like row affordances, edit actions, and lazy loading, and choose `Form` for settings or data-entry surfaces that should adopt platform conventions automatically. Use grids when the content is genuinely two-dimensional or should scale up more naturally on larger devices. For highly custom scrolling experiences, combine `ScrollView` with lazy stacks or grids rather than forcing everything through `List`. In general, let the container express the interaction model, not only the visual arrangement.",
+      "pitfall": "Defaulting to one container everywhere — especially hand-rolling settings screens in generic stacks or using lazy containers before measuring whether they help.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "synthesis",
+      "taxonomyTags": [
+        "performance",
+        "scrolling",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/picking-container-views-for-your-content.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/layout-fundamentals.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/building-layouts-with-stack-views.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/layout-adjustments.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/grouping-data-with-lazy-stack-views.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/view-layout.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [],
+        "mustMentionAnyOf": [
+          [
+            "VStack",
+            "HStack",
+            "stack"
+          ],
+          [
+            "LazyVStack",
+            "lazy stack"
+          ],
+          [
+            "List",
+            "Form"
+          ],
+          [
+            "LazyVGrid",
+            "grid"
+          ]
+        ],
+        "mustNotMention": [],
+        "passThreshold": 0.75
+      }
+    },
+    "q80-making-a-custom-interface-accessible": {
+      "id": "q80-making-a-custom-interface-accessible",
+      "order": 80,
+      "title": "Making a Custom Interface Accessible",
+      "question": "I have a custom SwiftUI interface that looks good visually, but I want it to work well with VoiceOver, keyboard focus, and other accessibility navigation. What should I be thinking about?",
+      "referenceAnswer": "Start with the basics: interactive elements need clear labels, values, and traits on the control itself, not on decorative children. Then make focus behavior intentional with APIs like `focusable`, `FocusState`, `defaultFocus`, and focused values/objects when keyboard or scene focus matters. Use grouping, headings, and sort priority to make reading order predictable, and add custom rotors or linked groups when people need to jump across structured or off-screen content. For status and animation, also respect environment settings like Reduce Motion and Differentiate Without Color so important meaning is not carried only by motion or color. Accessibility in SwiftUI is as much about navigation structure as it is about labels.",
+      "pitfall": "Treating accessibility as a layer of labels added at the end, while leaving focus order, grouping, and alternate navigation paths undefined.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "synthesis",
+      "taxonomyTags": [
+        "accessibility",
+        "navigation",
+        "styling",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/accessibility-fundamentals.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/creating-accessible-views.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/accessible-controls.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/accessible-navigation.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/focus.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/focus-cookbook-sample.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [],
+        "mustMentionAnyOf": [
+          [
+            "accessibility label",
+            "labels",
+            "traits"
+          ],
+          [
+            "FocusState",
+            "focusable",
+            "defaultFocus"
+          ],
+          [
+            "accessibilityRotor",
+            "rotor",
+            "sort priority",
+            "heading"
+          ],
+          [
+            "Reduce Motion",
+            "Differentiate Without Color",
+            "accessibilityReduceMotion",
+            "accessibilityDifferentiateWithoutColor"
+          ]
+        ],
+        "mustNotMention": [
+          "accessibilityHidden(true)"
+        ],
+        "passThreshold": 0.75
+      }
+    },
+    "q81-structuring-a-document-based-cross-platform-app": {
+      "id": "q81-structuring-a-document-based-cross-platform-app",
+      "order": 81,
+      "title": "Structuring a Document-Based Cross-Platform App",
+      "question": "If I were building a document-based SwiftUI app today, what should the top-level app structure look like across document windows, shared app state, and settings?",
+      "referenceAnswer": "Define a single `@main App` entry point and compose the app's scenes explicitly. Use `DocumentGroup` for document windows, add `Settings` for app preferences where appropriate, and add other scenes like `WindowGroup` only for non-document flows. Pick the document model that matches the app: `FileDocument`, `ReferenceFileDocument`, or the SwiftData-oriented document initializers when the model lives there. Keep truly shared app state at the app level and inject it into scenes, while letting each document window own its own document instance. If you want a polished launch experience, use the document-launch APIs rather than baking launch behavior into a regular content window.",
+      "pitfall": "Treating document windows like ordinary app windows, which leads to the wrong scene structure and duplicated or misplaced shared state.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "synthesis",
+      "taxonomyTags": [
+        "data-flow",
+        "documents",
+        "persistence",
+        "state-management",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/app-organization.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/documents.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/documentgroup.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/building-a-document-based-app-with-swiftui.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/building-a-document-based-app-using-swiftdata.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/scenes.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [],
+        "mustMentionAnyOf": [
+          [
+            "@main App",
+            "App entry point",
+            "scenes"
+          ],
+          [
+            "DocumentGroup"
+          ],
+          [
+            "Settings",
+            "WindowGroup"
+          ],
+          [
+            "FileDocument",
+            "ReferenceFileDocument",
+            "SwiftData"
+          ],
+          [
+            "shared state",
+            "inject",
+            "environment"
+          ]
+        ],
+        "mustNotMention": [],
+        "passThreshold": 0.75
+      }
+    },
+    "q82-bridging-uikit-or-appkit-into-swiftui": {
+      "id": "q82-bridging-uikit-or-appkit-into-swiftui",
+      "order": 82,
+      "title": "Bridging UIKit or AppKit into SwiftUI",
+      "question": "I need to wrap an existing UIKit or AppKit control inside SwiftUI. How do I do that without fighting layout, update cycles, or accessibility?",
+      "referenceAnswer": "Use the bridge that matches the direction of integration. When native views or view controllers need to live inside SwiftUI, use representable wrappers and keep state flowing from SwiftUI into the wrapped object through the make/update lifecycle. Add a coordinator when you need delegates, target-action callbacks, or other imperative plumbing. When SwiftUI needs to live inside an existing UIKit or AppKit surface, use hosting controllers or hosting configuration APIs so sizing and environment propagation stay consistent. In both directions, let the framework own sizing as much as possible and make sure accessibility labels, values, and semantics are surfaced at the interactive boundary instead of getting lost inside the wrapped control.",
+      "pitfall": "Manually forcing frames and one-off callbacks around the wrapped control instead of using representables, coordinators, and hosting APIs as the bridge.",
+      "evidenceBasis": "corpus",
+      "platformScope": "all",
+      "questionShape": "synthesis",
+      "taxonomyTags": [
+        "accessibility",
+        "formatting",
+        "interop",
+        "layout",
+        "strings",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/uikit-integration.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/appkit-integration.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/nsviewrepresentable.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/nsviewcontrollerrepresentable.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/nshostingcontroller.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [],
+        "mustMentionAnyOf": [
+          [
+            "UIViewRepresentable",
+            "NSViewRepresentable",
+            "representable"
+          ],
+          [
+            "Coordinator",
+            "delegate"
+          ],
+          [
+            "UIHostingController",
+            "NSHostingController",
+            "hosting configuration",
+            "hosting controller"
+          ],
+          [
+            "layout",
+            "sizing",
+            "sizeThatFits"
+          ],
+          [
+            "accessibility"
+          ]
+        ],
+        "mustNotMention": [],
+        "passThreshold": 0.75
+      }
+    },
+    "q83-building-a-native-menu-bar-for-a-mac-app": {
+      "id": "q83-building-a-native-menu-bar-for-a-mac-app",
+      "order": 83,
+      "title": "Building a Native Menu Bar for a Mac App",
+      "question": "I'm building a Mac app in SwiftUI. What's the right way to add app-specific menu bar commands, keyboard shortcuts, and dynamic menu state without rebuilding the system menus from scratch?",
+      "referenceAnswer": "Let your scenes provide the default menu structure, then extend it with the commands system. Attach `.commands` to the relevant scene, use `CommandMenu` for top-level app-specific menus, and use `CommandGroup` when you want to insert, replace, or extend standard system menu groups. Pull in built-in command sets like `SidebarCommands`, `ToolbarCommands`, or text-formatting commands when the app supports those capabilities, rather than recreating them manually. Add `keyboardShortcut` where it improves discoverability, and use focused values or other scene-aware state so menu titles and enablement follow the active window and selection.",
+      "pitfall": "Treating the menu bar like a pile of custom buttons, or replacing standard command groups when the app really just needs to extend them.",
+      "evidenceBasis": "corpus",
+      "platformScope": "macos",
+      "questionShape": "synthesis",
+      "taxonomyTags": [
+        "commands",
+        "data-flow",
+        "formatting",
+        "interaction",
+        "macos",
+        "presentation",
+        "state-management",
+        "strings",
+        "swiftui"
+      ],
+      "goldEvidence": [
+        {
+          "filePath": "pages/documentation/swiftui/menus-and-commands.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/building-and-customizing-the-menu-bar-with-swiftui.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/commandmenu.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/commandgroup.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/sidebarcommands.md"
+        },
+        {
+          "filePath": "pages/documentation/swiftui/toolbarcommands.md"
+        }
+      ],
+      "rubric": {
+        "mustMention": [],
+        "mustMentionAnyOf": [
+          [
+            ".commands",
+            "commands("
+          ],
+          [
+            "CommandMenu"
+          ],
+          [
+            "CommandGroup"
+          ],
+          [
+            "SidebarCommands",
+            "ToolbarCommands",
+            "TextFormattingCommands"
+          ],
+          [
+            "keyboardShortcut",
+            "FocusedValue",
+            "focused value"
+          ]
+        ],
+        "mustNotMention": [],
+        "passThreshold": 0.75
+      }
+    }
+  }
+}

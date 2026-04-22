@@ -6,7 +6,7 @@ const repoRoot = path.resolve(appRoot, '..', '..');
 
 const datasetPath = path.join(repoRoot, 'benchmark', 'dataset', 'swiftui-docs-chatbot-benchmark.v1.json');
 const rubricPath = path.join(repoRoot, 'benchmark', 'rubric', 'rubric.v1.json');
-const outputPath = path.join(appRoot, 'src', 'generated', 'question-bank.json');
+const outputPath = path.join(appRoot, 'public', 'generated', 'question-bank.json');
 
 const dataset = JSON.parse(readFileSync(datasetPath, 'utf8'));
 const rubric = JSON.parse(readFileSync(rubricPath, 'utf8'));

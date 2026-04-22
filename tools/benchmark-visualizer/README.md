@@ -28,6 +28,7 @@ npm run build
 ## Notes
 
 - Data stays in browser. No server upload.
+- Generated snapshot data now lives under `public/generated/` so the browser can fetch it without baking the full benchmark bundle into the main JS chunk.
 - Question metadata is generated from repo benchmark assets via `npm run generate:question-bank`.
 - Bundled recent runs are generated from `benchmark-results/` and prefer complete benchmark suites over smoke or partial runs.
 - Best experience: upload `aggregate.json` files from directories under `benchmark-results/`.

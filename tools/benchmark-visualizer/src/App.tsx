@@ -1,25 +1,25 @@
 import {
+  Suspense,
+  lazy,
   useEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import {
+  EMPTY_QUESTION_BANK,
+  EMPTY_RECENT_RUNS_BUNDLE,
+  buildQuestionList,
   dedupeExecutions,
-  loadBundledRecentExecutions,
+  loadBundledSnapshot,
   loadExecutionsFromFiles,
   pickAggregateFiles,
-  questionBank,
-  questionList,
-  recentRunsBundle,
 } from './lib/aggregate';
-import type { EnrichedRun, LoadedExecution, QuestionMeta } from './types';
+import type { BundledSnapshot, EnrichedRun, LoadedExecution, QuestionMeta } from './types';
 
 type FilterMode = 'all' | 'interesting' | 'errors' | 'disagreement';
-type SortMode = 'dataset' | 'worst-average' | 'most-disagreement';
+type SortMode = 'dataset' | 'judge-risk' | 'most-disagreement';
 type ThemeMode = 'light' | 'dark';
 type AnswerSortMode = 'execution-order' | 'score-desc' | 'judge-best' | 'cost-low';
 
@@ -33,6 +33,8 @@ interface QuestionGroup {
   judgeCorrectRate: number | null;
   meanCompleteness: number | null;
   referenceVerifiedRate: number | null;
+  judgeCoverageRate: number | null;
+  judgeCoverageCount: number;
   disagreementCount: number;
   hasErrors: boolean;
   hasIncorrect: boolean;
@@ -46,10 +48,7 @@ interface MetricDefinition {
 }
 
 const THEME_STORAGE_KEY = 'benchmark-visualizer-theme';
-
-const bundledExecutions = loadBundledRecentExecutions().sort((left, right) =>
-  left.label.localeCompare(right.label),
-);
+const LazyMarkdownBlock = lazy(() => import('./components/MarkdownBlock'));
 
 const summaryMetrics: MetricDefinition[] = [
   {
@@ -72,6 +71,12 @@ const summaryMetrics: MetricDefinition[] = [
     label: 'Reference verified rate',
     higherIsBetter: true,
     value: (execution) => execution.summary.judge?.referenceVerifiedRate,
+    format: (value) => formatPercent(value),
+  },
+  {
+    label: 'Judge coverage',
+    higherIsBetter: true,
+    value: (execution) => ratio(execution.summary.judge?.judgeRuns, execution.summary.runs),
     format: (value) => formatPercent(value),
   },
   {
@@ -147,12 +152,10 @@ const summaryMetrics: MetricDefinition[] = [
 ];
 
 function App() {
-  const [executions, setExecutions] = useState<LoadedExecution[]>(bundledExecutions);
-  const [messages, setMessages] = useState<string[]>(() =>
-    bundledExecutions.length > 0
-      ? [`Loaded ${bundledExecutions.length} recent run(s) bundled from repo snapshot.`]
-      : [],
-  );
+  const [bundledSnapshot, setBundledSnapshot] = useState<BundledSnapshot | null>(null);
+  const [bundleLoadError, setBundleLoadError] = useState<string | null>(null);
+  const [executions, setExecutions] = useState<LoadedExecution[]>([]);
+  const [messages, setMessages] = useState<string[]>([]);
   const [search, setSearch] = useState('');
   const [filterMode, setFilterMode] = useState<FilterMode>('interesting');
   const [sortMode, setSortMode] = useState<SortMode>('dataset');
@@ -161,19 +164,49 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
-  const [executionOrder, setExecutionOrder] = useState<string[]>(() =>
-    bundledExecutions.map((execution) => execution.id),
-  );
+  const [executionOrder, setExecutionOrder] = useState<string[]>([]);
   const [hiddenExecutionIds, setHiddenExecutionIds] = useState<string[]>([]);
   const [openAnswerRows, setOpenAnswerRows] = useState<Record<string, boolean>>({});
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const questionBank = bundledSnapshot?.questionBank ?? EMPTY_QUESTION_BANK;
+  const questionList = bundledSnapshot?.questionList ?? buildQuestionList(questionBank);
+  const recentRunsBundle = bundledSnapshot?.recentRunsBundle ?? EMPTY_RECENT_RUNS_BUNDLE;
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void loadBundledSnapshot()
+      .then((snapshot) => {
+        if (cancelled) {
+          return;
+        }
+        const bundledExecutions = [...snapshot.bundledExecutions].sort((left, right) =>
+          left.label.localeCompare(right.label),
+        );
+        setBundledSnapshot(snapshot);
+        setExecutions(bundledExecutions);
+        setExecutionOrder(bundledExecutions.map((execution) => execution.id));
+        setMessages([`Loaded ${bundledExecutions.length} recent run(s) bundled from repo snapshot.`]);
+        setBundleLoadError(null);
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+        setBundleLoadError(error instanceof Error ? error.message : String(error));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const executionIds = new Set(executions.map((execution) => execution.id));
@@ -202,8 +235,8 @@ function App() {
   }, [hiddenExecutionIds, orderedExecutions]);
 
   const questionGroups = useMemo(
-    () => buildQuestionGroups(visibleExecutions),
-    [visibleExecutions],
+    () => buildQuestionGroups(visibleExecutions, questionList),
+    [questionList, visibleExecutions],
   );
 
   const visibleQuestionGroups = useMemo(() => {
@@ -285,17 +318,37 @@ function App() {
       (group) => group.hasIncorrect || group.hasErrors || group.disagreementCount > 1,
     ).length;
 
+    const judgeCoverageNumerator = visibleExecutions.reduce(
+      (sum, execution) => sum + (execution.summary.judge?.judgeRuns ?? 0),
+      0,
+    );
+    const judgeCoverageDenominator = visibleExecutions.reduce(
+      (sum, execution) => sum + (execution.summary.runs ?? 0),
+      0,
+    );
+    const runsWithErrors = visibleExecutions.reduce(
+      (sum, execution) => sum + (execution.summary.errors?.runsWithAnyError ?? 0),
+      0,
+    );
+
     return {
       interestingCount,
+      judgeCoverageRate: ratio(judgeCoverageNumerator, judgeCoverageDenominator),
       questionCount: questionGroups.length,
       visibleExecutions: visibleExecutions.length,
       loadedExecutions: executions.length,
       visibleQuestions: visibleQuestionGroups.length,
+      runsWithErrors,
     };
-  }, [executions.length, questionGroups, visibleExecutions.length, visibleQuestionGroups.length]);
+  }, [executions.length, questionGroups, visibleExecutions, visibleQuestionGroups.length]);
 
   async function handleFiles(fileList: FileList | null) {
     if (!fileList) {
+      return;
+    }
+
+    if (!bundledSnapshot) {
+      setMessages((current) => ['Bundled question metadata is still loading. Try again in a moment.', ...current].slice(0, 8));
       return;
     }
 
@@ -306,7 +359,7 @@ function App() {
       return;
     }
 
-    const { executions: loaded, errors } = await loadExecutionsFromFiles(pickedFiles);
+    const { executions: loaded, errors } = await loadExecutionsFromFiles(pickedFiles, bundledSnapshot.questionBank);
 
     setExecutions((current) => {
       const merged = dedupeExecutions([...current, ...loaded]);
@@ -334,6 +387,14 @@ function App() {
   }
 
   function restoreRecentRuns() {
+    if (!bundledSnapshot) {
+      setMessages((current) => ['Bundled recent runs are still loading.', ...current].slice(0, 8));
+      return;
+    }
+
+    const bundledExecutions = [...bundledSnapshot.bundledExecutions].sort((left, right) =>
+      left.label.localeCompare(right.label),
+    );
     setExecutions(bundledExecutions);
     setExecutionOrder(bundledExecutions.map((execution) => execution.id));
     setHiddenExecutionIds([]);
@@ -456,6 +517,7 @@ function App() {
 
             <SidebarSection title="Sections" defaultOpen>
               <nav className="section-nav">
+                <a href="#scoring-model">Scoring model</a>
                 <a href="#overview">Overview</a>
                 <a href="#question-review">Question review</a>
                 <a href="#metric-desk">Metric desk</a>
@@ -489,7 +551,8 @@ function App() {
                           <span>{execution.shortLabel}</span>
                         </label>
                         <div className="model-manager-meta">
-                          <span>{formatNumber(execution.summary.meanAnswerScore, 2)} score</span>
+                          <span>{formatPercent(ratio(execution.summary.judge?.judgeCorrectCount, execution.summary.judge?.judgeRuns))} judge</span>
+                          <span>{formatCount(execution.summary.judge?.judgeRuns, execution.summary.runs)} covered</span>
                           <span>{formatUsd(execution.summary.cost?.meanTotalCostUsdPerRun, 4)}</span>
                         </div>
                         <div className="model-manager-actions">
@@ -610,11 +673,18 @@ function App() {
             </div>
             <div className="stat-strip">
               <StatPill label="Models visible" value={`${totals.visibleExecutions}/${totals.loadedExecutions}`} />
-              <StatPill label="Questions loaded" value={String(totals.questionCount)} />
+              <StatPill label="Judge coverage" value={formatPercent(totals.judgeCoverageRate)} />
               <StatPill label="Questions in filter" value={String(totals.visibleQuestions)} />
-              <StatPill label="Interesting questions" value={String(totals.interestingCount)} />
+              <StatPill label="Runs with errors" value={String(totals.runsWithErrors)} />
             </div>
           </header>
+
+          {bundleLoadError ? (
+            <section className="panel empty-panel">
+              <SectionHeader title="Bundled snapshot failed to load" subtitle="The app can still open uploaded aggregates once the benchmark metadata is available locally." />
+              <p>{bundleLoadError}</p>
+            </section>
+          ) : null}
 
           {messages.length > 0 ? (
             <section className="panel note-panel">
@@ -629,7 +699,10 @@ function App() {
 
           {executions.length === 0 ? (
             <section className="panel empty-panel">
-              <SectionHeader title="No benchmark runs loaded" subtitle="Restore recent runs from sidebar or upload fresh aggregates." />
+              <SectionHeader
+                title={bundledSnapshot ? 'No benchmark runs loaded' : 'Loading benchmark snapshot'}
+                subtitle={bundledSnapshot ? 'Restore recent runs from sidebar or upload fresh aggregates.' : 'Fetching bundled benchmark metadata and recent run summaries.'}
+              />
               <p>
                 Bundled benchmark metadata: {questionBank.benchmarkName} · dataset {questionBank.datasetVersion} · rubric {questionBank.rubricVersion}
               </p>
@@ -645,19 +718,49 @@ function App() {
             </section>
           ) : (
             <>
+              <section id="scoring-model" className="panel section-panel">
+                <SectionHeader
+                  title="How to read this benchmark now"
+                  subtitle="The visualizer follows the new judge-first structure: correctness and completeness are authoritative, reference verification is supporting context, and deterministic grading is a comparison tool."
+                />
+                <div className="scoring-guide-grid">
+                  <article className="guide-card">
+                    <div className="panel-topline">1. Judge correctness is the top call</div>
+                    <h4>Use the judge to answer “was the answer right?”</h4>
+                    <p>
+                      The primary axis is centered on <strong>-1 / 0 / 1</strong>, with legacy verdict labels only kept as a compatibility view.
+                    </p>
+                  </article>
+                  <article className="guide-card">
+                    <div className="panel-topline">2. Completeness depends on question shape</div>
+                    <h4>Targeted and synthesis questions are judged differently</h4>
+                    <p>
+                      Targeted questions need actionable implementation detail. Synthesis questions need the main buckets, tradeoffs, and organization.
+                    </p>
+                  </article>
+                  <article className="guide-card">
+                    <div className="panel-topline">3. Deterministic grading is secondary</div>
+                    <h4>Keep it for comparison and debugging</h4>
+                    <p>
+                      Answer score, rubric hits, grounding, and agreement stay visible, but they no longer lead the reading of the benchmark.
+                    </p>
+                  </article>
+                </div>
+              </section>
+
               <section id="overview" className="panel section-panel">
                 <SectionHeader
                   title="Overview"
-                  subtitle="Judge correctness, completeness, and reference verification lead here. Answer score stays available as a comparison signal."
+                  subtitle="Read this left to right as judge outcome, judge coverage, and run health. Debug metrics still appear inside each expanded row."
                 />
                 <div className="ledger-table-head">
                   <span>Model</span>
                   <span>Judge correct</span>
                   <span>Completeness</span>
                   <span>Reference verified</span>
-                  <span>Answer score (debug)</span>
+                  <span>Judge coverage</span>
                   <span>Cost / run</span>
-                  <span>Errors</span>
+                  <span>Run health</span>
                 </div>
                 <div className="ledger-stack">
                   {visibleExecutions.map((execution) => (
@@ -671,7 +774,7 @@ function App() {
                         <span>{formatPercent(ratio(execution.summary.judge?.judgeCorrectCount, execution.summary.judge?.judgeRuns))}</span>
                         <span>{formatNumber(execution.summary.judge?.meanCompleteness, 2)}</span>
                         <span>{formatPercent(execution.summary.judge?.referenceVerifiedRate)}</span>
-                        <span>{formatNumber(execution.summary.meanAnswerScore, 2)}</span>
+                        <span>{formatCount(execution.summary.judge?.judgeRuns, execution.summary.runs)}</span>
                         <span>{formatUsd(execution.summary.cost?.meanTotalCostUsdPerRun, 4)}</span>
                         <span>{formatCount(execution.summary.errors?.runsWithAnyError, execution.summary.runs)}</span>
                       </summary>
@@ -679,10 +782,12 @@ function App() {
                         <div className="metric-pair-grid compact-grid">
                           <MetricPair label="Runs" value={String(execution.summary.runs ?? '—')} />
                           <MetricPair label="Judge correct rate" value={formatPercent(ratio(execution.summary.judge?.judgeCorrectCount, execution.summary.judge?.judgeRuns))} />
+                          <MetricPair label="Judge coverage" value={formatCount(execution.summary.judge?.judgeRuns, execution.summary.runs)} />
                           <MetricPair label="Completeness" value={formatNumber(execution.summary.judge?.meanCompleteness, 2)} />
                           <MetricPair label="Reference verified rate" value={formatPercent(execution.summary.judge?.referenceVerifiedRate)} />
                           <MetricPair label="Answer score (debug)" value={formatNumber(execution.summary.meanAnswerScore, 2)} />
                           <MetricPair label="MRR" value={formatNumber(execution.summary.meanRetrievalMrr, 2)} />
+                          <MetricPair label="Runs with errors" value={formatCount(execution.summary.errors?.runsWithAnyError, execution.summary.runs)} />
                         </div>
                         <div className="breakdown-ledger">
                           {getSummaryBreakdownEntries(execution.summary).map((entry) => (
@@ -708,7 +813,7 @@ function App() {
               <section id="question-review" className="panel section-panel question-review-section">
                 <SectionHeader
                   title="Question review"
-                  subtitle="Judge verdict, completeness, and reference verification stay front and center. Deterministic score stays available below for comparison."
+                  subtitle="Start with the judge call on each question, then use deterministic grading and retrieval signals to explain disagreements or failures."
                 />
 
                 <div className="review-layout">
@@ -737,7 +842,7 @@ function App() {
                           <span>Sort</span>
                           <select value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)}>
                             <option value="dataset">Dataset order</option>
-                            <option value="worst-average">Worst average first</option>
+                            <option value="judge-risk">Weakest judge outcomes first</option>
                             <option value="most-disagreement">Most disagreement first</option>
                           </select>
                         </label>
@@ -786,8 +891,8 @@ function App() {
                             <div className="question-list-item-foot">
                               <span>{humanizeToken(group.meta.evidenceBasis)}</span>
                               <span>{humanizeToken(group.meta.questionShape)}</span>
+                              <span>{formatCount(group.judgeCoverageCount, visibleExecutions.length)} judged</span>
                               <span>{formatNumber(group.meanCompleteness, 2)} comp</span>
-                              <span>{formatNumber(group.averageScore, 2)} score</span>
                               <span>{group.disagreementCount} disagreement</span>
                             </div>
                           </button>
@@ -860,11 +965,14 @@ function App() {
                               >
                                 ref verified {formatPercent(selectedGroup.referenceVerifiedRate)}
                               </Badge>
-                              <Badge tone={selectedGroup.hasIncorrect ? 'danger' : 'success'}>
-                                score {selectedGroup.averageScore === null ? '—' : formatNumber(selectedGroup.averageScore, 2)}
+                              <Badge tone="neutral">
+                                judged {formatCount(selectedGroup.judgeCoverageCount, visibleExecutions.length)}
                               </Badge>
                               <Badge tone={selectedGroup.disagreementCount > 1 ? 'warn' : 'neutral'}>
                                 disagreement {selectedGroup.disagreementCount}
+                              </Badge>
+                              <Badge tone={selectedGroup.averageScore != null && selectedGroup.averageScore >= 1 ? 'success' : 'neutral'}>
+                                debug score {selectedGroup.averageScore === null ? '—' : formatNumber(selectedGroup.averageScore, 2)}
                               </Badge>
                               {selectedGroup.hasErrors ? <Badge tone="danger">has errors</Badge> : null}
                             </div>
@@ -877,7 +985,26 @@ function App() {
                             <MarkdownBlock text={selectedGroup.meta.referenceAnswer} />
                           </section>
                           <section className="dossier-panel">
-                            <div className="panel-topline">Rubric</div>
+                            <div className="panel-topline">How this question is judged</div>
+                            <p className="mini-copy">
+                              {selectedGroup.meta.questionShape === 'synthesis'
+                                ? 'Completeness here means covering the major buckets, tradeoffs, and organization a strong synthesis answer should include.'
+                                : 'Completeness here means giving actionable implementation detail, caveats, or code-level guidance when the question calls for it.'}
+                            </p>
+                            <p className="mini-copy">
+                              {selectedGroup.meta.evidenceBasis === 'corpus'
+                                ? 'Reference verification is meaningful here because the benchmark expects the answer to line up with corpus-backed source material.'
+                                : 'Reference verification is softer here because the benchmark treats this as curated guidance rather than a direct corpus lookup task.'}
+                            </p>
+                            <div className="metric-pair-grid compact-grid">
+                              <MetricPair label="Judge coverage" value={formatCount(selectedGroup.judgeCoverageCount, visibleExecutions.length)} />
+                              <MetricPair label="Judge correct rate" value={formatPercent(selectedGroup.judgeCorrectRate)} />
+                              <MetricPair label="Mean completeness" value={formatNumber(selectedGroup.meanCompleteness, 2)} />
+                              <MetricPair label="Reference verified" value={formatPercent(selectedGroup.referenceVerifiedRate)} />
+                            </div>
+                          </section>
+                          <section className="dossier-panel">
+                            <div className="panel-topline">Rubric and evidence</div>
                             <RubricList title="Must mention" items={selectedGroup.meta.rubric.mustMention} tone="success" />
                             <RubricGroupList title="Must mention one item from each group" groups={selectedGroup.meta.rubric.mustMentionAnyOf ?? []} tone="warn" />
                             <RubricList title="Must not mention" items={selectedGroup.meta.rubric.mustNotMention} tone="danger" />
@@ -934,11 +1061,11 @@ function App() {
                               <thead>
                                 <tr>
                                   <th>Model</th>
-                                  <th>Judge verdict</th>
+                                  <th>Correctness</th>
                                   <th>Completeness</th>
                                   <th>Reference verified</th>
-                                  <th>Answer score</th>
-                                  <th>Grounded</th>
+                                  <th>Judge status</th>
+                                  <th>Deterministic</th>
                                   <th>Cost</th>
                                   <th>Error</th>
                                   <th aria-label="Expand" />
@@ -980,8 +1107,8 @@ function App() {
                                         </td>
                                         <td>{formatJudgeAxis(run?.judge?.completeness)}</td>
                                         <td>{formatBoolean(run?.judge?.referenceVerified)}</td>
-                                        <td>{run?.grade?.score == null ? '—' : String(run.grade.score)}</td>
-                                        <td>{run ? (run.grade?.grounded ? 'yes' : 'no') : '—'}</td>
+                                        <td>{run?.judge?.status ?? '—'}</td>
+                                        <td>{run?.grade?.agreement ? humanizeToken(run.grade.agreement) : run?.grade?.score == null ? '—' : String(run.grade.score)}</td>
                                         <td>{formatUsd(run?.cost?.totalUsd, 4)}</td>
                                         <td>{run ? (run.errors?.collectHadError || run.errors?.judgeHadError ? 'yes' : 'no') : '—'}</td>
                                         <td>
@@ -1032,38 +1159,14 @@ function App() {
                                                     >
                                                       reference verified {formatBoolean(run.judge?.referenceVerified)}
                                                     </Badge>
-                                                    <Badge tone={run.grade?.correct ? 'success' : 'danger'}>
-                                                      deterministic {run.grade?.correct ? 'correct' : 'incorrect'}
-                                                    </Badge>
-                                                    <Badge tone={run.grade?.grounded ? 'accent' : 'warn'}>
-                                                      grounded {run.grade?.grounded ? 'yes' : 'no'}
-                                                    </Badge>
-                                                    {run.judge?.status ? <Badge tone="neutral">status {run.judge.status}</Badge> : null}
-                                                    {run.judge?.recommendsCorrectPattern ? <Badge tone="success">correct pattern</Badge> : null}
-                                                    {run.judge?.recommendsDeprecatedPattern ? <Badge tone="danger">deprecated pattern</Badge> : null}
-                                                    {run.judge?.retrievalSupportsReferenceAnswer ? <Badge tone="accent">retrieval supports ref</Badge> : null}
-                                                    {run.grade?.agreement ? <Badge tone="neutral">agreement {humanizeToken(run.grade.agreement)}</Badge> : null}
-                                                    {run.grade?.rubricStrength ? <Badge tone="neutral">rubric {humanizeToken(run.grade.rubricStrength)}</Badge> : null}
                                                     {run.errors?.collectHadError ? <Badge tone="danger">collect error</Badge> : null}
                                                     {run.errors?.judgeHadError ? <Badge tone="danger">judge error</Badge> : null}
                                                   </div>
 
-                                                  <div className="metric-pair-grid compact-grid detail-metrics-grid">
-                                                    <MetricPair label="Confidence" value={formatNumber(run.answer?.confidence, 2)} />
-                                                    <MetricPair label="Citations" value={String(run.answer?.citationCount ?? 0)} />
-                                                    <MetricPair label="Bytes read" value={formatWholeNumber(run.grade?.retrieval?.bytesRead)} />
-                                                    <MetricPair label="Files before relevant" value={formatWholeNumber(run.grade?.retrieval?.filesReadBeforeFirstRelevantDoc)} />
-                                                    <MetricPair
-                                                      label="Time to relevant"
-                                                      value={run.grade?.retrieval?.timeToFirstRelevantDocMs == null ? '—' : `${run.grade.retrieval.timeToFirstRelevantDocMs} ms`}
-                                                    />
-                                                    <MetricPair label="Total cost" value={formatUsd(run.cost?.totalUsd, 4)} />
-                                                  </div>
-
                                                   <div className="detail-sections">
                                                     <section className="detail-section">
-                                                      <div className="panel-topline">Judge-first authority</div>
-                                                      <p className="mini-copy">Judge correctness and completeness are the primary signals here. Deterministic grade remains below for comparison and debugging.</p>
+                                                      <div className="panel-topline">Authoritative judge call</div>
+                                                      <p className="mini-copy">Start here. This is the benchmark's main read of correctness and completeness for this answer.</p>
                                                       <div className="judge-block">
                                                         <div className="judge-summary-row">
                                                           <Badge tone={verdictTone(run.judge?.verdict ?? judgeVerdictFromCorrectness(run.judge?.correctness) ?? 'unknown')}>
@@ -1091,11 +1194,6 @@ function App() {
                                                           <Badge tone={run.judge?.recommendsDeprecatedPattern ? 'danger' : 'neutral'}>
                                                             deprecated pattern {formatBoolean(run.judge?.recommendsDeprecatedPattern)}
                                                           </Badge>
-                                                          <Badge tone={run.judge?.retrievalSupportsReferenceAnswer ? 'accent' : 'warn'}>
-                                                            retrieval supports ref {formatBoolean(run.judge?.retrievalSupportsReferenceAnswer)}
-                                                          </Badge>
-                                                          {run.grade?.agreement ? <Badge tone="neutral">agreement {humanizeToken(run.grade.agreement)}</Badge> : null}
-                                                          {run.grade?.rubricStrength ? <Badge tone="neutral">rubric {humanizeToken(run.grade.rubricStrength)}</Badge> : null}
                                                         </div>
 
                                                         <div className="judge-metric-grid">
@@ -1123,13 +1221,41 @@ function App() {
                                                     </section>
 
                                                     <section className="detail-section">
-                                                      <div className="panel-topline">Deterministic grade (comparison/debug)</div>
-                                                      <p className="mini-copy">Answer score and rubric checks are still available here, but they no longer lead the review.</p>
+                                                      <div className="panel-topline">Support and caveats</div>
+                                                      <div className="judge-summary-row">
+                                                        <Badge tone={run.judge?.retrievalSupportsReferenceAnswer ? 'accent' : 'warn'}>
+                                                          retrieval supports ref {formatBoolean(run.judge?.retrievalSupportsReferenceAnswer)}
+                                                        </Badge>
+                                                        {run.grade?.agreement ? <Badge tone="neutral">agreement {humanizeToken(run.grade.agreement)}</Badge> : null}
+                                                        {run.grade?.rubricStrength ? <Badge tone="neutral">rubric {humanizeToken(run.grade.rubricStrength)}</Badge> : null}
+                                                        {run.errors?.collectHadError ? <Badge tone="danger">collect error</Badge> : null}
+                                                        {run.errors?.judgeHadError ? <Badge tone="danger">judge error</Badge> : null}
+                                                      </div>
+                                                      <div className="metric-pair-grid compact-grid detail-metrics-grid">
+                                                        <MetricPair label="Debug score" value={run.grade?.score == null ? '—' : String(run.grade.score)} />
+                                                        <MetricPair label="Grounded" value={run.grade?.grounded ? 'yes' : run ? 'no' : '—'} />
+                                                        <MetricPair label="Citations" value={String(run.answer?.citationCount ?? 0)} />
+                                                        <MetricPair label="Total cost" value={formatUsd(run.cost?.totalUsd, 4)} />
+                                                      </div>
+                                                    </section>
+
+                                                    <details className="detail-section detail-debug-panel">
+                                                      <summary className="with-indicator">Deterministic grade (comparison/debug)</summary>
+                                                      <p className="mini-copy">Use this section to explain disagreement or inspect rubric misses. It is no longer the authoritative score.</p>
                                                       <RubricList title="Passed" items={run.grade?.mustMentionPassed ?? []} tone="success" />
                                                       <RubricList title="Missing" items={run.grade?.mustMentionFailed ?? []} tone="warn" />
                                                       <RubricList title="Violated" items={run.grade?.mustNotMentionViolated ?? []} tone="danger" />
                                                       <RubricList title="Failures" items={run.grade?.failures ?? []} tone="neutral" />
-                                                    </section>
+                                                      <div className="metric-pair-grid compact-grid detail-metrics-grid">
+                                                        <MetricPair label="Bytes read" value={formatWholeNumber(run.grade?.retrieval?.bytesRead)} />
+                                                        <MetricPair label="Files before relevant" value={formatWholeNumber(run.grade?.retrieval?.filesReadBeforeFirstRelevantDoc)} />
+                                                        <MetricPair
+                                                          label="Time to relevant"
+                                                          value={run.grade?.retrieval?.timeToFirstRelevantDocMs == null ? '—' : `${run.grade.retrieval.timeToFirstRelevantDocMs} ms`}
+                                                        />
+                                                        <MetricPair label="Confidence" value={formatNumber(run.answer?.confidence, 2)} />
+                                                      </div>
+                                                    </details>
 
                                                     {run.answer?.citationFilePaths?.length ? (
                                                       <section className="detail-section">
@@ -1379,9 +1505,9 @@ function RubricGroupList({
 
 function MarkdownBlock({ text }: { text: string }) {
   return (
-    <div className="markdown-block">
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
-    </div>
+    <Suspense fallback={<pre className="markdown-block markdown-fallback">{text}</pre>}>
+      <LazyMarkdownBlock text={text} />
+    </Suspense>
   );
 }
 
@@ -1414,7 +1540,7 @@ function judgeVerdictFromCorrectness(
   return undefined;
 }
 
-function buildQuestionGroups(executions: LoadedExecution[]): QuestionGroup[] {
+function buildQuestionGroups(executions: LoadedExecution[], questionList: QuestionMeta[]): QuestionGroup[] {
   const knownIds = new Set(questionList.map((question) => question.id));
   const extras = executions.flatMap((execution) =>
     execution.runs
@@ -1474,6 +1600,7 @@ function buildQuestionGroups(executions: LoadedExecution[]): QuestionGroup[] {
     const judgeCorrectRate = judgeRuns > 0 ? judgeCorrectCount / judgeRuns : null;
     const referenceVerifiedRate =
       referenceVerifiedRuns > 0 ? referenceVerifiedCount / referenceVerifiedRuns : null;
+    const judgeCoverageRate = answers.length > 0 ? judgeRuns / answers.length : null;
 
     const disagreementTokens = new Set<string>();
     answers.forEach(({ run }) => {
@@ -1493,6 +1620,8 @@ function buildQuestionGroups(executions: LoadedExecution[]): QuestionGroup[] {
       judgeCorrectRate,
       meanCompleteness,
       referenceVerifiedRate,
+      judgeCoverageRate,
+      judgeCoverageCount: judgeRuns,
       disagreementCount: disagreementTokens.size,
       hasErrors: answers.some(
         ({ run }) => Boolean(run?.errors?.collectHadError || run?.errors?.judgeHadError),
@@ -1530,8 +1659,14 @@ function sortAnswerRows(
 }
 
 function compareQuestionGroups(left: QuestionGroup, right: QuestionGroup, sortMode: SortMode): number {
-  if (sortMode === 'worst-average') {
-    return (left.averageScore ?? 2) - (right.averageScore ?? 2) || left.meta.order - right.meta.order;
+  if (sortMode === 'judge-risk') {
+    return (
+      compareNullableNumbers(left.judgeCorrectRate ?? undefined, right.judgeCorrectRate ?? undefined) ||
+      compareNullableNumbers(left.meanCompleteness ?? undefined, right.meanCompleteness ?? undefined) ||
+      compareNullableNumbers(left.judgeCoverageRate ?? undefined, right.judgeCoverageRate ?? undefined) ||
+      Number(right.hasErrors) - Number(left.hasErrors) ||
+      left.meta.order - right.meta.order
+    );
   }
 
   if (sortMode === 'most-disagreement') {

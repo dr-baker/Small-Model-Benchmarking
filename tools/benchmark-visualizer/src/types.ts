@@ -232,3 +232,10 @@ export interface RecentRunsBundle {
     aggregate: AggregateFile;
   }>;
 }
+
+export interface BundledSnapshot {
+  questionBank: QuestionBank;
+  questionList: QuestionMeta[];
+  recentRunsBundle: RecentRunsBundle;
+  bundledExecutions: LoadedExecution[];
+}
