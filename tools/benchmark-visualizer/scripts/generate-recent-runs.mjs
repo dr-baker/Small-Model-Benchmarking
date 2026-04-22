@@ -1,12 +1,50 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
+function readElapsedMsFromTrace(tracePath) {
+  if (!tracePath || !existsSync(tracePath)) return undefined;
+  try {
+    const trace = JSON.parse(readFileSync(tracePath, 'utf8'));
+    const elapsed = trace.elapsedMs;
+    return typeof elapsed === 'number' && Number.isFinite(elapsed) ? elapsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function enrichAggregateWithTiming(aggregate) {
+  if (!aggregate?.runs) return aggregate;
+
+  const perRun = aggregate.runs.map((run) => {
+    const tracePath = run.artifactPaths?.trace;
+    const collectMs = readElapsedMsFromTrace(tracePath);
+    if (collectMs != null) {
+      run.timing = { ...(run.timing ?? {}), collectMs };
+    }
+    return collectMs;
+  });
+
+  const tracked = perRun.filter((v) => typeof v === 'number');
+  if (tracked.length === 0) return aggregate;
+
+  const totalCollectMs = tracked.reduce((sum, v) => sum + v, 0);
+  const meanCollectMsPerRun = totalCollectMs / tracked.length;
+
+  for (const summary of aggregate.summaries ?? []) {
+    summary.timing = {
+      trackedRuns: tracked.length,
+      totalCollectMs,
+      meanCollectMsPerRun,
+    };
+  }
+  return aggregate;
+}
+
 const appRoot = process.cwd();
 const repoRoot = path.resolve(appRoot, '..', '..');
 const benchmarkResultsRoot = path.join(repoRoot, 'benchmark-results');
 const datasetPath = path.join(repoRoot, 'benchmark', 'dataset', 'swiftui-docs-chatbot-benchmark.v1.json');
 const outputPath = path.join(appRoot, 'public', 'generated', 'recent-runs.json');
-const limit = 9;
 const completeRunThreshold = readExpectedQuestionCount(datasetPath);
 
 function collectAggregateFiles(root) {
@@ -18,9 +56,9 @@ function collectAggregateFiles(root) {
   walk(root, aggregateFiles);
 
   const canonical = aggregateFiles.filter((entry) => isCanonicalRecentRun(entry));
-  const selected = canonical.length >= limit ? canonical : aggregateFiles;
+  const selected = canonical.length > 0 ? canonical : aggregateFiles;
 
-  return selected.sort((left, right) => right.mtimeMs - left.mtimeMs).slice(0, limit);
+  return selected.sort((left, right) => right.mtimeMs - left.mtimeMs);
 }
 
 function walk(currentDirectory, aggregateFiles) {
@@ -32,7 +70,7 @@ function walk(currentDirectory, aggregateFiles) {
     }
 
     if (entry.isFile() && entry.name === 'aggregate.json') {
-      const aggregate = JSON.parse(readFileSync(absolutePath, 'utf8'));
+      const aggregate = enrichAggregateWithTiming(JSON.parse(readFileSync(absolutePath, 'utf8')));
       const stats = statSync(absolutePath);
       aggregateFiles.push({
         sourceName: path.basename(path.dirname(absolutePath)),
