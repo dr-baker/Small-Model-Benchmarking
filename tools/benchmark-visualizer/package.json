@@ -1,0 +1,27 @@
+{
+  "name": "benchmark-visualizer",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "generate:question-bank": "node scripts/generate-question-bank.mjs",
+    "generate:recent-runs": "node scripts/generate-recent-runs.mjs",
+    "generate": "npm run generate:question-bank && npm run generate:recent-runs",
+    "dev": "npm run generate && vite",
+    "build": "npm run generate && tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.2",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.7"
+  }
+}
