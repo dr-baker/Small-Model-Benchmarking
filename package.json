@@ -10,7 +10,8 @@
     "dataset:validate": "node scripts/build-dataset.mjs --check",
     "test:run": "tsx scripts/test-run.ts",
     "aggregate:run": "tsx scripts/aggregate-run.ts",
-    "test:transport-lite": "tsx scripts/test-transport-lite.ts"
+    "test:transport-lite": "tsx scripts/test-transport-lite.ts",
+    "models:watch": "node scripts/watch-new-model-sweep.mjs"
   },
   "dependencies": {
     "@mariozechner/pi-coding-agent": "0.65.2",
