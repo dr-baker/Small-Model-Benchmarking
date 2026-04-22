@@ -56,9 +56,8 @@ const JUDGE_SCHEMA = {
       properties: {
         hasCode: { type: "boolean" },
         hasExplanation: { type: "boolean" },
-        mode: { type: "string", enum: ["closed_book", "open_book"] },
       },
-      required: ["hasCode", "hasExplanation", "mode"],
+      required: ["hasCode", "hasExplanation"],
       additionalProperties: false,
     },
   },

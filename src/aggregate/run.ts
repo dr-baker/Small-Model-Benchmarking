@@ -32,6 +32,7 @@ export interface AggregateRunOptions {
 interface SummaryAccumulator {
   model: RunManifest["model"];
   mode: BenchmarkMode;
+  answerCollectionMode?: RunManifest["answerCollectionMode"];
   toolSet: ToolSetDefinition;
   transport: RunManifest["transport"];
   runs: number;
@@ -104,7 +105,7 @@ interface EvidenceBasisAccumulator {
   judgeRetrievalSupportsRuns: number;
 }
 
-type NormalizedAnswerArtifact = BenchmarkAnswerResponse | { parseError: string; rawText?: string };
+type NormalizedAnswerArtifact = BenchmarkAnswerResponse;
 
 interface DatasetArtifact {
   questions: DatasetQuestion[];
@@ -126,7 +127,7 @@ interface RunRecord {
 }
 
 function summaryKey(manifest: RunManifest): string {
-  return [manifest.model.provider, manifest.model.modelId, manifest.transport.kind, manifest.mode, manifest.toolSet.name, manifest.toolSet.version].join("::");
+  return [manifest.model.provider, manifest.model.modelId, manifest.transport.kind, manifest.mode, manifest.answerCollectionMode ?? "structured_json", manifest.toolSet.name, manifest.toolSet.version].join("::");
 }
 
 function getSharedBenchmarkDirectory(runDirectories: string[]): string {
@@ -209,10 +210,6 @@ function resolveQuestionDetail(record: Pick<RunRecord, "grade" | "trace"> & { ma
     ...(title !== undefined ? { title } : {}),
     ...(question !== undefined ? { question } : {}),
   };
-}
-
-function isParseErrorAnswer(answer: NormalizedAnswerArtifact): answer is { parseError: string; rawText?: string } {
-  return "parseError" in answer;
 }
 
 function createEvidenceBasisAccumulator(evidenceBasis: BenchmarkEvidenceBasis): EvidenceBasisAccumulator {
@@ -432,21 +429,17 @@ function createAggregateRunDetails(records: RunRecord[]): AggregateRunDetail[] {
         model: manifest.model,
         transport: manifest.transport,
         mode: manifest.mode,
+        ...(manifest.answerCollectionMode ? { answerCollectionMode: manifest.answerCollectionMode } : {}),
         toolSet: manifest.toolSet,
-        answer: isParseErrorAnswer(answer)
-          ? {
-              parseError: answer.parseError,
-              citationCount: 0,
-              citationFilePaths: [],
-            }
-          : {
-              mode: answer.mode,
-              confidence: answer.confidence,
-              finalAnswer: answer.finalAnswer,
-              ...(answer.mode === "open_book" ? { evidenceSummary: answer.evidenceSummary } : {}),
-              citationCount: answer.citations.length,
-              citationFilePaths: answer.citations.map((citation) => citation.filePath),
-            },
+        answer: {
+          mode: answer.mode,
+          confidence: answer.confidence,
+          finalAnswer: answer.finalAnswer,
+          ...(answer.parseError ? { parseError: answer.parseError } : {}),
+          ...(answer.mode === "open_book" ? { evidenceSummary: answer.evidenceSummary } : {}),
+          citationCount: answer.citations?.length ?? 0,
+          citationFilePaths: answer.citations?.map((citation) => citation.filePath) ?? [],
+        },
         grade: {
           score: grade.answer.score,
           correct: grade.answer.correct,
@@ -508,6 +501,7 @@ function createRunCsvRows(runs: AggregateRunDetail[]): Array<Record<string, unkn
     modelId: run.model.modelId,
     transportKind: run.transport.kind,
     mode: run.mode,
+    answerCollectionMode: run.answerCollectionMode,
     toolSetName: run.toolSet.name,
     toolSetVersion: run.toolSet.version,
     answerMode: run.answer.mode,
@@ -572,6 +566,7 @@ function createSummaryCsvRows(summaries: AggregateModelSummary[]): Array<Record<
     modelProvider: summary.model.provider,
     modelId: summary.model.modelId,
     mode: summary.mode,
+    answerCollectionMode: summary.answerCollectionMode,
     transportKind: summary.transport.kind,
     toolSetName: summary.toolSet.name,
     toolSetVersion: summary.toolSet.version,
@@ -619,6 +614,7 @@ function createEvidenceBasisCsvRows(summaries: AggregateModelSummary[]): Array<R
       modelProvider: summary.model.provider,
       modelId: summary.model.modelId,
       mode: summary.mode,
+      answerCollectionMode: summary.answerCollectionMode,
       transportKind: summary.transport.kind,
       toolSetName: summary.toolSet.name,
       evidenceBasis: evidenceBasisSummary.evidenceBasis,
@@ -674,6 +670,7 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
     const existing = accumulators.get(key) ?? {
       model: manifest.model,
       mode: manifest.mode,
+      answerCollectionMode: manifest.answerCollectionMode,
       toolSet: manifest.toolSet,
       transport: manifest.transport,
       runs: 0,
@@ -855,6 +852,7 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
     const base: AggregateModelSummary = {
       model: accumulator.model,
       mode: accumulator.mode,
+      ...(accumulator.answerCollectionMode ? { answerCollectionMode: accumulator.answerCollectionMode } : {}),
       toolSet: accumulator.toolSet,
       transport: accumulator.transport,
       runs: accumulator.runs,
@@ -933,6 +931,7 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
     "modelId",
     "transportKind",
     "mode",
+    "answerCollectionMode",
     "toolSetName",
     "toolSetVersion",
     "answerMode",
@@ -995,6 +994,7 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
     "modelProvider",
     "modelId",
     "mode",
+    "answerCollectionMode",
     "transportKind",
     "toolSetName",
     "toolSetVersion",
@@ -1039,6 +1039,7 @@ export async function aggregateRuns(options: AggregateRunOptions): Promise<Aggre
     "modelProvider",
     "modelId",
     "mode",
+    "answerCollectionMode",
     "transportKind",
     "toolSetName",
     "evidenceBasis",

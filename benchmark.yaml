@@ -56,7 +56,8 @@ corpus:
 execution:
   resume: true                   # true = skip completed runs and continue partial executions when runId is explicit
   stopOnError: false             # false = keep going and record failures instead of aborting the whole matrix
-  maxParseRetries: 3             # retry collect-stage schema parse failures up to N times before recording the failure
+  maxParseRetries: 3             # retry collect-stage normalization failures up to N times before recording the failure
+  answerCollectionMode: lazy_text # structured_json = require JSON answer contract; lazy_text = accept plain answers and extract fields when possible
 
 # Batch controls
 batch:
@@ -65,7 +66,7 @@ batch:
 
 # System prompts
 systemPrompts:
-  collect: "You are a benchmark runner. Follow the response schema exactly."
+  collect: "You are a benchmark runner. Follow the active answer-format instructions exactly."
   judge: "You are a benchmark judge. Follow the response schema exactly."
 
 # Run matrix: which modes to run + default toolSet per mode

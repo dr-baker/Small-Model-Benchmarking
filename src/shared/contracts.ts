@@ -5,6 +5,7 @@ export const ANSWER_RESPONSE_SCHEMA_VERSION = "answer-response.v1" as const;
 export const JUDGE_VERDICT_SCHEMA_VERSION = "judge-verdict.v1" as const;
 
 export type BenchmarkMode = "closed_book" | "open_book";
+export type AnswerCollectionMode = "structured_json" | "lazy_text";
 export type ToolSetName = "none" | "read_only" | "read_grep" | "read_grep_glob" | "swift_docs_hybrid";
 export type PromptTemplateId = "benchmark-answer-v1";
 export type JudgePromptTemplateId = "judge-answer-v1";
@@ -15,7 +16,6 @@ export type JudgeDeprecatedPatternUse = "primary" | "fallback" | "warning_only" 
 export interface JudgeObservations {
   hasCode: boolean;
   hasExplanation: boolean;
-  mode: BenchmarkMode;
 }
 export type GradingMethod = "deterministic";
 export type RubricStrength = "low" | "medium" | "high";
@@ -124,6 +124,7 @@ export interface CollectRunInput {
   promptTemplatePath: string;
   promptTemplateVersion: string;
   responseSchemaVersion: typeof ANSWER_RESPONSE_SCHEMA_VERSION;
+  answerCollectionMode?: AnswerCollectionMode;
   rubricVersion: string;
   corpus: CorpusSnapshotRef;
   swiftDocs?: SwiftDocsToolConfig;
@@ -172,7 +173,22 @@ export interface OpenBookAnswerResponse {
   evidenceSummary: string;
 }
 
-export type BenchmarkAnswerResponse = ClosedBookAnswerResponse | OpenBookAnswerResponse;
+export type StructuredBenchmarkAnswerResponse = ClosedBookAnswerResponse | OpenBookAnswerResponse;
+
+export interface NormalizedAnswerArtifact {
+  mode: BenchmarkMode;
+  finalAnswer: string | null;
+  confidence: number | null;
+  citations: CitationReference[] | null;
+  evidenceSummary: string | null;
+  schemaVersion?: typeof ANSWER_RESPONSE_SCHEMA_VERSION;
+  rawText?: string;
+  parseError?: string;
+  extractionWarnings?: string[];
+  answerCollectionMode?: AnswerCollectionMode;
+}
+
+export type BenchmarkAnswerResponse = NormalizedAnswerArtifact;
 
 export interface JudgeProfile {
   id: string;
@@ -232,6 +248,7 @@ export interface RunManifest {
   model: ModelRef;
   transport: ModelTransportConfig;
   mode: BenchmarkMode;
+  answerCollectionMode?: AnswerCollectionMode;
   toolSet: ToolSetDefinition;
   promptTemplateId: PromptTemplateId;
   promptTemplateVersion: string;
@@ -403,6 +420,7 @@ export interface AggregateEvidenceBasisSummary {
 export interface AggregateModelSummary {
   model: ModelRef;
   mode: BenchmarkMode;
+  answerCollectionMode?: AnswerCollectionMode;
   toolSet: ToolSetDefinition;
   transport: ModelTransportConfig;
   runs: number;
@@ -426,10 +444,10 @@ export interface AggregateRunQuestionDetail {
 
 export interface AggregateRunAnswerDetail {
   mode?: BenchmarkMode;
-  confidence?: number;
-  finalAnswer?: string;
+  confidence?: number | null;
+  finalAnswer?: string | null;
   parseError?: string;
-  evidenceSummary?: string;
+  evidenceSummary?: string | null;
   citationCount: number;
   citationFilePaths: string[];
 }
@@ -459,6 +477,7 @@ export interface AggregateRunDetail {
   model: ModelRef;
   transport: ModelTransportConfig;
   mode: BenchmarkMode;
+  answerCollectionMode?: AnswerCollectionMode;
   toolSet: ToolSetDefinition;
   answer: AggregateRunAnswerDetail;
   grade: {

@@ -7,7 +7,7 @@ import { runCollect } from "../src/collect/run.js";
 import { loadToolSetCatalog } from "../src/collect/tool-sets.js";
 import { gradeRun } from "../src/grade/run.js";
 import { judgeRun } from "../src/judge/run.js";
-import type { DatasetQuestion, ModelRef, ToolSetName } from "../src/shared/contracts.js";
+import type { AnswerCollectionMode, DatasetQuestion, ModelRef, ToolSetName } from "../src/shared/contracts.js";
 import { loadBenchmarkConfigWithMeta, getCandidateModelRefs, getJudgeModelRef, getJudgeTransportConfig, getPromptTemplatePath, parseModelRefFromString, type BenchmarkBatchNumber, type BenchmarkConfig, type BenchmarkConfigPaths } from "../src/shared/config.js";
 import { readJsonFile, writeJsonFile, writeTextFile } from "../src/shared/io.js";
 
@@ -25,6 +25,7 @@ interface CliArgs {
   batchNumber?: BenchmarkBatchNumber;
   resume?: boolean;
   stopOnError?: boolean;
+  answerCollectionMode?: AnswerCollectionMode;
 }
 
 interface RunStageState {
@@ -75,6 +76,13 @@ function parseCliArgs(argv: string[]): CliArgs {
     else if (arg.startsWith("--batch-number=")) result.batchNumber = parseBatchNumber(arg.split("=")[1] ?? "");
     else if (arg.startsWith("--resume=")) result.resume = parseBoolean(arg.split("=")[1] ?? "", "--resume");
     else if (arg.startsWith("--stop-on-error=")) result.stopOnError = parseBoolean(arg.split("=")[1] ?? "", "--stop-on-error");
+    else if (arg.startsWith("--answer-collection-mode=")) {
+      const answerCollectionMode = arg.split("=")[1];
+      if (answerCollectionMode !== "structured_json" && answerCollectionMode !== "lazy_text") {
+        throw new Error("--answer-collection-mode must be structured_json or lazy_text");
+      }
+      result.answerCollectionMode = answerCollectionMode;
+    }
     else throw new Error(`Unknown argument: ${arg}`);
   }
   return result;
@@ -226,6 +234,7 @@ async function writeExecutionArtifacts(params: {
   batchQuestions: DatasetQuestion[];
   executionResume: boolean;
   stopOnError: boolean;
+  answerCollectionMode: AnswerCollectionMode;
   configPaths: BenchmarkConfigPaths;
 }): Promise<void> {
   const executionYaml = stringifyYaml({
@@ -247,6 +256,7 @@ async function writeExecutionArtifacts(params: {
       ...params.config.execution,
       resume: params.executionResume,
       stopOnError: params.stopOnError,
+      answerCollectionMode: params.answerCollectionMode,
     },
     batch: {
       size: params.batchSize,
@@ -278,6 +288,7 @@ async function writeExecutionArtifacts(params: {
       ...(params.cli.batchNumber ? { batchNumber: params.cli.batchNumber } : {}),
       ...(params.cli.resume !== undefined ? { resume: params.cli.resume } : {}),
       ...(params.cli.stopOnError !== undefined ? { stopOnError: params.cli.stopOnError } : {}),
+      ...(params.cli.answerCollectionMode !== undefined ? { answerCollectionMode: params.cli.answerCollectionMode } : {}),
     },
     aggregateOutputs: {
       json: join(params.executionDirectory, "aggregate.json"),
@@ -297,6 +308,7 @@ async function main() {
   const effectiveRunId = cli.runId ?? config.runId;
   const executionResume = cli.resume ?? config.execution.resume;
   const stopOnError = cli.stopOnError ?? config.execution.stopOnError;
+  const answerCollectionMode = cli.answerCollectionMode ?? config.execution.answerCollectionMode;
   const configuredBatchNumber = cli.batchNumber ?? config.batch.number;
   const batchSize = cli.batchSize ?? config.batch.size;
 
@@ -360,6 +372,7 @@ async function main() {
     batchQuestions: questions,
     executionResume,
     stopOnError,
+    answerCollectionMode,
     configPaths,
   });
 
@@ -418,6 +431,7 @@ async function main() {
             question,
             sampling: {},
             systemPrompt: config.systemPrompts.collect,
+            answerCollectionMode,
             maxParseRetries: config.execution.maxParseRetries,
           });
           collectHadError = collectOutput.hasError;

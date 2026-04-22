@@ -5,13 +5,16 @@ import { readFile } from "node:fs/promises";
 import {
   ANSWER_RESPONSE_SCHEMA_VERSION,
   PIPELINE_CONTRACT_VERSION,
+  type AnswerCollectionMode,
   type BenchmarkAnswerResponse,
+  type CitationReference,
   type CollectRetryMetadata,
   type CollectRunInput,
   type CollectTrace,
   type PromptMessageSnapshot,
   type PromptSnapshot,
   type RunManifest,
+  type StructuredBenchmarkAnswerResponse,
 } from "../shared/contracts.js";
 import { serializeJson, writeJsonFile } from "../shared/io.js";
 import { extractJsonObject } from "../shared/json.js";
@@ -30,7 +33,7 @@ export interface CollectRunOutput {
   runDirectory: string;
   manifest: RunManifest;
   trace: CollectTrace;
-  normalizedAnswer: BenchmarkAnswerResponse | { parseError: string; rawText?: string };
+  normalizedAnswer: BenchmarkAnswerResponse;
   hasError: boolean;
 }
 
@@ -40,7 +43,7 @@ function validateInput(input: CollectRunInput): void {
   if (input.mode === "closed_book" && input.toolSet.name !== "none") throw new Error("Closed-book runs must use the 'none' tool set.");
 }
 
-function validateParsedAnswer(value: unknown): value is BenchmarkAnswerResponse {
+function validateStructuredAnswer(value: unknown): value is StructuredBenchmarkAnswerResponse {
   if (!value || typeof value !== "object") return false;
   const c = value as Record<string, unknown>;
   if (c.schemaVersion !== ANSWER_RESPONSE_SCHEMA_VERSION) return false;
@@ -56,30 +59,199 @@ function validateParsedAnswer(value: unknown): value is BenchmarkAnswerResponse 
   return typeof c.evidenceSummary === "string" && c.evidenceSummary.trim().length > 0;
 }
 
-function normalizeAnswerCitations(answer: BenchmarkAnswerResponse, corpusRoot: string): BenchmarkAnswerResponse {
-  if (answer.mode === "closed_book") return answer;
+function normalizeCitationReferences(citations: CitationReference[] | null, corpusRoot: string): CitationReference[] | null {
+  if (!citations) return null;
+  return citations
+    .map((citation) => {
+      const filePath = normalizeCitationFilePath(citation.filePath, corpusRoot);
+      return filePath ? { ...citation, filePath } : undefined;
+    })
+    .filter((citation): citation is CitationReference => citation !== undefined);
+}
+
+function extractStructuredAnswerFields(value: unknown, expectedMode: CollectRunInput["mode"], corpusRoot: string): Partial<BenchmarkAnswerResponse> {
+  if (!value || typeof value !== "object") return {};
+  const candidate = value as Record<string, unknown>;
+  const finalAnswer = typeof candidate.finalAnswer === "string" && candidate.finalAnswer.trim().length > 0
+    ? candidate.finalAnswer.trim()
+    : undefined;
+  const confidence = typeof candidate.confidence === "number" ? candidate.confidence : undefined;
+  const citations = Array.isArray(candidate.citations)
+    ? normalizeCitationReferences(candidate.citations.filter((item): item is CitationReference => Boolean(item) && typeof item === "object" && typeof (item as Record<string, unknown>).filePath === "string"), corpusRoot)
+    : undefined;
+  const evidenceSummary = typeof candidate.evidenceSummary === "string" && candidate.evidenceSummary.trim().length > 0
+    ? candidate.evidenceSummary.trim()
+    : expectedMode === "closed_book"
+      ? null
+      : undefined;
 
   return {
-    ...answer,
-    citations: answer.citations
-      .map((citation) => {
-        const filePath = normalizeCitationFilePath(citation.filePath, corpusRoot);
-        return filePath ? { ...citation, filePath } : undefined;
-      })
-      .filter((citation): citation is BenchmarkAnswerResponse["citations"][number] => citation !== undefined),
+    ...(candidate.schemaVersion === ANSWER_RESPONSE_SCHEMA_VERSION ? { schemaVersion: ANSWER_RESPONSE_SCHEMA_VERSION } : {}),
+    mode: expectedMode,
+    ...(finalAnswer !== undefined ? { finalAnswer } : {}),
+    ...(confidence !== undefined ? { confidence } : {}),
+    ...(citations !== undefined ? { citations } : {}),
+    ...(evidenceSummary !== undefined ? { evidenceSummary } : {}),
   };
 }
 
-function parseAnswer(rawText: string | undefined, corpusRoot: string): BenchmarkAnswerResponse | { parseError: string; rawText?: string } {
-  if (!rawText) return { parseError: "Assistant produced no final text." };
+function createFormatInstructions(mode: CollectRunInput["mode"], answerCollectionMode: AnswerCollectionMode): string {
+  if (answerCollectionMode === "structured_json") {
+    const closedBookSchema = `{
+  "schemaVersion": "answer-response.v1",
+  "mode": "closed_book",
+  "finalAnswer": "string",
+  "confidence": 0.0,
+  "citations": []
+}`;
+    const openBookSchema = `{
+  "schemaVersion": "answer-response.v1",
+  "mode": "open_book",
+  "finalAnswer": "string",
+  "confidence": 0.0,
+  "citations": [
+    {
+      "filePath": "relative/path/in/corpus (for Swift Docs hybrid search, use normalized_md_path from the tool result)",
+      "anchor": "optional passage anchor",
+      "quote": "optional direct quote",
+      "justification": "why this citation supports the answer"
+    }
+  ],
+  "evidenceSummary": "short summary of the evidence actually read or retrieved"
+}`;
+    return [
+      "## Active answer format",
+      "Return exactly one JSON object.",
+      "Do not wrap it in markdown fences.",
+      mode === "closed_book" ? `### Required schema\n\n\`\`\`json\n${closedBookSchema}\n\`\`\`` : `### Required schema\n\n\`\`\`json\n${openBookSchema}\n\`\`\``,
+    ].join("\n\n");
+  }
+
+  return [
+    "## Active answer format",
+    "Return a plain answer in normal prose. JSON is optional and not required.",
+    `The benchmark mode is ${mode}; answer for that mode only.`,
+    mode === "open_book"
+      ? "If you can clearly support the answer from material you actually read in this run, include short source hints, quotes, or file paths inline when natural, but do not force a schema."
+      : "Do not invent citations or claim you used tools you did not use.",
+    "Focus on a correct, concise, actionable answer first. If confidence or evidence summary are not natural to include, omit them.",
+  ].join("\n\n");
+}
+
+function buildCollectSystemPrompt(basePrompt: string, answerCollectionMode: AnswerCollectionMode): string {
+  return answerCollectionMode === "structured_json"
+    ? `${basePrompt}\nReturn one valid JSON object only.`
+    : `${basePrompt}\nDo not force JSON. A plain answer is acceptable. Include extra metadata only when natural and supported.`;
+}
+
+function normalizeStructuredAnswer(rawText: string | undefined, expectedMode: CollectRunInput["mode"], corpusRoot: string): BenchmarkAnswerResponse {
+  if (!rawText) {
+    return {
+      mode: expectedMode,
+      finalAnswer: null,
+      confidence: null,
+      citations: null,
+      evidenceSummary: expectedMode === "open_book" ? null : null,
+      parseError: "Assistant produced no final text.",
+      answerCollectionMode: "structured_json",
+    };
+  }
+
   try {
     const parsed = extractJsonObject(rawText);
-    return validateParsedAnswer(parsed)
-      ? normalizeAnswerCitations(parsed, corpusRoot)
-      : { parseError: "Assistant JSON did not match answer-response.v1 schema or contained an empty answer.", rawText };
+    const extracted = extractStructuredAnswerFields(parsed, expectedMode, corpusRoot);
+    if (validateStructuredAnswer(parsed)) {
+      return {
+        mode: expectedMode,
+        finalAnswer: extracted.finalAnswer ?? null,
+        confidence: extracted.confidence ?? null,
+        citations: extracted.citations ?? (expectedMode === "closed_book" ? [] : []),
+        evidenceSummary: extracted.evidenceSummary ?? null,
+        ...(extracted.schemaVersion ? { schemaVersion: extracted.schemaVersion } : {}),
+        rawText,
+        answerCollectionMode: "structured_json",
+      };
+    }
+
+    return {
+      mode: expectedMode,
+      finalAnswer: null,
+      confidence: extracted.confidence ?? null,
+      citations: extracted.citations ?? null,
+      evidenceSummary: extracted.evidenceSummary ?? null,
+      ...(extracted.schemaVersion ? { schemaVersion: extracted.schemaVersion } : {}),
+      rawText,
+      parseError: "Assistant JSON did not match answer-response.v1 schema or contained an empty answer.",
+      answerCollectionMode: "structured_json",
+    };
   } catch (error) {
-    return { parseError: error instanceof Error ? error.message : String(error), rawText };
+    return {
+      mode: expectedMode,
+      finalAnswer: null,
+      confidence: null,
+      citations: null,
+      evidenceSummary: null,
+      rawText,
+      parseError: error instanceof Error ? error.message : String(error),
+      answerCollectionMode: "structured_json",
+    };
   }
+}
+
+function normalizeLazyAnswer(rawText: string | undefined, expectedMode: CollectRunInput["mode"], corpusRoot: string): BenchmarkAnswerResponse {
+  if (!rawText) {
+    return {
+      mode: expectedMode,
+      finalAnswer: null,
+      confidence: null,
+      citations: null,
+      evidenceSummary: null,
+      parseError: "Assistant produced no final text.",
+      answerCollectionMode: "lazy_text",
+    };
+  }
+
+  const trimmedRawText = rawText.trim();
+  const warnings: string[] = [];
+  const normalized: BenchmarkAnswerResponse = {
+    mode: expectedMode,
+    finalAnswer: trimmedRawText.length > 0 ? trimmedRawText : null,
+    confidence: null,
+    citations: null,
+    evidenceSummary: null,
+    rawText,
+    answerCollectionMode: "lazy_text",
+  };
+
+  try {
+    const parsed = extractJsonObject(rawText);
+    const extracted = extractStructuredAnswerFields(parsed, expectedMode, corpusRoot);
+    if (extracted.finalAnswer !== undefined) normalized.finalAnswer = extracted.finalAnswer;
+    if (extracted.confidence !== undefined) normalized.confidence = extracted.confidence;
+    if (extracted.citations !== undefined) normalized.citations = extracted.citations;
+    if (extracted.evidenceSummary !== undefined) normalized.evidenceSummary = extracted.evidenceSummary;
+    if (extracted.schemaVersion !== undefined) normalized.schemaVersion = extracted.schemaVersion;
+    if (!validateStructuredAnswer(parsed)) {
+      warnings.push("Structured fields were only partially recoverable from assistant output.");
+    }
+  } catch (error) {
+    warnings.push(`Structured extraction failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  if (warnings.length > 0) {
+    normalized.extractionWarnings = warnings;
+  }
+  if (normalized.finalAnswer === null) {
+    normalized.parseError = "Assistant produced no final text.";
+  }
+
+  return normalized;
+}
+
+function parseAnswer(rawText: string | undefined, expectedMode: CollectRunInput["mode"], corpusRoot: string, answerCollectionMode: AnswerCollectionMode): BenchmarkAnswerResponse {
+  return answerCollectionMode === "lazy_text"
+    ? normalizeLazyAnswer(rawText, expectedMode, corpusRoot)
+    : normalizeStructuredAnswer(rawText, expectedMode, corpusRoot);
 }
 
 function sha256(value: string): string {
@@ -102,8 +274,8 @@ function toUsageTotals(value: unknown): { promptTokens: number; completionTokens
   };
 }
 
-function isParseErrorResult(value: BenchmarkAnswerResponse | { parseError: string; rawText?: string }): value is { parseError: string; rawText?: string } {
-  return "parseError" in value;
+function hasCollectParseFailure(value: BenchmarkAnswerResponse): boolean {
+  return typeof value.parseError === "string" || value.finalAnswer === null;
 }
 
 export async function runCollect(input: CollectRunInput): Promise<CollectRunOutput> {
@@ -120,9 +292,11 @@ export async function runCollect(input: CollectRunInput): Promise<CollectRunOutp
   const manifestPath = join(runDirectory, "manifest.json");
 
   const corpusRoot = resolve(REPO_ROOT, input.corpus.rootDir);
-  const userMessages = await renderPromptMessages(input.promptTemplatePath, input.mode, input.question);
-  const userPrompt = await renderPrompt(input.promptTemplatePath, input.mode, input.question);
-  const systemPrompt = input.systemPrompt;
+  const answerCollectionMode = input.answerCollectionMode ?? "structured_json";
+  const formatInstructions = createFormatInstructions(input.mode, answerCollectionMode);
+  const userMessages = await renderPromptMessages(input.promptTemplatePath, input.mode, input.question, formatInstructions);
+  const userPrompt = await renderPrompt(input.promptTemplatePath, input.mode, input.question, formatInstructions);
+  const systemPrompt = buildCollectSystemPrompt(input.systemPrompt, answerCollectionMode);
   const promptMessages: PromptMessageSnapshot[] = [
     { role: "system", content: systemPrompt },
     ...userMessages,
@@ -145,7 +319,15 @@ export async function runCollect(input: CollectRunInput): Promise<CollectRunOutp
   let totalCompletionTokens = 0;
   let totalTokens = 0;
   let llmResult;
-  let normalizedAnswer: BenchmarkAnswerResponse | { parseError: string; rawText?: string } = { parseError: "Collect did not run." };
+  let normalizedAnswer: BenchmarkAnswerResponse = {
+    mode: input.mode,
+    finalAnswer: null,
+    confidence: null,
+    citations: null,
+    evidenceSummary: null,
+    parseError: "Collect did not run.",
+    answerCollectionMode,
+  };
 
   for (let attempt = 1; attempt <= maxParseRetries + 1; attempt += 1) {
     events.push({
@@ -159,7 +341,7 @@ export async function runCollect(input: CollectRunInput): Promise<CollectRunOutp
       transport: input.transport,
       messages: promptMessages,
       tools,
-      responseFormat: buildAnswerResponseFormat(),
+      ...(answerCollectionMode === "structured_json" ? { responseFormat: buildAnswerResponseFormat() } : {}),
       apiKey,
       cwd: corpusRoot,
     });
@@ -182,27 +364,27 @@ export async function runCollect(input: CollectRunInput): Promise<CollectRunOutp
       hasTrackedCost = true;
     }
 
-    normalizedAnswer = parseAnswer(llmResult.finalText, corpusRoot);
-    const parseErrorResult = isParseErrorResult(normalizedAnswer) ? normalizedAnswer : undefined;
+    normalizedAnswer = parseAnswer(llmResult.finalText, input.mode, corpusRoot, answerCollectionMode);
+    const parseFailed = hasCollectParseFailure(normalizedAnswer);
 
     events.push({
       observedAt: new Date().toISOString(),
       eventType: "collect_attempt_end",
       payload: {
         attempt,
-        parseFailed: parseErrorResult !== undefined,
-        ...(parseErrorResult ? { parseError: parseErrorResult.parseError } : {}),
+        parseFailed,
+        ...(normalizedAnswer.parseError ? { parseError: normalizedAnswer.parseError } : {}),
         ...(llmResult.error !== undefined ? { llmError: llmResult.error } : {}),
       },
     });
 
-    if (llmResult.error !== undefined || !parseErrorResult) {
+    if (llmResult.error !== undefined || !parseFailed) {
       break;
     }
 
     if (attempt <= maxParseRetries) {
       parseRetriesUsed += 1;
-      retryReasons.push(parseErrorResult.parseError);
+      retryReasons.push(normalizedAnswer.parseError ?? "Answer normalization failed.");
     }
   }
 
@@ -221,7 +403,7 @@ export async function runCollect(input: CollectRunInput): Promise<CollectRunOutp
     maxParseRetries,
     parseRetriesUsed,
     attempts: parseRetriesUsed + 1,
-    succeededAfterRetry: parseRetriesUsed > 0 && !isParseErrorResult(normalizedAnswer) && llmResult.error === undefined,
+    succeededAfterRetry: parseRetriesUsed > 0 && !hasCollectParseFailure(normalizedAnswer) && llmResult.error === undefined,
     retryReasons,
   };
 
@@ -259,6 +441,7 @@ export async function runCollect(input: CollectRunInput): Promise<CollectRunOutp
     model: input.model,
     transport: input.transport,
     mode: input.mode,
+    answerCollectionMode,
     toolSet: input.toolSet,
     promptTemplateId: input.promptTemplateId,
     promptTemplateVersion: input.promptTemplateVersion,
@@ -287,6 +470,6 @@ export async function runCollect(input: CollectRunInput): Promise<CollectRunOutp
     manifest,
     trace,
     normalizedAnswer,
-    hasError: llmResult.error !== undefined || "parseError" in normalizedAnswer,
+    hasError: llmResult.error !== undefined || hasCollectParseFailure(normalizedAnswer),
   };
 }

@@ -21,10 +21,10 @@ interface GradeRunOptions {
   datasetPath: string;
 }
 
-function deriveFailures(answer: BenchmarkAnswerResponse | { parseError: string }, trace: CollectTrace): FailureTaxonomyId[] {
+function deriveFailures(answer: BenchmarkAnswerResponse, trace: CollectTrace): FailureTaxonomyId[] {
   const failures: FailureTaxonomyId[] = [];
 
-  if ("parseError" in answer) {
+  if (!answer.finalAnswer?.trim()) {
     failures.push("schema_parse_failure");
   }
   if (trace.error) {
@@ -243,7 +243,7 @@ function inferRubricStrength(questionRubric: RubricDefinition["questions"][numbe
 
 export async function gradeRun(options: GradeRunOptions): Promise<GradeArtifact> {
   const trace = await readJsonFile<CollectTrace>(join(options.runDirectory, "trace.json"));
-  const answer = await readJsonFile<BenchmarkAnswerResponse | { parseError: string }>(join(options.runDirectory, "normalized-answer.json"));
+  const answer = await readJsonFile<BenchmarkAnswerResponse>(join(options.runDirectory, "normalized-answer.json"));
   const manifest = await readJsonFile<RunManifest>(join(options.runDirectory, "manifest.json"));
 
   const rubric = await readJsonFile<RubricDefinition>(options.rubricPath);
@@ -265,7 +265,7 @@ export async function gradeRun(options: GradeRunOptions): Promise<GradeArtifact>
   let grounded: boolean | undefined;
   const rubricStrength = inferRubricStrength(questionRubric);
 
-  if (!("parseError" in answer) && questionRubric) {
+  if (answer.finalAnswer?.trim() && questionRubric) {
     const finalAnswer = answer.finalAnswer;
     const expectedStance = questionRubric.expectedStance ?? "neutral";
 
@@ -319,7 +319,8 @@ export async function gradeRun(options: GradeRunOptions): Promise<GradeArtifact>
 
     if (answer.mode === "open_book") {
       const retrievedPaths = collectRetrievedPaths(trace, corpusRoot);
-      const citationsValid = answer.citations.length > 0 && answer.citations.every((citation) => retrievedPaths.has(citation.filePath));
+      const citations = answer.citations ?? [];
+      const citationsValid = citations.length > 0 && citations.every((citation) => retrievedPaths.has(citation.filePath));
       grounded = citationsValid;
       if (!grounded) {
         failures.push("correct_without_support");

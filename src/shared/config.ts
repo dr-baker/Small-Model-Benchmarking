@@ -14,6 +14,7 @@ import type {
   SessionConfig,
   ThinkingLevel,
   SwiftDocsToolConfig,
+  AnswerCollectionMode,
 } from "./contracts.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -41,6 +42,7 @@ export interface BenchmarkExecutionConfig {
   resume: boolean;
   stopOnError: boolean;
   maxParseRetries: number;
+  answerCollectionMode: AnswerCollectionMode;
 }
 
 export type BenchmarkBatchNumber = number | "auto";
@@ -218,6 +220,9 @@ function validateConfig(raw: unknown): asserts raw is BenchmarkConfig {
   if (!isPositiveInteger(execution.maxParseRetries) && execution.maxParseRetries !== 0) {
     throw new Error("execution.maxParseRetries must be a non-negative integer");
   }
+  if (execution.answerCollectionMode !== "structured_json" && execution.answerCollectionMode !== "lazy_text") {
+    throw new Error("execution.answerCollectionMode must be 'structured_json' or 'lazy_text'");
+  }
 
   if (!c.batch || typeof c.batch !== "object") throw new Error("Missing batch");
   const batch = c.batch as Record<string, unknown>;
@@ -300,6 +305,12 @@ export async function loadBenchmarkConfigWithMeta(path?: string): Promise<Loaded
   const overridePath = explicitConfigPath ? undefined : DEFAULT_LOCAL_CONFIG_PATH;
   const overrideRaw = overridePath ? await readYamlFileIfExists(overridePath) : undefined;
   const mergedRaw = overrideRaw === undefined ? baseRaw : mergeConfigValue(baseRaw, overrideRaw);
+  if (mergedRaw && typeof mergedRaw === "object") {
+    const execution = (mergedRaw as Record<string, unknown>).execution;
+    if (execution && typeof execution === "object" && !("answerCollectionMode" in execution)) {
+      (execution as Record<string, unknown>).answerCollectionMode = "structured_json";
+    }
+  }
 
   validateConfig(mergedRaw);
   return {

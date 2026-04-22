@@ -10,38 +10,11 @@ You are answering a single benchmark question about modern SwiftUI / Apple-platf
 - Treat the frozen corpus as the only valid documentation source for open-book evidence in this benchmark.
 
 ## Output contract
-Return exactly one JSON object that matches this schema.
-Do not wrap it in markdown fences.
+The benchmark runner will append the active answer-format instructions for this run.
+Follow that contract exactly.
 
-### Closed-book schema
-```json
-{
-  "schemaVersion": "answer-response.v1",
-  "mode": "closed_book",
-  "finalAnswer": "string",
-  "confidence": 0.0,
-  "citations": []
-}
-```
-
-### Open-book schema
-```json
-{
-  "schemaVersion": "answer-response.v1",
-  "mode": "open_book",
-  "finalAnswer": "string",
-  "confidence": 0.0,
-  "citations": [
-    {
-      "filePath": "relative/path/in/corpus (for Swift Docs hybrid search, use normalized_md_path from the tool result)",
-      "anchor": "optional passage anchor",
-      "quote": "optional direct quote",
-      "justification": "why this citation supports the answer"
-    }
-  ],
-  "evidenceSummary": "short summary of the evidence actually read or retrieved"
-}
-```
+If the active format asks for metadata such as confidence, citations, or evidence summary, provide it when you can support it.
+If the active format allows a plain answer, focus on a correct, concise, directly useful answer first.
 
 ## Confidence
 - Use a number from 0.0 to 1.0.

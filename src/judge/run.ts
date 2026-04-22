@@ -36,7 +36,6 @@ interface ParsedJudgeResponse {
   observations: {
     hasCode: boolean;
     hasExplanation: boolean;
-    mode: "closed_book" | "open_book";
   };
 }
 
@@ -66,8 +65,7 @@ function isJudgeObservations(v: unknown): v is ParsedJudgeResponse["observations
   if (!v || typeof v !== "object") return false;
   const o = v as Record<string, unknown>;
   return typeof o.hasCode === "boolean"
-    && typeof o.hasExplanation === "boolean"
-    && (o.mode === "closed_book" || o.mode === "open_book");
+    && typeof o.hasExplanation === "boolean";
 }
 
 function validateJudgeResponse(value: unknown): value is ParsedJudgeResponse {
@@ -127,35 +125,26 @@ function buildSearchTraceSummary(trace: CollectTrace): string | undefined {
   return `## Candidate retrieval trace\n${searchCalls.slice(0, 3).map(summarizeCall).join("\n\n")}`;
 }
 
-async function renderJudgePromptMessages(question: DatasetQuestion, answer: BenchmarkAnswerResponse, trace: CollectTrace, promptTemplatePath: string): Promise<PromptMessageSnapshot[]> {
+async function renderJudgePromptMessages(question: DatasetQuestion, answer: BenchmarkAnswerResponse, trace: CollectTrace, promptTemplatePath: string, _manifest: RunManifest): Promise<PromptMessageSnapshot[]> {
   const template = await readFile(promptTemplatePath, "utf8");
-  const evidenceBlock = answer.mode === "open_book"
-    ? `\n- answer included ${answer.citations.length} citation(s)\n- answer evidence summary: ${answer.evidenceSummary}`
-    : "";
-  const benchmarkMetadataBlock = `## Benchmark question metadata\n- evidenceBasis: ${question.evidenceBasis}\n- questionShape: ${question.questionShape}\n- platformScope: ${question.platformScope}`;
-
   const retrievalBlock = buildSearchTraceSummary(trace);
 
   return [
     { role: "user", content: template.trim() },
     {
       role: "user",
-      content: `${benchmarkMetadataBlock}\n\n## Benchmark question\n${question.question}\n\n## Reference answer\n${question.referenceAnswer}`,
+      content: `## Benchmark question\n${question.question}\n\n## Reference answer\n${question.referenceAnswer}`,
     },
     {
       role: "user",
-      content: `## Candidate answer metadata\n- mode: ${answer.mode}\n- answerConfidence: ${answer.confidence}${evidenceBlock}`,
-    },
-    {
-      role: "user",
-      content: `## Candidate answer\n${answer.finalAnswer}`,
+      content: `## Candidate answer\n${answer.finalAnswer ?? answer.rawText ?? "[missing candidate answer]"}`,
     },
     ...(retrievalBlock ? [{ role: "user" as const, content: retrievalBlock }] : []),
   ];
 }
 
-async function renderJudgePrompt(question: DatasetQuestion, answer: BenchmarkAnswerResponse, trace: CollectTrace, promptTemplatePath: string): Promise<string> {
-  const messages = await renderJudgePromptMessages(question, answer, trace, promptTemplatePath);
+async function renderJudgePrompt(question: DatasetQuestion, answer: BenchmarkAnswerResponse, trace: CollectTrace, promptTemplatePath: string, manifest: RunManifest): Promise<string> {
+  const messages = await renderJudgePromptMessages(question, answer, trace, promptTemplatePath, manifest);
   return messages.map((message) => message.content).join("\n\n").trimEnd() + "\n";
 }
 
@@ -183,7 +172,7 @@ export async function judgeRun(options: JudgeRunOptions): Promise<JudgeRunOutput
   const judgeV2Path = join(options.runDirectory, "judge.v2.json");
 
   const manifest = await readJsonFile<RunManifest>(join(options.runDirectory, "manifest.json"));
-  const normalizedAnswer = await readJsonFile<BenchmarkAnswerResponse | { parseError: string; rawText?: string }>(join(options.runDirectory, "normalized-answer.json"));
+  const normalizedAnswer = await readJsonFile<BenchmarkAnswerResponse>(join(options.runDirectory, "normalized-answer.json"));
   const trace = await readJsonFile<CollectTrace>(join(options.runDirectory, "trace.json"));
   const dataset = await readJsonFile<{ questions: DatasetQuestion[] }>(options.datasetPath);
   const questionId = manifest.questionId ?? "unknown";
@@ -206,15 +195,15 @@ export async function judgeRun(options: JudgeRunOptions): Promise<JudgeRunOutput
     await writeJsonFile(judgeV2Path, a);
     return { judgePath, artifact: a };
   }
-  if ("parseError" in normalizedAnswer) {
-    const a = skip("answer_parse_error", ["Judge skipped: answer has parse error."]);
+  if (!normalizedAnswer.finalAnswer?.trim()) {
+    const a = skip("answer_parse_error", ["Judge skipped: candidate answer text was unavailable after normalization."]);
     await writeJsonFile(judgePath, a);
     await writeJsonFile(judgeV2Path, a);
     return { judgePath, artifact: a };
   }
 
-  const userMessages = await renderJudgePromptMessages(question, normalizedAnswer, trace, options.promptTemplatePath);
-  const userPrompt = await renderJudgePrompt(question, normalizedAnswer, trace, options.promptTemplatePath);
+  const userMessages = await renderJudgePromptMessages(question, normalizedAnswer, trace, options.promptTemplatePath, manifest);
+  const userPrompt = await renderJudgePrompt(question, normalizedAnswer, trace, options.promptTemplatePath, manifest);
   const promptMessages: PromptMessageSnapshot[] = [
     { role: "system", content: systemPrompt },
     ...userMessages,
@@ -234,10 +223,7 @@ export async function judgeRun(options: JudgeRunOptions): Promise<JudgeRunOutput
   });
 
   const parsed = parseJudgeResponse(llmResult.finalText);
-  const modeMismatch = !("parseError" in parsed) && parsed.observations.mode !== normalizedAnswer.mode
-    ? `Judge observations.mode (${parsed.observations.mode}) did not match candidate answer mode (${normalizedAnswer.mode}).`
-    : undefined;
-  const scored = !("parseError" in parsed) && modeMismatch === undefined;
+  const scored = !("parseError" in parsed);
   const hasError = llmResult.error !== undefined;
   const artifactStatus: JudgeArtifact["status"] = !hasError && scored ? "scored" : "error";
 
@@ -260,17 +246,16 @@ export async function judgeRun(options: JudgeRunOptions): Promise<JudgeRunOutput
     ...(llmResult.finalText !== undefined ? { rawResponseText: llmResult.finalText } : {}),
     ...(llmResult.usage !== undefined ? { usage: llmResult.usage } : {}),
     ...(llmResult.costUsd !== undefined ? { costUsd: llmResult.costUsd } : {}),
-    ...(!scored || hasError ? { error: llmResult.error ?? toJsonValue(modeMismatch ?? parsed) } : {}),
+    ...(!scored || hasError ? { error: llmResult.error ?? toJsonValue(parsed) } : {}),
     elapsedMs: Date.now() - startedAt,
     notes: [
-      "Corpus-assisted qualitative judgment with explicit closed-book handling.",
+      "Corpus-assisted qualitative judgment over the question, reference answer, candidate answer, and optional retrieval trace.",
       options.transport.kind === "openrouter"
         ? "Structured output enforced via response_format."
         : "Pi SDK transport used prompt-level schema enforcement (no response_format support).",
       ...(hasError ? ["Judge model call failed."] : []),
       ...(scored ? [`Judge writes judge.json for compatibility and judge.v2.json as the slimmer authoritative artifact: correctness=${parsed.correctness}, completeness=${parsed.completeness}, deprecatedPatternUse=${parsed.deprecatedPatternUse}, referenceVerified=${parsed.referenceVerified}.`] : []),
-      ...(modeMismatch ? [modeMismatch] : []),
-      ...(scored || modeMismatch ? [] : [`Judge output parse failure: ${(parsed as { parseError: string }).parseError}`]),
+      ...(scored ? [] : [`Judge output parse failure: ${(parsed as { parseError: string }).parseError}`]),
     ],
   };
 
