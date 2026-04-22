@@ -592,7 +592,7 @@ details[open] > summary.with-indicator::after {
 .ledger-table-head,
 .ledger-row-summary {
   display: grid;
-  grid-template-columns: minmax(250px, 1.45fr) repeat(6, minmax(88px, 0.46fr));
+  grid-template-columns: minmax(250px, 1.45fr) repeat(7, minmax(88px, 0.46fr));
   gap: 10px;
   align-items: center;
 }

@@ -31,6 +31,7 @@ interface QuestionGroup {
   }>;
   averageScore: number | null;
   judgeCorrectRate: number | null;
+  judgeCorrectnessScore: number | null;
   meanCompleteness: number | null;
   referenceVerifiedRate: number | null;
   judgeCoverageRate: number | null;
@@ -51,6 +52,12 @@ const THEME_STORAGE_KEY = 'benchmark-visualizer-theme';
 const LazyMarkdownBlock = lazy(() => import('./components/MarkdownBlock'));
 
 const summaryMetrics: MetricDefinition[] = [
+  {
+    label: 'Judge correctness score',
+    higherIsBetter: true,
+    value: (execution) => getJudgeCorrectnessScore(execution.summary),
+    format: (value) => formatNumber(value, 2),
+  },
   {
     label: 'Judge correct rate',
     higherIsBetter: true,
@@ -674,7 +681,7 @@ function App() {
             <div className="stat-strip">
               <StatPill label="Models visible" value={`${totals.visibleExecutions}/${totals.loadedExecutions}`} />
               <StatPill label="Judge coverage" value={formatPercent(totals.judgeCoverageRate)} />
-              <StatPill label="Questions in filter" value={String(totals.visibleQuestions)} />
+              <StatPill label="Interesting questions" value={String(totals.interestingCount)} />
               <StatPill label="Runs with errors" value={String(totals.runsWithErrors)} />
             </div>
           </header>
@@ -755,6 +762,7 @@ function App() {
                 />
                 <div className="ledger-table-head">
                   <span>Model</span>
+                  <span>Judge score</span>
                   <span>Judge correct</span>
                   <span>Completeness</span>
                   <span>Reference verified</span>
@@ -771,6 +779,7 @@ function App() {
                           <strong>{execution.shortLabel}</strong>
                           <span>{execution.label}</span>
                         </div>
+                        <span>{formatNumber(getJudgeCorrectnessScore(execution.summary), 2)}</span>
                         <span>{formatPercent(ratio(execution.summary.judge?.judgeCorrectCount, execution.summary.judge?.judgeRuns))}</span>
                         <span>{formatNumber(execution.summary.judge?.meanCompleteness, 2)}</span>
                         <span>{formatPercent(execution.summary.judge?.referenceVerifiedRate)}</span>
@@ -781,6 +790,7 @@ function App() {
                       <div className="ledger-row-body">
                         <div className="metric-pair-grid compact-grid">
                           <MetricPair label="Runs" value={String(execution.summary.runs ?? '—')} />
+                          <MetricPair label="Judge correctness score" value={formatNumber(getJudgeCorrectnessScore(execution.summary), 2)} />
                           <MetricPair label="Judge correct rate" value={formatPercent(ratio(execution.summary.judge?.judgeCorrectCount, execution.summary.judge?.judgeRuns))} />
                           <MetricPair label="Judge coverage" value={formatCount(execution.summary.judge?.judgeRuns, execution.summary.runs)} />
                           <MetricPair label="Completeness" value={formatNumber(execution.summary.judge?.meanCompleteness, 2)} />
@@ -864,14 +874,16 @@ function App() {
                               <div className="question-list-badges">
                                 <Badge
                                   tone={
-                                    group.judgeCorrectRate == null
+                                    group.judgeCorrectnessScore == null
                                       ? 'neutral'
-                                      : group.judgeCorrectRate >= 0.5
+                                      : group.judgeCorrectnessScore >= 0.25
                                         ? 'success'
-                                        : 'warn'
+                                        : group.judgeCorrectnessScore < 0
+                                          ? 'danger'
+                                          : 'warn'
                                   }
                                 >
-                                  judge {formatPercent(group.judgeCorrectRate)}
+                                  score {formatNumber(group.judgeCorrectnessScore, 2)}
                                 </Badge>
                                 <Badge
                                   tone={
@@ -942,14 +954,16 @@ function App() {
                               <Badge tone="neutral">{humanizeToken(selectedGroup.meta.platformScope)}</Badge>
                               <Badge
                                 tone={
-                                  selectedGroup.judgeCorrectRate == null
+                                  selectedGroup.judgeCorrectnessScore == null
                                     ? 'neutral'
-                                    : selectedGroup.judgeCorrectRate >= 0.5
+                                    : selectedGroup.judgeCorrectnessScore >= 0.25
                                       ? 'success'
-                                      : 'warn'
+                                      : selectedGroup.judgeCorrectnessScore < 0
+                                        ? 'danger'
+                                        : 'warn'
                                 }
                               >
-                                judge {formatPercent(selectedGroup.judgeCorrectRate)}
+                                judge score {formatNumber(selectedGroup.judgeCorrectnessScore, 2)}
                               </Badge>
                               <Badge tone="neutral">
                                 completeness {formatNumber(selectedGroup.meanCompleteness, 2)}
@@ -998,6 +1012,7 @@ function App() {
                             </p>
                             <div className="metric-pair-grid compact-grid">
                               <MetricPair label="Judge coverage" value={formatCount(selectedGroup.judgeCoverageCount, visibleExecutions.length)} />
+                              <MetricPair label="Judge correctness score" value={formatNumber(selectedGroup.judgeCorrectnessScore, 2)} />
                               <MetricPair label="Judge correct rate" value={formatPercent(selectedGroup.judgeCorrectRate)} />
                               <MetricPair label="Mean completeness" value={formatNumber(selectedGroup.meanCompleteness, 2)} />
                               <MetricPair label="Reference verified" value={formatPercent(selectedGroup.referenceVerifiedRate)} />
@@ -1601,6 +1616,10 @@ function buildQuestionGroups(executions: LoadedExecution[], questionList: Questi
     const referenceVerifiedRate =
       referenceVerifiedRuns > 0 ? referenceVerifiedCount / referenceVerifiedRuns : null;
     const judgeCoverageRate = answers.length > 0 ? judgeRuns / answers.length : null;
+    const judgeCorrectnessScore =
+      answers.length > 0
+        ? judgeAnswers.reduce((sum, run) => sum + (run.judge?.correctness ?? 0), 0) / answers.length
+        : null;
 
     const disagreementTokens = new Set<string>();
     answers.forEach(({ run }) => {
@@ -1618,6 +1637,7 @@ function buildQuestionGroups(executions: LoadedExecution[], questionList: Questi
       answers,
       averageScore,
       judgeCorrectRate,
+      judgeCorrectnessScore,
       meanCompleteness,
       referenceVerifiedRate,
       judgeCoverageRate,
@@ -1661,6 +1681,7 @@ function sortAnswerRows(
 function compareQuestionGroups(left: QuestionGroup, right: QuestionGroup, sortMode: SortMode): number {
   if (sortMode === 'judge-risk') {
     return (
+      compareNullableNumbers(left.judgeCorrectnessScore ?? undefined, right.judgeCorrectnessScore ?? undefined) ||
       compareNullableNumbers(left.judgeCorrectRate ?? undefined, right.judgeCorrectRate ?? undefined) ||
       compareNullableNumbers(left.meanCompleteness ?? undefined, right.meanCompleteness ?? undefined) ||
       compareNullableNumbers(left.judgeCoverageRate ?? undefined, right.judgeCoverageRate ?? undefined) ||
@@ -1791,6 +1812,24 @@ function compareJudgePriority(
 
 function makeAnswerRowKey(questionId: string, executionId: string): string {
   return `${questionId}::${executionId}`;
+}
+
+function getJudgeCorrectnessScore(summary: LoadedExecution['summary']): number | undefined {
+  const runs = summary.runs;
+  if (runs == null || runs === 0) {
+    return undefined;
+  }
+
+  const judge = summary.judge;
+  if (!judge) {
+    return undefined;
+  }
+
+  const points =
+    (judge.correctnessPositiveCount ?? judge.judgeCorrectCount ?? 0) -
+    (judge.correctnessNegativeCount ?? judge.judgeIncorrectCount ?? 0);
+
+  return points / runs;
 }
 
 function ratio(numerator: number | undefined, denominator: number | undefined): number | undefined {
