@@ -1,0 +1,51 @@
+{
+  "parallelism": 3,
+  "defaults": {
+    "questionIds": [
+      "q07-rounding-corners-on-a-container",
+      "q45-adding-a-delay-in-an-async-context",
+      "q51-displaying-a-web-page-in-swiftui",
+      "q64-color-only-status-indicators"
+    ],
+    "modes": ["open_book"],
+    "toolSet": "swift_docs_search_read",
+    "batchSize": 4,
+    "batchNumber": 1,
+    "resume": true,
+    "stopOnError": false
+  },
+  "entries": [
+    {
+      "runId": "grok-search-read-multiquery",
+      "model": "openrouter/x-ai/grok-4.1-fast"
+    },
+    {
+      "runId": "mercury-search-read-multiquery",
+      "model": "openrouter/inception/mercury-2"
+    },
+    {
+      "runId": "gpt-oss-baseten-search-read-multiquery",
+      "model": "openrouter/openai/gpt-oss-120b",
+      "transport": {
+        "openRouterRouting": {
+          "only": ["baseten"],
+          "order": ["baseten"]
+        }
+      }
+    },
+    {
+      "runId": "grok-search-read-low",
+      "model": "openrouter/x-ai/grok-4.1-fast",
+      "transport": {
+        "openRouterReasoningEffort": "low"
+      }
+    },
+    {
+      "runId": "grok-search-read-minimal",
+      "model": "openrouter/x-ai/grok-4.1-fast",
+      "transport": {
+        "openRouterReasoningEffort": "minimal"
+      }
+    }
+  ]
+}
