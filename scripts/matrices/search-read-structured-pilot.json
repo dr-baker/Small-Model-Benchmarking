@@ -1,0 +1,64 @@
+{
+  "parallelism": 2,
+  "defaults": {
+    "modes": ["open_book"],
+    "toolSet": "swift_docs_search_read",
+    "resume": true,
+    "stopOnError": false,
+    "answerCollectionMode": "structured_json"
+  },
+  "entries": [
+    {
+      "id": "grok",
+      "runId": "grok-search-read-structured-campaign",
+      "model": "openrouter/x-ai/grok-4.1-fast"
+    },
+    {
+      "id": "mercury",
+      "runId": "mercury-search-read-structured-campaign",
+      "model": "openrouter/inception/mercury-2"
+    },
+    {
+      "id": "gpt-oss-baseten",
+      "runId": "gpt-oss-baseten-search-read-structured-campaign",
+      "model": "openrouter/openai/gpt-oss-120b",
+      "transport": {
+        "openRouterRouting": {
+          "only": ["baseten"],
+          "order": ["baseten"]
+        }
+      }
+    }
+  ],
+  "phases": [
+    {
+      "name": "pilot",
+      "questionIds": [
+        "q07-rounding-corners-on-a-container",
+        "q45-adding-a-delay-in-an-async-context",
+        "q51-displaying-a-web-page-in-swiftui",
+        "q64-color-only-status-indicators"
+      ],
+      "batchSize": 4,
+      "batchNumber": 1,
+      "validation": {
+        "maxAnyErrorRate": 0.5,
+        "maxJudgeErrorRate": 0.5,
+        "structuredFallback": {
+          "enabled": true,
+          "minRuns": 2,
+          "minAnswerParseErrorRate": 0.5,
+          "maxOtherCollectErrorRate": 0.1,
+          "maxJudgeErrorRate": 0.5,
+          "targetAnswerCollectionMode": "lazy_text",
+          "runIdSuffix": "-lazy"
+        }
+      }
+    },
+    {
+      "name": "main-batch-1",
+      "batchSize": 20,
+      "batchNumber": "auto"
+    }
+  ]
+}
