@@ -289,11 +289,19 @@ async function runOpenRouterClient(config: LlmClientConfig, deps: LlmClientDeps 
       if (config.transport.openRouterRouting) {
         body.provider = config.transport.openRouterRouting;
       }
+      if (config.transport.openRouterReasoningEffort) {
+        body.reasoning = { effort: config.transport.openRouterReasoningEffort };
+      }
 
       events.push({
         observedAt: new Date().toISOString(),
         eventType: "llm_request",
-        payload: toJsonValue({ round, model: config.model.modelId, transport: config.transport.kind }),
+        payload: toJsonValue({
+          round,
+          model: config.model.modelId,
+          transport: config.transport.kind,
+          ...(config.transport.openRouterReasoningEffort ? { openRouterReasoningEffort: config.transport.openRouterReasoningEffort } : {}),
+        }),
       });
 
       let response: Response | undefined;

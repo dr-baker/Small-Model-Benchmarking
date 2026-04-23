@@ -6,7 +6,7 @@ export const JUDGE_VERDICT_SCHEMA_VERSION = "judge-verdict.v1" as const;
 
 export type BenchmarkMode = "closed_book" | "open_book";
 export type AnswerCollectionMode = "structured_json" | "lazy_text";
-export type ToolSetName = "none" | "read_only" | "read_grep" | "read_grep_glob" | "swift_docs_hybrid";
+export type ToolSetName = "none" | "read_only" | "read_grep" | "read_grep_glob" | "swift_docs_hybrid" | "swift_docs_search_read";
 export type PromptTemplateId = "benchmark-answer-v1";
 export type JudgePromptTemplateId = "judge-answer-v1";
 export type JudgeVerdictLabel = "correct" | "partially_correct" | "incorrect";
@@ -37,6 +37,7 @@ export interface ModelRef {
 }
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+export type OpenRouterReasoningEffort = "minimal" | "low" | "medium" | "high";
 
 export interface SessionConfig {
   compaction: boolean;
@@ -58,6 +59,7 @@ export interface ModelTransportConfig {
   openRouterRouting?: OpenRouterProviderRoutingConfig;
   openRouterUseStructuredOutputs?: boolean;
   openRouterRetryDelaysMs?: number[];
+  openRouterReasoningEffort?: OpenRouterReasoningEffort;
 }
 
 export interface CorpusSnapshotRef {

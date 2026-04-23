@@ -13,6 +13,7 @@ import type {
   ModelTransportConfig,
   SessionConfig,
   ThinkingLevel,
+  OpenRouterReasoningEffort,
   SwiftDocsToolConfig,
   AnswerCollectionMode,
 } from "./contracts.js";
@@ -106,6 +107,7 @@ function isNonEmptyStringArray(value: unknown): value is string[] {
 }
 
 const VALID_THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
+const VALID_OPENROUTER_REASONING_EFFORTS: OpenRouterReasoningEffort[] = ["minimal", "low", "medium", "high"];
 
 function validateTransportConfig(raw: unknown, label: string): asserts raw is ModelTransportConfig {
   if (!raw || typeof raw !== "object") throw new Error(`Missing ${label}`);
@@ -161,6 +163,15 @@ function validateTransportConfig(raw: unknown, label: string): asserts raw is Mo
     }
     if (!Array.isArray(transport.openRouterRetryDelaysMs) || !transport.openRouterRetryDelaysMs.every(isNonNegativeInteger)) {
       throw new Error(`${label}.openRouterRetryDelaysMs must be an array of non-negative integers`);
+    }
+  }
+
+  if (transport.openRouterReasoningEffort !== undefined) {
+    if (transport.kind !== "openrouter") {
+      throw new Error(`${label}.openRouterReasoningEffort is only supported when ${label}.kind='openrouter'`);
+    }
+    if (!VALID_OPENROUTER_REASONING_EFFORTS.includes(transport.openRouterReasoningEffort as OpenRouterReasoningEffort)) {
+      throw new Error(`${label}.openRouterReasoningEffort must be one of ${VALID_OPENROUTER_REASONING_EFFORTS.join(", ")}`);
     }
   }
 }

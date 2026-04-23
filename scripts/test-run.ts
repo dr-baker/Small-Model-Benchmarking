@@ -17,6 +17,7 @@ interface CliArgs {
   model?: string;
   judgeModel?: string;
   transport?: "openrouter" | "pi";
+  openRouterReasoningEffort?: "minimal" | "low" | "medium" | "high";
   questionIds?: string[];
   modes?: string[];
   toolSet?: ToolSetName;
@@ -70,6 +71,13 @@ function parseCliArgs(argv: string[]): CliArgs {
       result.transport = transport;
     }
     else if (arg.startsWith("--mode=")) result.modes = parseCsv(arg.split("=")[1] ?? "");
+    else if (arg.startsWith("--openrouter-reasoning-effort=")) {
+      const effort = arg.split("=")[1];
+      if (effort !== "minimal" && effort !== "low" && effort !== "medium" && effort !== "high") {
+        throw new Error("--openrouter-reasoning-effort must be minimal, low, medium, or high");
+      }
+      result.openRouterReasoningEffort = effort;
+    }
     else if (arg.startsWith("--tool-set=")) result.toolSet = arg.split("=")[1] as ToolSetName;
     else if (arg.startsWith("--run-id=")) result.runId = arg.split("=")[1];
     else if (arg.startsWith("--batch-size=")) result.batchSize = parsePositiveInteger(arg.split("=")[1] ?? "", "--batch-size");
@@ -207,6 +215,7 @@ function normalizeTransportForArtifact(transport: BenchmarkConfig["transport"]):
       ...(transport.openRouterRouting ? { openRouterRouting: transport.openRouterRouting } : {}),
       ...(transport.openRouterUseStructuredOutputs !== undefined ? { openRouterUseStructuredOutputs: transport.openRouterUseStructuredOutputs } : {}),
       ...(transport.openRouterRetryDelaysMs ? { openRouterRetryDelaysMs: transport.openRouterRetryDelaysMs } : {}),
+      ...(transport.openRouterReasoningEffort ? { openRouterReasoningEffort: transport.openRouterReasoningEffort } : {}),
     };
   }
 
@@ -284,6 +293,7 @@ async function writeExecutionArtifacts(params: {
       ...(params.cli.modes ? { modes: params.cli.modes } : {}),
       ...(params.cli.runId ? { runId: params.cli.runId } : {}),
       ...(params.cli.toolSet ? { toolSet: params.cli.toolSet } : {}),
+      ...(params.cli.openRouterReasoningEffort ? { openRouterReasoningEffort: params.cli.openRouterReasoningEffort } : {}),
       ...(params.cli.batchSize ? { batchSize: params.cli.batchSize } : {}),
       ...(params.cli.batchNumber ? { batchNumber: params.cli.batchNumber } : {}),
       ...(params.cli.resume !== undefined ? { resume: params.cli.resume } : {}),
@@ -318,7 +328,11 @@ async function main() {
   const judgeModelRef: ModelRef = cli.judgeModel
     ? parseModelRefFromString(cli.judgeModel)
     : getJudgeModelRef(config);
-  const transport = cli.transport ? { ...config.transport, kind: cli.transport } : config.transport;
+  const transport = {
+    ...config.transport,
+    ...(cli.transport ? { kind: cli.transport } : {}),
+    ...(cli.openRouterReasoningEffort ? { openRouterReasoningEffort: cli.openRouterReasoningEffort } : {}),
+  };
   const judgeTransport = cli.transport ? { ...getJudgeTransportConfig(config), kind: cli.transport } : getJudgeTransportConfig(config);
 
   if (executionResume && effectiveRunId === "auto") {
