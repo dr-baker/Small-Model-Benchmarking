@@ -16,6 +16,7 @@ import type {
   OpenRouterReasoningEffort,
   SwiftDocsToolConfig,
   AnswerCollectionMode,
+  RetryPolicyConfig,
 } from "./contracts.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -61,6 +62,7 @@ export interface BenchmarkConfig {
   judge: {
     model: string;
     transport?: ModelTransportConfig;
+    retry?: RetryPolicyConfig;
     profile: JudgeProfile;
   };
   paths: {
@@ -108,6 +110,21 @@ function isNonEmptyStringArray(value: unknown): value is string[] {
 
 const VALID_THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
 const VALID_OPENROUTER_REASONING_EFFORTS: OpenRouterReasoningEffort[] = ["minimal", "low", "medium", "high"];
+
+function validateRetryPolicyConfig(raw: unknown, label: string): asserts raw is RetryPolicyConfig {
+  if (!raw || typeof raw !== "object") throw new Error(`${label} must be an object`);
+  const retry = raw as Record<string, unknown>;
+  if (!isPositiveInteger(retry.maxAttempts)) throw new Error(`${label}.maxAttempts must be a positive integer`);
+  if (!isNonNegativeInteger(retry.initialDelayMs)) throw new Error(`${label}.initialDelayMs must be a non-negative integer`);
+  if (typeof retry.backoffMultiplier !== "number" || !Number.isFinite(retry.backoffMultiplier) || retry.backoffMultiplier < 1) {
+    throw new Error(`${label}.backoffMultiplier must be a finite number greater than or equal to 1`);
+  }
+  if (!isNonNegativeInteger(retry.maxDelayMs)) throw new Error(`${label}.maxDelayMs must be a non-negative integer`);
+  if (retry.maxDelayMs < retry.initialDelayMs) throw new Error(`${label}.maxDelayMs must be greater than or equal to initialDelayMs`);
+  if (retry.jitterMs !== undefined && !isNonNegativeInteger(retry.jitterMs)) {
+    throw new Error(`${label}.jitterMs must be a non-negative integer when provided`);
+  }
+}
 
 function validateTransportConfig(raw: unknown, label: string): asserts raw is ModelTransportConfig {
   if (!raw || typeof raw !== "object") throw new Error(`Missing ${label}`);
@@ -196,6 +213,9 @@ function validateConfig(raw: unknown): asserts raw is BenchmarkConfig {
   if (typeof judge.model !== "string") throw new Error("judge.model must be a provider/model string");
   if (judge.transport !== undefined) {
     validateTransportConfig(judge.transport, "judge.transport");
+  }
+  if (judge.retry !== undefined) {
+    validateRetryPolicyConfig(judge.retry, "judge.retry");
   }
   if (!judge.profile || typeof judge.profile !== "object") throw new Error("Missing judge.profile");
   const profile = judge.profile as Record<string, unknown>;

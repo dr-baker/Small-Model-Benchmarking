@@ -14,6 +14,7 @@ import {
   type ModelRef,
   type ModelTransportConfig,
   type PromptMessageSnapshot,
+  type RetryPolicyConfig,
   type RunManifest,
   type ToolInvocationTrace,
 } from "../shared/contracts.js";
@@ -104,7 +105,7 @@ function deriveLegacyExplanation(r: ParsedJudgeResponse): 0 | 1 | 2 {
 }
 
 function buildSearchTraceSummary(trace: CollectTrace): string | undefined {
-  const searchCalls = trace.toolInvocations.filter((tool) => tool.toolName === "swift_docs_search_hybrid" && !tool.isError);
+  const searchCalls = trace.toolInvocations.filter((tool) => isSwiftDocsSearchToolName(tool.toolName) && !tool.isError);
   if (searchCalls.length === 0) return undefined;
 
   const summarizeCall = (tool: ToolInvocationTrace, index: number) => {
@@ -146,6 +147,108 @@ async function renderJudgePromptMessages(question: DatasetQuestion, answer: Benc
 async function renderJudgePrompt(question: DatasetQuestion, answer: BenchmarkAnswerResponse, trace: CollectTrace, promptTemplatePath: string, manifest: RunManifest): Promise<string> {
   const messages = await renderJudgePromptMessages(question, answer, trace, promptTemplatePath, manifest);
   return messages.map((message) => message.content).join("\n\n").trimEnd() + "\n";
+}
+
+const DEFAULT_JUDGE_RETRY_POLICY: RetryPolicyConfig = {
+  maxAttempts: 3,
+  initialDelayMs: 2000,
+  backoffMultiplier: 2,
+  maxDelayMs: 15000,
+  jitterMs: 250,
+};
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getRetryDelayMs(policy: RetryPolicyConfig, attemptIndex: number): number {
+  const exponentialDelay = policy.initialDelayMs * (policy.backoffMultiplier ** attemptIndex);
+  const cappedDelay = Math.min(policy.maxDelayMs, Math.round(exponentialDelay));
+  if (!policy.jitterMs) return cappedDelay;
+  return cappedDelay + Math.floor(Math.random() * (policy.jitterMs + 1));
+}
+
+function isRetryableJudgeError(error: unknown): boolean {
+  if (!error) return false;
+  const text = serializeJson(toJsonValue(error)).toLowerCase();
+  return text.includes("server_error")
+    || text.includes("rate limit")
+    || text.includes("rate_limit")
+    || text.includes("timeout")
+    || text.includes("timed out")
+    || text.includes("temporarily unavailable")
+    || text.includes("overloaded")
+    || text.includes("connection reset")
+    || text.includes("econnreset")
+    || text.includes("etimedout")
+    || text.includes("429")
+    || text.includes("502")
+    || text.includes("503")
+    || text.includes("504");
+}
+
+function shouldRetryJudgeAttempt(llmResult: { error: unknown | undefined; finalText: string | undefined }, parsed: ParsedJudgeResponse | { parseError: string; rawText?: string }): { retryable: boolean; reason?: string } {
+  if (llmResult.error !== undefined) {
+    return isRetryableJudgeError(llmResult.error)
+      ? { retryable: true, reason: `judge model call failed: ${serializeJson(toJsonValue(llmResult.error))}` }
+      : { retryable: false };
+  }
+
+  if ("parseError" in parsed) {
+    if (parsed.parseError === "Judge produced no final text.") {
+      return { retryable: true, reason: parsed.parseError };
+    }
+    if (!llmResult.finalText?.trim()) {
+      return { retryable: true, reason: parsed.parseError };
+    }
+  }
+
+  return { retryable: false };
+}
+
+async function runJudgeWithRetries(params: {
+  model: ModelRef;
+  transport: ModelTransportConfig;
+  messages: PromptMessageSnapshot[];
+  tools: ReturnType<typeof createToolsForToolSet>;
+  apiKey: string | undefined;
+  cwd: string;
+  retryPolicy: RetryPolicyConfig | undefined;
+}): Promise<{ llmResult: Awaited<ReturnType<typeof runLlmClient>>; parsed: ParsedJudgeResponse | { parseError: string; rawText?: string }; attemptCount: number; retryNotes: string[] }> {
+  const retryPolicy = params.retryPolicy ?? DEFAULT_JUDGE_RETRY_POLICY;
+  const retryNotes: string[] = [];
+
+  for (let attempt = 1; attempt <= retryPolicy.maxAttempts; attempt += 1) {
+    const llmResult = await runLlmClient({
+      model: params.model,
+      transport: params.transport,
+      messages: params.messages,
+      tools: params.tools,
+      responseFormat: buildJudgeVerdictResponseFormat(),
+      apiKey: params.apiKey,
+      cwd: params.cwd,
+    });
+    const parsed = parseJudgeResponse(llmResult.finalText);
+    const retryDecision = shouldRetryJudgeAttempt(llmResult, parsed);
+
+    if (!retryDecision.retryable || attempt === retryPolicy.maxAttempts) {
+      if (attempt > 1) {
+        retryNotes.push(`Judge attempts: ${attempt} total; retries used=${attempt - 1}.`);
+      }
+      if (retryDecision.retryable && attempt === retryPolicy.maxAttempts && retryDecision.reason) {
+        retryNotes.push(`Judge retries exhausted after attempt ${attempt}: ${retryDecision.reason}`);
+      }
+      return { llmResult, parsed, attemptCount: attempt, retryNotes };
+    }
+
+    const delayMs = getRetryDelayMs(retryPolicy, attempt - 1);
+    const reason = retryDecision.reason ?? "retryable judge failure";
+    retryNotes.push(`Judge attempt ${attempt} failed with a retryable issue; waiting ${delayMs}ms before retry ${attempt + 1}/${retryPolicy.maxAttempts}. Reason: ${reason}`);
+    console.warn(`judge retry ${attempt + 1}/${retryPolicy.maxAttempts} scheduled in ${delayMs}ms for ${params.model.provider}/${params.model.modelId}: ${reason}`);
+    await sleep(delayMs);
+  }
+
+  throw new Error("Judge retry loop terminated unexpectedly.");
 }
 
 function createSkippedArtifact(params: {
@@ -212,17 +315,15 @@ export async function judgeRun(options: JudgeRunOptions): Promise<JudgeRunOutput
   const tools = createToolsForToolSet(judgeToolSet, corpusRoot, manifest.swiftDocs ? { swiftDocs: manifest.swiftDocs } : undefined);
   const apiKey = await resolveModelApiKey(effectiveJudgeModel);
 
-  const llmResult = await runLlmClient({
+  const { llmResult, parsed, retryNotes } = await runJudgeWithRetries({
     model: effectiveJudgeModel,
     transport: options.transport,
     messages: promptMessages,
     tools,
-    responseFormat: buildJudgeVerdictResponseFormat(),
     apiKey,
     cwd: corpusRoot,
+    retryPolicy: options.retryPolicy,
   });
-
-  const parsed = parseJudgeResponse(llmResult.finalText);
   const scored = !("parseError" in parsed);
   const hasError = llmResult.error !== undefined;
   const artifactStatus: JudgeArtifact["status"] = !hasError && scored ? "scored" : "error";
@@ -253,6 +354,7 @@ export async function judgeRun(options: JudgeRunOptions): Promise<JudgeRunOutput
       options.transport.kind === "openrouter"
         ? "Structured output enforced via response_format."
         : "Pi SDK transport used prompt-level schema enforcement (no response_format support).",
+      ...retryNotes,
       ...(hasError ? ["Judge model call failed."] : []),
       ...(scored ? [`Judge writes judge.json for compatibility and judge.v2.json as the slimmer authoritative artifact: correctness=${parsed.correctness}, completeness=${parsed.completeness}, deprecatedPatternUse=${parsed.deprecatedPatternUse}, referenceVerified=${parsed.referenceVerified}.`] : []),
       ...(scored ? [] : [`Judge output parse failure: ${(parsed as { parseError: string }).parseError}`]),

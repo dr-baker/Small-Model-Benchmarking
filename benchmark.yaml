@@ -25,6 +25,12 @@ judge:
       retry: false
       maxRetries: 0
       thinkingLevel: medium
+  retry:
+    maxAttempts: 3
+    initialDelayMs: 2000
+    backoffMultiplier: 2
+    maxDelayMs: 15000
+    jitterMs: 250
   profile:
     id: semantic-judge-v1
     version: 1.0.0

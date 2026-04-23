@@ -256,6 +256,7 @@ async function writeExecutionArtifacts(params: {
     judge: {
       model: `${params.judgeModelRef.provider}/${params.judgeModelRef.modelId}`,
       transport: normalizeTransportForArtifact(params.judgeTransport),
+      ...(params.config.judge.retry ? { retry: params.config.judge.retry } : {}),
       profile: params.config.judge.profile,
     },
     paths: params.config.paths,
@@ -473,6 +474,7 @@ async function main() {
             systemPrompt: config.systemPrompts.judge,
             toolSetCatalogPath: config.paths.toolSets,
             transport: judgeTransport,
+            retryPolicy: config.judge.retry,
             judgeModelOverride: judgeModelRef,
           });
           judgeHadError = judgeOutput.artifact.status === "error";

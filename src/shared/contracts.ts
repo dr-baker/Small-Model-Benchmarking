@@ -39,6 +39,14 @@ export interface ModelRef {
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 export type OpenRouterReasoningEffort = "minimal" | "low" | "medium" | "high";
 
+export interface RetryPolicyConfig {
+  maxAttempts: number;
+  initialDelayMs: number;
+  backoffMultiplier: number;
+  maxDelayMs: number;
+  jitterMs?: number;
+}
+
 export interface SessionConfig {
   compaction: boolean;
   retry: boolean;
