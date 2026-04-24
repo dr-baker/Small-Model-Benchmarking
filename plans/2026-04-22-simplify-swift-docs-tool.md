@@ -1,0 +1,34 @@
+# Simplify Swift Docs Retrieval Tool
+
+## Goal
+Replace the current model-tuned Swift Docs hybrid tool with a simpler opinionated retrieval tool designed for this benchmark, wire it into a new hybrid+read tool set, update prompt/docs/integration code, and test Grok, Mercury, and GPT OSS 120B Baseten on the new setup.
+
+## TODO
+- [x] Audit the current Swift Docs tool, result parsers, judge/grade integrations, and benchmark prompt/tool-set wiring.
+- [x] Design the new benchmark-specific retrieval tool interface, defaults, fallback behavior, and output shape.
+- [x] Implement the new Swift Docs search tool and wire it into a new tool set alongside `read`.
+- [x] Update parsing, retrieval metrics, judge trace summaries, benchmark prompts, config comments, and local setup docs for the new tool.
+- [x] Add or adapt local test coverage/scripts so the new tool can be exercised directly and tuned.
+- [x] Run typecheck/build and targeted local retrieval tests to tune the new tool defaults.
+- [x] Run benchmark slices for Grok, Mercury, and GPT OSS 120B Baseten on the new tool set and summarize results.
+- [x] Analyze the first search+read smoke-slice failures and identify targeted retrieval heuristics to add.
+- [x] Implement a second-pass set of retrieval optimizations and rerun parallel smoke slices for Grok, Mercury, and GPT OSS 120B Baseten.
+
+## Progress Notes
+- [2026-04-22 01:40] Started the simplification pass. Confirmed the current `swift_docs_search_hybrid` wrapper exposes too many retrieval knobs to the model and that judge/grade only really depend on stable path-bearing results.
+- [2026-04-22 01:43] Used subagents to audit the current integration and confirm a safer direction: benchmark-specific query-intent args only, wrapper-owned defaults/fallbacks, and hybrid+read as the target tool set.
+- [2026-04-22 02:25] Added a new `swift_docs_search` tool with a minimal interface (`query`, optional `symbols`) and a new `swift_docs_search_read` tool set. The wrapper now owns the hybrid defaults, strips corpus prefixes from returned paths, performs exact-symbol lookup, falls back to lexical chunk search when symbol lookup misses, and returns ranked `recommendedReads` plus compatible `pages`/`chunks` for grading.
+- [2026-04-22 02:40] Updated shared parsing and judge/grade integrations to treat both Swift Docs tool names as retrieval sources. Updated the benchmark prompt, `benchmark.yaml` comments, and `docs/local-setup.md` to describe the search+read flow and to warn the model not to return tool payloads as the final answer.
+- [2026-04-22 02:50] Added `scripts/test-swift-docs-search.ts` and `npm run test:tools:swift-docs-search` for direct retrieval tuning. Local tool tests on q07/q45/q51/q64 showed the new tool surfaces the expected docs much more cleanly than the old wide-open hybrid interface, especially after adding the `Task.sleep` lexical fallback.
+- [2026-04-22 03:05] Ran targeted 4-question benchmark slices on the new tool set for Grok, Mercury, and GPT OSS 120B on Baseten. Grok went 3 correct / 1 partial on the judged slice and clearly used the intended search→read pattern. Mercury went 2 correct / 1 incorrect with 1 judge server error. GPT Baseten went 1 correct / 1 partial with 2 judge server errors on the first slice; after tightening the prompt to forbid final tool-payload output, a q64 rerun improved from a broken final answer to a scored partial answer.
+- [2026-04-22 03:30] Did a second optimization pass focused on the remaining q51/q64 misses. Added domain heuristics to `swift_docs_search` for web-content queries (`WebView`, `WebPage`, linked WebKit URL promotion) and color-only accessibility queries (`accessibilityDifferentiateWithoutColor`, `Differentiate without Color`, `shapes or glyphs`). Also added ranking penalties for misleading fallback pages like `paging`, `toolbaritemplacement/status`, and generic accessibility label/value docs when the query intent is clearly different.
+- [2026-04-22 03:40] Reran the 4-question smoke slices in parallel for Grok, Mercury, and GPT OSS 120B Baseten. On pass 2 all three models reached 4/4 judged-correct on this slice. Grok improved from 3 correct + 1 partial to 4 correct while also reducing mean tool calls from 6.25 to 4.5 and mean collect time from 24.67s to 15.43s. Mercury improved from 2 correct / 1 incorrect / 1 judge error to 4 correct. GPT Baseten improved from 1 correct / 1 partial / 2 judge errors to 4 correct, with far better control on q51 and q64.
+- [2026-04-22 04:05] Per user request, removed the highly question-specific heuristics from the second pass and replaced them with systematic changes: generic phrase extraction for query planning, generic “modern API / documentation guidance” semantic reformulations, linked-doc promotion from retrieved Apple doc URLs, stronger specificity ranking, and ambiguity penalties for low-information generic hits. Then reran the same 4-question smoke slice in parallel. Results stayed strong for Grok (4/4 correct) and remained improved over the first pass for Mercury (3/4 correct) and GPT Baseten (3/4 correct, 1 partial), without the targeted q51/q64 heuristics.
+- [2026-04-22 04:12] Also tried a stronger answer-synthesis prompt that told models to prefer direct symbol pages over overview/integration docs. That change regressed the smoke slice for all three models, so it was reverted. Current state keeps the systematic retrieval-wrapper improvements but not the stronger synthesis prompt.
+
+## Final notes and learnings
+- Shipped a new benchmark-oriented `swift_docs_search` tool and `swift_docs_search_read` tool set instead of replacing the legacy low-level hybrid tool outright.
+- The strongest design lesson was to keep the model-facing interface tiny and move retrieval policy into the wrapper: fixed hybrid defaults, exact symbol lookup, lexical fallback for symbol misses, ranked recommended reads, query-intent heuristics, linked-doc promotion, and explicit read-before-answer guidance.
+- The second pass showed that a small number of domain-specific heuristics can materially improve both quality and control without reintroducing a complex model-facing parameter surface, but those heuristics were probably too narrow for long-term confidence.
+- The systematic pass kept the simpler model-facing interface and replaced the question-specific boosts with general retrieval improvements. On the targeted 4-question slice it still achieved 4/4 judged-correct for Grok, 3/4 for Mercury, and 3/4 plus 1 partial for GPT OSS 120B Baseten.
+- The remaining systematic issues now look mostly like synthesis/decision issues after retrieval rather than the tool returning obviously wrong candidates: repeated reformulations on low-confidence questions, models sometimes preferring broad or fallback docs over the most direct doc, and lazy-text runs still hiding groundedness because they don’t emit structured citations.
