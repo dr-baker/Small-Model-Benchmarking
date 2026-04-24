@@ -1,0 +1,252 @@
+{
+  "parallelism": 2,
+  "defaults": {
+    "resume": true,
+    "stopOnError": false
+  },
+  "entries": [
+    {
+      "id": "qwen-closed",
+      "runId": "qwen3-next-80b-a3b-thinking-closed",
+      "model": "openrouter/qwen/qwen3-next-80b-a3b-thinking",
+      "modes": ["closed_book"],
+      "toolSet": "none"
+    },
+    {
+      "id": "qwen-read-only",
+      "runId": "qwen3-next-80b-a3b-thinking-read-only",
+      "model": "openrouter/qwen/qwen3-next-80b-a3b-thinking",
+      "modes": ["open_book"],
+      "toolSet": "read_only"
+    },
+    {
+      "id": "qwen-read-grep",
+      "runId": "qwen3-next-80b-a3b-thinking-read-grep",
+      "model": "openrouter/qwen/qwen3-next-80b-a3b-thinking",
+      "modes": ["open_book"],
+      "toolSet": "read_grep"
+    },
+    {
+      "id": "qwen-read-grep-glob",
+      "runId": "qwen3-next-80b-a3b-thinking-read-grep-glob",
+      "model": "openrouter/qwen/qwen3-next-80b-a3b-thinking",
+      "modes": ["open_book"],
+      "toolSet": "read_grep_glob"
+    },
+    {
+      "id": "qwen-swift-docs-hybrid",
+      "runId": "qwen3-next-80b-a3b-thinking-swift-docs-hybrid",
+      "model": "openrouter/qwen/qwen3-next-80b-a3b-thinking",
+      "modes": ["open_book"],
+      "toolSet": "swift_docs_hybrid"
+    },
+    {
+      "id": "qwen-swift-docs-search-read",
+      "runId": "qwen3-next-80b-a3b-thinking-swift-docs-search-read",
+      "model": "openrouter/qwen/qwen3-next-80b-a3b-thinking",
+      "modes": ["open_book"],
+      "toolSet": "swift_docs_search_read"
+    },
+
+    {
+      "id": "devstral-closed",
+      "runId": "devstral-small-closed",
+      "model": "openrouter/mistralai/devstral-small",
+      "modes": ["closed_book"],
+      "toolSet": "none"
+    },
+    {
+      "id": "devstral-read-only",
+      "runId": "devstral-small-read-only",
+      "model": "openrouter/mistralai/devstral-small",
+      "modes": ["open_book"],
+      "toolSet": "read_only"
+    },
+    {
+      "id": "devstral-read-grep",
+      "runId": "devstral-small-read-grep",
+      "model": "openrouter/mistralai/devstral-small",
+      "modes": ["open_book"],
+      "toolSet": "read_grep"
+    },
+    {
+      "id": "devstral-read-grep-glob",
+      "runId": "devstral-small-read-grep-glob",
+      "model": "openrouter/mistralai/devstral-small",
+      "modes": ["open_book"],
+      "toolSet": "read_grep_glob"
+    },
+    {
+      "id": "devstral-swift-docs-hybrid",
+      "runId": "devstral-small-swift-docs-hybrid",
+      "model": "openrouter/mistralai/devstral-small",
+      "modes": ["open_book"],
+      "toolSet": "swift_docs_hybrid"
+    },
+    {
+      "id": "devstral-swift-docs-search-read",
+      "runId": "devstral-small-swift-docs-search-read",
+      "model": "openrouter/mistralai/devstral-small",
+      "modes": ["open_book"],
+      "toolSet": "swift_docs_search_read"
+    },
+
+    {
+      "id": "glm-deepinfra-closed",
+      "runId": "glm-4-7-flash-deepinfra-closed",
+      "model": "openrouter/z-ai/glm-4.7-flash",
+      "modes": ["closed_book"],
+      "toolSet": "none",
+      "transport": {
+        "openRouterRouting": {
+          "only": ["deepinfra"],
+          "order": ["deepinfra"]
+        }
+      }
+    },
+    {
+      "id": "glm-deepinfra-read-only",
+      "runId": "glm-4-7-flash-deepinfra-read-only",
+      "model": "openrouter/z-ai/glm-4.7-flash",
+      "modes": ["open_book"],
+      "toolSet": "read_only",
+      "transport": {
+        "openRouterRouting": {
+          "only": ["deepinfra"],
+          "order": ["deepinfra"]
+        }
+      }
+    },
+    {
+      "id": "glm-deepinfra-read-grep",
+      "runId": "glm-4-7-flash-deepinfra-read-grep",
+      "model": "openrouter/z-ai/glm-4.7-flash",
+      "modes": ["open_book"],
+      "toolSet": "read_grep",
+      "transport": {
+        "openRouterRouting": {
+          "only": ["deepinfra"],
+          "order": ["deepinfra"]
+        }
+      }
+    },
+    {
+      "id": "glm-deepinfra-read-grep-glob",
+      "runId": "glm-4-7-flash-deepinfra-read-grep-glob",
+      "model": "openrouter/z-ai/glm-4.7-flash",
+      "modes": ["open_book"],
+      "toolSet": "read_grep_glob",
+      "transport": {
+        "openRouterRouting": {
+          "only": ["deepinfra"],
+          "order": ["deepinfra"]
+        }
+      }
+    },
+    {
+      "id": "glm-deepinfra-swift-docs-hybrid",
+      "runId": "glm-4-7-flash-deepinfra-swift-docs-hybrid",
+      "model": "openrouter/z-ai/glm-4.7-flash",
+      "modes": ["open_book"],
+      "toolSet": "swift_docs_hybrid",
+      "transport": {
+        "openRouterRouting": {
+          "only": ["deepinfra"],
+          "order": ["deepinfra"]
+        }
+      }
+    },
+    {
+      "id": "glm-deepinfra-swift-docs-search-read",
+      "runId": "glm-4-7-flash-deepinfra-swift-docs-search-read",
+      "model": "openrouter/z-ai/glm-4.7-flash",
+      "modes": ["open_book"],
+      "toolSet": "swift_docs_search_read",
+      "transport": {
+        "openRouterRouting": {
+          "only": ["deepinfra"],
+          "order": ["deepinfra"]
+        }
+      }
+    },
+
+    {
+      "id": "gemma-google-vertex-closed",
+      "runId": "gemma-4-26b-a4b-it-google-vertex-closed",
+      "model": "openrouter/google/gemma-4-26b-a4b-it",
+      "modes": ["closed_book"],
+      "toolSet": "none",
+      "transport": {
+        "openRouterRouting": {
+          "only": ["google-vertex"],
+          "order": ["google-vertex"]
+        }
+      }
+    },
+    {
+      "id": "gemma-google-vertex-read-only",
+      "runId": "gemma-4-26b-a4b-it-google-vertex-read-only",
+      "model": "openrouter/google/gemma-4-26b-a4b-it",
+      "modes": ["open_book"],
+      "toolSet": "read_only",
+      "transport": {
+        "openRouterRouting": {
+          "only": ["google-vertex"],
+          "order": ["google-vertex"]
+        }
+      }
+    },
+    {
+      "id": "gemma-google-vertex-read-grep",
+      "runId": "gemma-4-26b-a4b-it-google-vertex-read-grep",
+      "model": "openrouter/google/gemma-4-26b-a4b-it",
+      "modes": ["open_book"],
+      "toolSet": "read_grep",
+      "transport": {
+        "openRouterRouting": {
+          "only": ["google-vertex"],
+          "order": ["google-vertex"]
+        }
+      }
+    },
+    {
+      "id": "gemma-google-vertex-read-grep-glob",
+      "runId": "gemma-4-26b-a4b-it-google-vertex-read-grep-glob",
+      "model": "openrouter/google/gemma-4-26b-a4b-it",
+      "modes": ["open_book"],
+      "toolSet": "read_grep_glob",
+      "transport": {
+        "openRouterRouting": {
+          "only": ["google-vertex"],
+          "order": ["google-vertex"]
+        }
+      }
+    },
+    {
+      "id": "gemma-google-vertex-swift-docs-hybrid",
+      "runId": "gemma-4-26b-a4b-it-google-vertex-swift-docs-hybrid",
+      "model": "openrouter/google/gemma-4-26b-a4b-it",
+      "modes": ["open_book"],
+      "toolSet": "swift_docs_hybrid",
+      "transport": {
+        "openRouterRouting": {
+          "only": ["google-vertex"],
+          "order": ["google-vertex"]
+        }
+      }
+    },
+    {
+      "id": "gemma-google-vertex-swift-docs-search-read",
+      "runId": "gemma-4-26b-a4b-it-google-vertex-swift-docs-search-read",
+      "model": "openrouter/google/gemma-4-26b-a4b-it",
+      "modes": ["open_book"],
+      "toolSet": "swift_docs_search_read",
+      "transport": {
+        "openRouterRouting": {
+          "only": ["google-vertex"],
+          "order": ["google-vertex"]
+        }
+      }
+    }
+  ]
+}
