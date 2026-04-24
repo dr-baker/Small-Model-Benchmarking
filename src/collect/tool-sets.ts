@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { createFindTool, createGrepTool, createLsTool, createReadTool } from "@mariozechner/pi-coding-agent";
 import type { SwiftDocsToolConfig, ToolSetDefinition, ToolSetName } from "../shared/contracts.js";
 import { resolvePathWithinCorpus } from "../shared/corpus-paths.js";
-import { createSwiftDocsSearchHybridTool } from "./swift-docs-tool.js";
+import { createSwiftDocsSearchHybridTool, createSwiftDocsSearchTool } from "./swift-docs-tool.js";
 
 interface ToolSetCatalogFile {
   version: string;
@@ -28,7 +28,8 @@ type CollectTool =
   | ReturnType<typeof createGrepTool>
   | ReturnType<typeof createFindTool>
   | ReturnType<typeof createLsTool>
-  | ReturnType<typeof createSwiftDocsSearchHybridTool>;
+  | ReturnType<typeof createSwiftDocsSearchHybridTool>
+  | ReturnType<typeof createSwiftDocsSearchTool>;
 
 type ToolLike = {
   name: string;
@@ -86,6 +87,12 @@ export function createToolsForToolSet(toolSet: ToolSetDefinition, cwd: string, o
           throw new Error("Tool set requires swiftDocs config, but benchmark config.swiftDocs is missing.");
         }
         tools.push(createSwiftDocsSearchHybridTool(options.swiftDocs));
+        break;
+      case "swift_docs_search":
+        if (!options?.swiftDocs) {
+          throw new Error("Tool set requires swiftDocs config, but benchmark config.swiftDocs is missing.");
+        }
+        tools.push(createSwiftDocsSearchTool(options.swiftDocs));
         break;
       default:
         throw new Error(`Unsupported tool in catalog: ${toolName}`);

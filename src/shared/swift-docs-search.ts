@@ -14,6 +14,10 @@ export interface SwiftDocsHybridToolResult {
   chunks: SwiftDocsHybridChunkResult[];
 }
 
+export function isSwiftDocsSearchToolName(toolName: string): boolean {
+  return toolName === "swift_docs_search_hybrid" || toolName === "swift_docs_search";
+}
+
 function parseJsonString(value: string): unknown {
   try {
     return JSON.parse(value);
@@ -26,9 +30,10 @@ export function parseSwiftDocsHybridToolResult(value: unknown): SwiftDocsHybridT
   const parsed = typeof value === "string" ? parseJsonString(value) : value;
   if (!parsed || typeof parsed !== "object") return undefined;
   const record = parsed as Record<string, unknown>;
-  if (!Array.isArray(record.pages) || !Array.isArray(record.chunks)) return undefined;
+  const pagesInput = Array.isArray(record.pages) ? record.pages : [];
+  const chunksInput = Array.isArray(record.chunks) ? record.chunks : [];
 
-  const pages = record.pages.map((page) => {
+  const pages = pagesInput.map((page) => {
     const item = page && typeof page === "object" ? page as Record<string, unknown> : {};
     return {
       ...(typeof item.doc_id === "string" ? { doc_id: item.doc_id } : {}),
@@ -38,7 +43,7 @@ export function parseSwiftDocsHybridToolResult(value: unknown): SwiftDocsHybridT
     };
   });
 
-  const chunks = record.chunks.map((chunk) => {
+  const chunks = chunksInput.map((chunk) => {
     const item = chunk && typeof chunk === "object" ? chunk as Record<string, unknown> : {};
     return {
       ...(typeof item.chunk_id === "string" ? { chunk_id: item.chunk_id } : {}),
@@ -49,6 +54,7 @@ export function parseSwiftDocsHybridToolResult(value: unknown): SwiftDocsHybridT
     };
   });
 
+  if (!Array.isArray(record.pages) && !Array.isArray(record.chunks)) return undefined;
   return { pages, chunks };
 }
 

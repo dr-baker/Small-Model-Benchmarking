@@ -30,7 +30,7 @@ swiftDocs:
   configPath: /absolute/path/to/swift-docs-config.yaml
 ```
 
-This is only needed when running with `--tool-set=swift_docs_hybrid`.
+This is needed when running with either `--tool-set=swift_docs_hybrid` or the newer `--tool-set=swift_docs_search_read`.
 If you need a completely different config file, set `BENCHMARK_CONFIG=/path/to/config.yaml` before running.
 
 ## 4. Smoke test

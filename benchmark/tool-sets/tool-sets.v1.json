@@ -28,8 +28,14 @@
     {
       "name": "swift_docs_hybrid",
       "version": "1.0.0",
-      "description": "Allows one canonical Swift Docs hybrid retrieval tool that accepts explicit terms, symbol hints, and semantic queries.",
+      "description": "Allows the legacy low-level Swift Docs hybrid retrieval tool that accepts explicit terms, symbol hints, and semantic queries.",
       "toolNames": ["swift_docs_search_hybrid"]
+    },
+    {
+      "name": "swift_docs_search_read",
+      "version": "1.0.0",
+      "description": "Use the benchmark-specific Swift Docs search tool to shortlist the best docs, then read the returned files directly before answering.",
+      "toolNames": ["swift_docs_search", "read"]
     }
   ]
 }

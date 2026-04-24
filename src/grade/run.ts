@@ -13,7 +13,7 @@ import type {
 } from "../shared/contracts.js";
 import { readJsonFile, writeJsonFile } from "../shared/io.js";
 import { inferEvidenceBasis, normalizeCorpusRelativePath } from "../shared/corpus-paths.js";
-import { collectSwiftDocsRetrievedPaths, parseSwiftDocsHybridToolResult } from "../shared/swift-docs-search.js";
+import { collectSwiftDocsRetrievedPaths, isSwiftDocsSearchToolName, parseSwiftDocsHybridToolResult } from "../shared/swift-docs-search.js";
 
 interface GradeRunOptions {
   runDirectory: string;
@@ -95,7 +95,7 @@ function searchCallHasRelevantPath(tool: ToolInvocationTrace, relevantPaths: Set
 }
 
 function calculateSwiftDocsHybridRetrievalMetrics(trace: CollectTrace, question: DatasetQuestion, corpusRoot: string): RetrievalMetrics | undefined {
-  const successfulSearchCalls = trace.toolInvocations.filter((tool) => tool.toolName === "swift_docs_search_hybrid" && !tool.isError);
+  const successfulSearchCalls = trace.toolInvocations.filter((tool) => isSwiftDocsSearchToolName(tool.toolName) && !tool.isError);
   if (successfulSearchCalls.length === 0) return undefined;
 
   const relevantPaths = new Set(question.goldEvidence.map((e) => e.filePath));
@@ -139,7 +139,7 @@ function collectRetrievedPaths(trace: CollectTrace, corpusRoot: string): Set<str
       continue;
     }
 
-    if (tool.toolName === "swift_docs_search_hybrid") {
+    if (isSwiftDocsSearchToolName(tool.toolName)) {
       const parsed = parseSwiftDocsHybridToolResult(tool.result);
       if (!parsed) continue;
       for (const path of collectSwiftDocsRetrievedPaths(parsed)) {
