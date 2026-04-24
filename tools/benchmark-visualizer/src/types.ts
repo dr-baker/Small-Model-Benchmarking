@@ -91,6 +91,14 @@ export interface AggregateSummary {
     modelId?: string;
   };
   mode?: string;
+  answerCollectionMode?: string;
+  transport?: {
+    kind?: string;
+    openRouterRouting?: {
+      only?: string[];
+      order?: string[];
+    };
+  };
   toolSet?: {
     name?: string;
     version?: string;
@@ -105,7 +113,16 @@ export interface AggregateSummary {
     meanCollectCostUsdPerRun?: number;
     meanJudgeCostUsdPerRun?: number;
     meanTotalCostUsdPerRun?: number;
+    totalCollectCostUsd?: number;
+    totalJudgeCostUsd?: number;
     totalCostUsd?: number;
+    collectTrackedRuns?: number;
+    judgeTrackedRuns?: number;
+  };
+  timing?: {
+    trackedRuns?: number;
+    totalCollectMs?: number;
+    meanCollectMsPerRun?: number;
   };
   judge?: AggregateJudgeSummary;
   errors?: {
@@ -191,12 +208,19 @@ export interface AggregateRun {
     judgeUsd?: number;
     totalUsd?: number;
   };
+  timing?: {
+    collectMs?: number;
+  };
   errors?: {
     collectHadError?: boolean;
     judgeHadError?: boolean;
   };
   artifactPaths?: {
     aggregate?: string;
+    trace?: string;
+    judge?: string;
+    grade?: string;
+    normalizedAnswer?: string;
   };
 }
 

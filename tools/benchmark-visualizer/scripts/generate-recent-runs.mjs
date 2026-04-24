@@ -55,8 +55,9 @@ function collectAggregateFiles(root) {
   const aggregateFiles = [];
   walk(root, aggregateFiles);
 
-  const canonical = aggregateFiles.filter((entry) => isCanonicalRecentRun(entry));
-  const selected = canonical.length > 0 ? canonical : aggregateFiles;
+  const included = aggregateFiles.filter((entry) => !isExcludedRecentRun(entry));
+  const canonical = included.filter((entry) => isCanonicalRecentRun(entry));
+  const selected = canonical.length > 0 ? canonical : included;
 
   return selected.sort((left, right) => right.mtimeMs - left.mtimeMs);
 }
@@ -96,6 +97,11 @@ function isCanonicalRecentRun(entry) {
   return typeof runs === 'number' && typeof completeRunThreshold === 'number'
     ? runs >= completeRunThreshold
     : true;
+}
+
+function isExcludedRecentRun(entry) {
+  const modelId = entry.aggregate?.summaries?.[0]?.model?.modelId ?? '';
+  return modelId.includes('nemotron-3-super') || modelId.includes('trinity-mini');
 }
 
 const recentRuns = collectAggregateFiles(benchmarkResultsRoot).map((entry) => ({

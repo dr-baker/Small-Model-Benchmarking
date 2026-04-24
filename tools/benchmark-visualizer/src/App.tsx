@@ -22,6 +22,9 @@ type FilterMode = 'all' | 'interesting' | 'errors' | 'disagreement';
 type SortMode = 'dataset' | 'judge-risk' | 'most-disagreement';
 type ThemeMode = 'light' | 'dark';
 type AnswerSortMode = 'execution-order' | 'score-desc' | 'judge-best' | 'cost-low';
+type ChartScoreMode = 'correct-rate' | 'correctness-score';
+type ParetoFrontierFilterKey = 'cost-correct-rate' | 'time-correct-rate' | 'cost-correctness-score' | 'time-correctness-score';
+type Tone = 'success' | 'warn' | 'danger' | 'accent' | 'neutral';
 
 interface QuestionGroup {
   meta: QuestionMeta;
@@ -43,6 +46,7 @@ interface QuestionGroup {
 
 interface MetricDefinition {
   label: string;
+  sublabel?: string;
   higherIsBetter: boolean;
   value: (execution: LoadedExecution) => number | undefined;
   format: (value: number | undefined) => string;
@@ -54,6 +58,7 @@ const LazyMarkdownBlock = lazy(() => import('./components/MarkdownBlock'));
 const summaryMetrics: MetricDefinition[] = [
   {
     label: 'Judge correctness score',
+    sublabel: 'errors = -1',
     higherIsBetter: true,
     value: (execution) => getJudgeCorrectnessScore(execution.summary),
     format: (value) => formatNumber(value, 2),
@@ -61,11 +66,7 @@ const summaryMetrics: MetricDefinition[] = [
   {
     label: 'Judge correct rate',
     higherIsBetter: true,
-    value: (execution) =>
-      ratio(
-        execution.summary.judge?.judgeCorrectCount,
-        execution.summary.judge?.judgeRuns,
-      ),
+    value: (execution) => ratio(execution.summary.judge?.judgeCorrectCount, execution.summary.judge?.judgeRuns),
     format: (value) => formatPercent(value),
   },
   {
@@ -75,7 +76,7 @@ const summaryMetrics: MetricDefinition[] = [
     format: (value) => formatNumber(value, 2),
   },
   {
-    label: 'Reference verified rate',
+    label: 'Reference verified',
     higherIsBetter: true,
     value: (execution) => execution.summary.judge?.referenceVerifiedRate,
     format: (value) => formatPercent(value),
@@ -87,7 +88,8 @@ const summaryMetrics: MetricDefinition[] = [
     format: (value) => formatPercent(value),
   },
   {
-    label: 'Answer score (debug)',
+    label: 'Answer score',
+    sublabel: 'debug',
     higherIsBetter: true,
     value: (execution) => execution.summary.meanAnswerScore,
     format: (value) => formatNumber(value, 2),
@@ -105,58 +107,158 @@ const summaryMetrics: MetricDefinition[] = [
     format: (value) => formatNumber(value, 2),
   },
   {
-    label: 'Code example',
-    higherIsBetter: true,
-    value: (execution) => execution.summary.judge?.meanCodeExample,
-    format: (value) => formatNumber(value, 2),
-  },
-  {
-    label: 'Explanation',
-    higherIsBetter: true,
-    value: (execution) => execution.summary.judge?.meanExplanation,
-    format: (value) => formatNumber(value, 2),
-  },
-  {
-    label: 'Retrieval quality',
-    higherIsBetter: true,
-    value: (execution) => execution.summary.judge?.meanRetrievalQuality,
-    format: (value) => formatNumber(value, 2),
-  },
-  {
-    label: 'Correct-pattern rate',
-    higherIsBetter: true,
-    value: (execution) => execution.summary.judge?.recommendsCorrectPatternRate,
-    format: (value) => formatPercent(value),
-  },
-  {
-    label: 'Deprecated-pattern rate',
-    higherIsBetter: false,
-    value: (execution) => execution.summary.judge?.recommendsDeprecatedPatternRate,
-    format: (value) => formatPercent(value),
-  },
-  {
-    label: 'Supportive retrieval rate',
-    higherIsBetter: true,
-    value: (execution) => execution.summary.judge?.retrievalSupportsReferenceAnswerRate,
-    format: (value) => formatPercent(value),
-  },
-  {
-    label: 'Cost / run',
+    label: 'Cost / question',
     higherIsBetter: false,
     value: (execution) => execution.summary.cost?.meanTotalCostUsdPerRun,
     format: (value) => formatUsd(value, 4),
   },
   {
-    label: 'Runs with any error',
+    label: 'Total cost',
     higherIsBetter: false,
-    value: (execution) =>
-      ratio(
-        execution.summary.errors?.runsWithAnyError,
-        execution.summary.runs,
-      ),
+    value: (execution) => execution.summary.cost?.totalCostUsd,
+    format: (value) => formatUsd(value, 2),
+  },
+  {
+    label: 'Time / question',
+    higherIsBetter: false,
+    value: (execution) => execution.summary.timing?.meanCollectMsPerRun,
+    format: (value) => formatDuration(value),
+  },
+  {
+    label: 'Total time',
+    higherIsBetter: false,
+    value: (execution) => execution.summary.timing?.totalCollectMs,
+    format: (value) => formatDuration(value),
+  },
+  {
+    label: 'Runs with errors',
+    higherIsBetter: false,
+    value: (execution) => ratio(execution.summary.errors?.runsWithAnyError, execution.summary.runs),
     format: (value) => formatPercent(value),
   },
 ];
+
+interface ScatterAxis {
+  label: string;
+  value: (execution: LoadedExecution) => number | undefined;
+  format: (value: number | undefined) => string;
+  higherIsBetter: boolean;
+}
+
+interface LedgerColumn {
+  label: string;
+  higherIsBetter: boolean;
+  value: (execution: LoadedExecution) => number | undefined;
+  format: (value: number | undefined, execution?: LoadedExecution) => string;
+}
+
+interface LedgerExtremes {
+  min: number;
+  max: number;
+  distinctCount: number;
+}
+
+function computeExtremes(executions: LoadedExecution[], column: LedgerColumn): LedgerExtremes | null {
+  const values: number[] = [];
+  for (const execution of executions) {
+    const value = column.value(execution);
+    if (typeof value === 'number' && Number.isFinite(value)) values.push(value);
+  }
+  if (values.length === 0) return null;
+  const distinct = new Set(values);
+  return { min: Math.min(...values), max: Math.max(...values), distinctCount: distinct.size };
+}
+
+function rankValue(
+  value: number | undefined,
+  extremes: LedgerExtremes | null,
+  higherIsBetter: boolean,
+): 'is-best' | 'is-worst' | '' {
+  if (extremes == null || typeof value !== 'number' || !Number.isFinite(value)) return '';
+  if (extremes.distinctCount < 2) return '';
+  if (higherIsBetter) {
+    if (value === extremes.max) return 'is-best';
+    if (value === extremes.min) return 'is-worst';
+  } else {
+    if (value === extremes.min) return 'is-best';
+    if (value === extremes.max) return 'is-worst';
+  }
+  return '';
+}
+
+const PARETO_FRONTIER_FILTERS: Array<{
+  key: ParetoFrontierFilterKey;
+  label: string;
+  xAxis: ScatterAxis;
+  yAxis: ScatterAxis;
+}> = [
+  {
+    key: 'cost-correct-rate',
+    label: 'Cost vs correct rate',
+    xAxis: {
+      label: 'Cost / question',
+      value: (execution) => execution.summary.cost?.meanTotalCostUsdPerRun,
+      format: (value) => formatUsd(value, 4),
+      higherIsBetter: false,
+    },
+    yAxis: {
+      label: 'Correct rate',
+      value: (execution) => ratio(execution.summary.judge?.judgeCorrectCount, execution.summary.judge?.judgeRuns),
+      format: (value) => formatPercent(value),
+      higherIsBetter: true,
+    },
+  },
+  {
+    key: 'time-correct-rate',
+    label: 'Time vs correct rate',
+    xAxis: {
+      label: 'Time / question',
+      value: (execution) => execution.summary.timing?.meanCollectMsPerRun,
+      format: (value) => formatDuration(value),
+      higherIsBetter: false,
+    },
+    yAxis: {
+      label: 'Correct rate',
+      value: (execution) => ratio(execution.summary.judge?.judgeCorrectCount, execution.summary.judge?.judgeRuns),
+      format: (value) => formatPercent(value),
+      higherIsBetter: true,
+    },
+  },
+  {
+    key: 'cost-correctness-score',
+    label: 'Cost vs correctness score',
+    xAxis: {
+      label: 'Cost / question',
+      value: (execution) => execution.summary.cost?.meanTotalCostUsdPerRun,
+      format: (value) => formatUsd(value, 4),
+      higherIsBetter: false,
+    },
+    yAxis: {
+      label: 'Correctness score',
+      value: (execution) => getJudgeCorrectnessScore(execution.summary),
+      format: (value) => formatNumber(value, 2),
+      higherIsBetter: true,
+    },
+  },
+  {
+    key: 'time-correctness-score',
+    label: 'Time vs correctness score',
+    xAxis: {
+      label: 'Time / question',
+      value: (execution) => execution.summary.timing?.meanCollectMsPerRun,
+      format: (value) => formatDuration(value),
+      higherIsBetter: false,
+    },
+    yAxis: {
+      label: 'Correctness score',
+      value: (execution) => getJudgeCorrectnessScore(execution.summary),
+      format: (value) => formatNumber(value, 2),
+      higherIsBetter: true,
+    },
+  },
+];
+
+const DEFAULT_PARETO_FRONTIER_FILTERS = PARETO_FRONTIER_FILTERS.map((filter) => filter.key);
 
 function App() {
   const [bundledSnapshot, setBundledSnapshot] = useState<BundledSnapshot | null>(null);
@@ -167,12 +269,17 @@ function App() {
   const [filterMode, setFilterMode] = useState<FilterMode>('interesting');
   const [sortMode, setSortMode] = useState<SortMode>('dataset');
   const [answerSortMode, setAnswerSortMode] = useState<AnswerSortMode>('execution-order');
+  const [chartScoreMode, setChartScoreMode] = useState<ChartScoreMode>('correct-rate');
   const [isDragging, setIsDragging] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
   const [executionOrder, setExecutionOrder] = useState<string[]>([]);
   const [hiddenExecutionIds, setHiddenExecutionIds] = useState<string[]>([]);
+  const [hiddenRunTypes, setHiddenRunTypes] = useState<string[]>([]);
+  const [maxErrorRatePercent, setMaxErrorRatePercent] = useState(10);
+  const [paretoFrontierOnly, setParetoFrontierOnly] = useState(false);
+  const [selectedParetoFrontierFilters, setSelectedParetoFrontierFilters] = useState<ParetoFrontierFilterKey[]>(DEFAULT_PARETO_FRONTIER_FILTERS);
   const [openAnswerRows, setOpenAnswerRows] = useState<Record<string, boolean>>({});
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -191,22 +298,17 @@ function App() {
 
     void loadBundledSnapshot()
       .then((snapshot) => {
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
         const bundledExecutions = [...snapshot.bundledExecutions].sort((left, right) =>
           left.label.localeCompare(right.label),
         );
         setBundledSnapshot(snapshot);
         setExecutions(bundledExecutions);
         setExecutionOrder(bundledExecutions.map((execution) => execution.id));
-        setMessages([`Loaded ${bundledExecutions.length} recent run(s) bundled from repo snapshot.`]);
         setBundleLoadError(null);
       })
       .catch((error) => {
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
         setBundleLoadError(error instanceof Error ? error.message : String(error));
       });
 
@@ -217,15 +319,11 @@ function App() {
 
   useEffect(() => {
     const executionIds = new Set(executions.map((execution) => execution.id));
-
     setExecutionOrder((current) => {
       const kept = current.filter((id) => executionIds.has(id));
-      const missing = executions
-        .map((execution) => execution.id)
-        .filter((id) => !kept.includes(id));
+      const missing = executions.map((execution) => execution.id).filter((id) => !kept.includes(id));
       return [...kept, ...missing];
     });
-
     setHiddenExecutionIds((current) => current.filter((id) => executionIds.has(id)));
   }, [executions]);
 
@@ -236,15 +334,103 @@ function App() {
       .filter((execution): execution is LoadedExecution => execution !== undefined);
   }, [executionOrder, executions]);
 
+  const runTypeOptions = useMemo(() => {
+    const seen = new Map<string, { key: string; label: string; count: number }>();
+    for (const execution of orderedExecutions) {
+      const { key, label } = getRunTypeInfo(execution);
+      const entry = seen.get(key);
+      if (entry) entry.count += 1;
+      else seen.set(key, { key, label, count: 1 });
+    }
+    return Array.from(seen.values()).sort((left, right) => left.label.localeCompare(right.label));
+  }, [orderedExecutions]);
+
+  const baseVisibleExecutions = useMemo(() => {
+    const hiddenIds = new Set(hiddenExecutionIds);
+    const hiddenTypes = new Set(hiddenRunTypes);
+    return orderedExecutions.filter((execution) => {
+      if (hiddenIds.has(execution.id)) return false;
+      if (hiddenTypes.has(getRunTypeInfo(execution).key)) return false;
+      const errorRate = getExecutionErrorRate(execution.summary);
+      if (errorRate != null && errorRate > maxErrorRatePercent / 100) return false;
+      return true;
+    });
+  }, [hiddenExecutionIds, hiddenRunTypes, maxErrorRatePercent, orderedExecutions]);
+
+  useEffect(() => {
+    setSelectedParetoFrontierFilters((current) => current.filter((key) => DEFAULT_PARETO_FRONTIER_FILTERS.includes(key)));
+  }, []);
+
+  const paretoFrontierExecutionIdsByFilter = useMemo(() => {
+    return new Map(
+      PARETO_FRONTIER_FILTERS.map((filter) => {
+        const points = baseVisibleExecutions
+          .map((execution) => ({
+            execution,
+            x: filter.xAxis.value(execution),
+            y: filter.yAxis.value(execution),
+          }))
+          .filter(
+            (point): point is { execution: LoadedExecution; x: number; y: number } =>
+              typeof point.x === 'number' && typeof point.y === 'number',
+          );
+        const frontier = computeParetoFrontier(points, filter.xAxis.higherIsBetter, filter.yAxis.higherIsBetter);
+        return [filter.key, new Set(frontier.map((point) => point.execution.id))];
+      }),
+    );
+  }, [baseVisibleExecutions]);
+
   const visibleExecutions = useMemo(() => {
-    const hidden = new Set(hiddenExecutionIds);
-    return orderedExecutions.filter((execution) => !hidden.has(execution.id));
-  }, [hiddenExecutionIds, orderedExecutions]);
+    if (!paretoFrontierOnly) {
+      return baseVisibleExecutions;
+    }
+
+    const allowedIds = new Set<string>();
+    for (const key of selectedParetoFrontierFilters) {
+      const frontierIds = paretoFrontierExecutionIdsByFilter.get(key);
+      frontierIds?.forEach((id) => allowedIds.add(id));
+    }
+
+    return baseVisibleExecutions.filter((execution) => allowedIds.has(execution.id));
+  }, [baseVisibleExecutions, paretoFrontierExecutionIdsByFilter, paretoFrontierOnly, selectedParetoFrontierFilters]);
+
+  const selectedParetoFrontierModelCount = useMemo(() => {
+    const ids = new Set<string>();
+    for (const key of selectedParetoFrontierFilters) {
+      const frontierIds = paretoFrontierExecutionIdsByFilter.get(key);
+      frontierIds?.forEach((id) => ids.add(id));
+    }
+    return ids.size;
+  }, [paretoFrontierExecutionIdsByFilter, selectedParetoFrontierFilters]);
+
+  const toggleRunTypeVisibility = (key: string) => {
+    setHiddenRunTypes((current) =>
+      current.includes(key) ? current.filter((entry) => entry !== key) : [...current, key],
+    );
+  };
 
   const questionGroups = useMemo(
     () => buildQuestionGroups(visibleExecutions, questionList),
     [questionList, visibleExecutions],
   );
+
+  const chartScoreAxis = useMemo<ScatterAxis>(() => {
+    if (chartScoreMode === 'correctness-score') {
+      return {
+        label: 'Correctness score',
+        value: (execution) => getJudgeCorrectnessScore(execution.summary),
+        format: (value) => formatNumber(value, 2),
+        higherIsBetter: true,
+      };
+    }
+
+    return {
+      label: 'Correct rate',
+      value: (execution) => ratio(execution.summary.judge?.judgeCorrectCount, execution.summary.judge?.judgeRuns),
+      format: (value) => formatPercent(value),
+      higherIsBetter: true,
+    };
+  }, [chartScoreMode]);
 
   const visibleQuestionGroups = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -257,23 +443,11 @@ function App() {
         group.meta.question.toLowerCase().includes(normalizedSearch) ||
         group.meta.referenceAnswer.toLowerCase().includes(normalizedSearch);
 
-      if (!textMatches) {
-        return false;
-      }
-
-      if (filterMode === 'all') {
-        return true;
-      }
-      if (filterMode === 'interesting') {
-        return group.hasIncorrect || group.hasErrors || group.disagreementCount > 1;
-      }
-      if (filterMode === 'errors') {
-        return group.hasErrors;
-      }
-      if (filterMode === 'disagreement') {
-        return group.disagreementCount > 1;
-      }
-
+      if (!textMatches) return false;
+      if (filterMode === 'all') return true;
+      if (filterMode === 'interesting') return group.hasIncorrect || group.hasErrors || group.disagreementCount > 1;
+      if (filterMode === 'errors') return group.hasErrors;
+      if (filterMode === 'disagreement') return group.disagreementCount > 1;
       return true;
     });
 
@@ -285,7 +459,6 @@ function App() {
       setSelectedQuestionId(null);
       return;
     }
-
     const hasSelected = visibleQuestionGroups.some((group) => group.meta.id === selectedQuestionId);
     if (!hasSelected) {
       setSelectedQuestionId(visibleQuestionGroups[0]?.meta.id ?? null);
@@ -302,9 +475,7 @@ function App() {
     : -1;
 
   const selectedAnswerRows = useMemo(() => {
-    if (!selectedGroup) {
-      return [];
-    }
+    if (!selectedGroup) return [];
     return sortAnswerRows(selectedGroup.answers, answerSortMode);
   }, [answerSortMode, selectedGroup]);
 
@@ -313,9 +484,7 @@ function App() {
       .map(({ run }) => run)
       .filter((run): run is EnrichedRun => hasJudgeSignal(run))
       .reduce<EnrichedRun | null>((best, run) => {
-        if (!best || compareJudgePriority(run, best) > 0) {
-          return run;
-        }
+        if (!best || compareJudgePriority(run, best) > 0) return run;
         return best;
       }, null);
   }, [selectedAnswerRows]);
@@ -324,7 +493,6 @@ function App() {
     const interestingCount = questionGroups.filter(
       (group) => group.hasIncorrect || group.hasErrors || group.disagreementCount > 1,
     ).length;
-
     const judgeCoverageNumerator = visibleExecutions.reduce(
       (sum, execution) => sum + (execution.summary.judge?.judgeRuns ?? 0),
       0,
@@ -341,48 +509,37 @@ function App() {
     return {
       interestingCount,
       judgeCoverageRate: ratio(judgeCoverageNumerator, judgeCoverageDenominator),
-      questionCount: questionGroups.length,
       visibleExecutions: visibleExecutions.length,
       loadedExecutions: executions.length,
-      visibleQuestions: visibleQuestionGroups.length,
       runsWithErrors,
     };
-  }, [executions.length, questionGroups, visibleExecutions, visibleQuestionGroups.length]);
+  }, [executions.length, questionGroups, visibleExecutions]);
 
   async function handleFiles(fileList: FileList | null) {
-    if (!fileList) {
-      return;
-    }
-
+    if (!fileList) return;
     if (!bundledSnapshot) {
-      setMessages((current) => ['Bundled question metadata is still loading. Try again in a moment.', ...current].slice(0, 8));
+      setMessages((current) => ['Bundled question metadata is still loading.', ...current].slice(0, 6));
       return;
     }
-
     const pickedFiles = pickAggregateFiles(Array.from(fileList));
-
     if (pickedFiles.length === 0) {
-      setMessages((current) => ['No aggregate.json files found in selection.', ...current].slice(0, 8));
+      setMessages((current) => ['No aggregate.json files found.', ...current].slice(0, 6));
       return;
     }
-
     const { executions: loaded, errors } = await loadExecutionsFromFiles(pickedFiles, bundledSnapshot.questionBank);
-
     setExecutions((current) => {
       const merged = dedupeExecutions([...current, ...loaded]);
       return merged.sort((left, right) => left.label.localeCompare(right.label));
     });
-
     if (loaded.length > 0) {
-      setMessages((current) => [`Added ${loaded.length} execution(s).`, ...errors, ...current].slice(0, 8));
+      setMessages((current) => [`Added ${loaded.length} execution(s).`, ...errors, ...current].slice(0, 6));
     } else {
-      setMessages((current) => [...errors, ...current].slice(0, 8));
+      setMessages((current) => [...errors, ...current].slice(0, 6));
     }
   }
 
   function removeExecution(executionId: string) {
     setExecutions((current) => current.filter((execution) => execution.id !== executionId));
-    setMessages((current) => ['Removed 1 execution.', ...current].slice(0, 8));
   }
 
   function clearAll() {
@@ -394,11 +551,7 @@ function App() {
   }
 
   function restoreRecentRuns() {
-    if (!bundledSnapshot) {
-      setMessages((current) => ['Bundled recent runs are still loading.', ...current].slice(0, 8));
-      return;
-    }
-
+    if (!bundledSnapshot) return;
     const bundledExecutions = [...bundledSnapshot.bundledExecutions].sort((left, right) =>
       left.label.localeCompare(right.label),
     );
@@ -406,10 +559,6 @@ function App() {
     setExecutionOrder(bundledExecutions.map((execution) => execution.id));
     setHiddenExecutionIds([]);
     setOpenAnswerRows({});
-    setMessages((current) => {
-      const note = `Loaded ${bundledExecutions.length} recent run(s) bundled from repo snapshot.`;
-      return [note, ...current.filter((message) => message !== note)].slice(0, 8);
-    });
   }
 
   function toggleExecutionVisibility(executionId: string) {
@@ -423,15 +572,9 @@ function App() {
   function moveExecution(executionId: string, direction: -1 | 1) {
     setExecutionOrder((current) => {
       const index = current.indexOf(executionId);
-      if (index < 0) {
-        return current;
-      }
-
+      if (index < 0) return current;
       const targetIndex = index + direction;
-      if (targetIndex < 0 || targetIndex >= current.length) {
-        return current;
-      }
-
+      if (targetIndex < 0 || targetIndex >= current.length) return current;
       const next = [...current];
       const [item] = next.splice(index, 1);
       next.splice(targetIndex, 0, item);
@@ -448,10 +591,7 @@ function App() {
   }
 
   function setAllVisibleAnswerRows(open: boolean) {
-    if (!selectedGroup) {
-      return;
-    }
-
+    if (!selectedGroup) return;
     const nextEntries = selectedAnswerRows.map(({ execution }) => [
       makeAnswerRowKey(selectedGroup.meta.id, execution.id),
       open,
@@ -468,968 +608,1206 @@ function App() {
   }
 
   function moveQuestionSelection(direction: -1 | 1) {
-    if (selectedQuestionIndex < 0) {
-      return;
-    }
-
+    if (selectedQuestionIndex < 0) return;
     const nextIndex = selectedQuestionIndex + direction;
     const nextGroup = visibleQuestionGroups[nextIndex];
-    if (nextGroup) {
-      setSelectedQuestionId(nextGroup.meta.id);
-    }
+    if (nextGroup) setSelectedQuestionId(nextGroup.meta.id);
   }
 
   return (
-    <div className="workspace-shell">
+    <div className={`workspace-shell ${sidebarOpen ? '' : 'sidebar-closed'}`}>
       <button
         type="button"
         className="sidebar-toggle"
         onClick={() => setSidebarOpen((current) => !current)}
+        aria-label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
       >
-        {sidebarOpen ? 'Hide desk' : 'Show desk'}
+        {sidebarOpen ? '‹' : '›'}
       </button>
 
-      <div className={`workspace ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
-        <aside className="desk-sidebar">
-          <div className="desk-sidebar-inner">
-            <div className="sidebar-masthead">
-              <div className="eyebrow">Analysis desk</div>
-              <h1>Benchmark Visualizer</h1>
-              <p>
-                Pick question. Compare model scores. Open only answers that need reading.
-              </p>
-            </div>
+      <aside className="desk-sidebar">
+        <div className="desk-sidebar-inner">
+          <div className="sidebar-masthead">
+            <h1>Benchmark Visualizer</h1>
+          </div>
 
-            <SidebarSection title="Library" defaultOpen>
-              <div className="sidebar-stack">
-                <div className="mini-note">
-                  Snapshot {formatTimestamp(recentRunsBundle.generatedAt)} · {recentRunsBundle.count} recent runs bundled
-                </div>
-                <div className="button-stack">
-                  <button type="button" className="button button-solid" onClick={() => fileInputRef.current?.click()}>
-                    Add aggregate files
-                  </button>
-                  <button type="button" className="button" onClick={() => folderInputRef.current?.click()}>
-                    Add run folders
-                  </button>
-                  <button type="button" className="button" onClick={restoreRecentRuns}>
-                    Restore recent set
-                  </button>
-                  <button type="button" className="button button-ghost" onClick={clearAll}>
-                    Clear desk
-                  </button>
-                </div>
+          <details className="sidebar-section" open>
+            <summary><span className="disclosure">Data</span></summary>
+            <div className="sidebar-section-body">
+              <div className="button-stack">
+                <button type="button" className="button button-solid" onClick={() => fileInputRef.current?.click()}>
+                  Add aggregate files
+                </button>
+                <button type="button" className="button" onClick={() => folderInputRef.current?.click()}>
+                  Add run folders
+                </button>
+                <button type="button" className="button" onClick={restoreRecentRuns}>
+                  Restore recent
+                </button>
+                <button type="button" className="button button-ghost" onClick={clearAll}>
+                  Clear
+                </button>
               </div>
-            </SidebarSection>
+            </div>
+          </details>
 
-            <SidebarSection title="Sections" defaultOpen>
-              <nav className="section-nav">
-                <a href="#scoring-model">Scoring model</a>
-                <a href="#overview">Overview</a>
-                <a href="#question-review">Question review</a>
-                <a href="#metric-desk">Metric desk</a>
-              </nav>
-            </SidebarSection>
+          <details className="sidebar-section" open>
+            <summary><span className="disclosure">Jump to</span></summary>
+            <nav className="section-nav">
+              <a href="#overview">Overview</a>
+              <a href="#question-review">Question review</a>
+              <a href="#metric-desk">Metric desk</a>
+            </nav>
+          </details>
 
-            <SidebarSection title="Models" defaultOpen>
-              <div className="sidebar-stack">
-                <div className="toolbar-inline">
-                  <button type="button" className="button button-tiny" onClick={showAllExecutions}>
-                    Show all
-                  </button>
-                  <button type="button" className="button button-tiny" onClick={hideAllExecutions}>
-                    Hide all
-                  </button>
-                </div>
-                <div className="mini-note">
-                  Reorder comparison rows here. Question table inherits same order unless you sort per-question.
-                </div>
-                <div className="model-manager-list">
-                  {orderedExecutions.map((execution, index) => {
-                    const isHidden = hiddenExecutionIds.includes(execution.id);
+          {runTypeOptions.length > 1 ? (
+            <details className="sidebar-section" open>
+              <summary><span className="disclosure">Run types ({runTypeOptions.length})</span></summary>
+              <div className="sidebar-section-body">
+                <div className="run-type-list">
+                  {runTypeOptions.map((option) => {
+                    const isHidden = hiddenRunTypes.includes(option.key);
                     return (
-                      <div key={execution.id} className={`model-manager-row ${isHidden ? 'is-hidden' : ''}`}>
-                        <label className="model-visibility-toggle">
-                          <input
-                            type="checkbox"
-                            checked={!isHidden}
-                            onChange={() => toggleExecutionVisibility(execution.id)}
-                          />
-                          <span>{execution.shortLabel}</span>
-                        </label>
-                        <div className="model-manager-meta">
-                          <span>{formatPercent(ratio(execution.summary.judge?.judgeCorrectCount, execution.summary.judge?.judgeRuns))} judge</span>
-                          <span>{formatCount(execution.summary.judge?.judgeRuns, execution.summary.runs)} covered</span>
-                          <span>{formatUsd(execution.summary.cost?.meanTotalCostUsdPerRun, 4)}</span>
-                        </div>
-                        <div className="model-manager-actions">
-                          <button
-                            type="button"
-                            className="icon-button"
-                            disabled={index === 0}
-                            onClick={() => moveExecution(execution.id, -1)}
-                            aria-label={`Move ${execution.shortLabel} up`}
-                          >
-                            ↑
-                          </button>
-                          <button
-                            type="button"
-                            className="icon-button"
-                            disabled={index === orderedExecutions.length - 1}
-                            onClick={() => moveExecution(execution.id, 1)}
-                            aria-label={`Move ${execution.shortLabel} down`}
-                          >
-                            ↓
-                          </button>
-                          <button
-                            type="button"
-                            className="icon-button"
-                            onClick={() => removeExecution(execution.id)}
-                            aria-label={`Remove ${execution.shortLabel}`}
-                          >
-                            ×
-                          </button>
-                        </div>
-                      </div>
+                      <label key={option.key} className={`run-type-row ${isHidden ? 'is-hidden' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={!isHidden}
+                          onChange={() => toggleRunTypeVisibility(option.key)}
+                        />
+                        <span className="run-type-label">{option.label}</span>
+                        <span className="run-type-count">{option.count}</span>
+                      </label>
                     );
                   })}
                 </div>
               </div>
-            </SidebarSection>
+            </details>
+          ) : null}
 
-            <SidebarSection title="Appearance" defaultOpen>
-              <div className="sidebar-stack">
-                <div className="theme-toggle" role="tablist" aria-label="Theme">
-                  <button
-                    type="button"
-                    className={`theme-option ${theme === 'light' ? 'is-active' : ''}`}
-                    onClick={() => setTheme('light')}
-                  >
-                    Day paper
-                  </button>
-                  <button
-                    type="button"
-                    className={`theme-option ${theme === 'dark' ? 'is-active' : ''}`}
-                    onClick={() => setTheme('dark')}
-                  >
-                    Night desk
-                  </button>
+          <details className="sidebar-section" open>
+            <summary><span className="disclosure">Quality filter</span></summary>
+            <div className="sidebar-section-body">
+              <label className="slider-filter">
+                <div className="slider-filter-head">
+                  <span>Max error rate</span>
+                  <strong>{maxErrorRatePercent}%</strong>
                 </div>
-              </div>
-            </SidebarSection>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/json,.json"
-              multiple
-              hidden
-              onChange={(event) => {
-                void handleFiles(event.target.files);
-                event.currentTarget.value = '';
-              }}
-            />
-            <input
-              ref={folderInputRef}
-              type="file"
-              multiple
-              hidden
-              onChange={(event) => {
-                void handleFiles(event.target.files);
-                event.currentTarget.value = '';
-              }}
-              {...({ webkitdirectory: '' } as Record<string, string>)}
-            />
-          </div>
-        </aside>
-
-        <main className="report-main">
-          <header className="masthead panel">
-            <div className="masthead-rule" />
-            <div className="eyebrow">{formatTimestamp(new Date().toISOString())}</div>
-            <div className="masthead-grid">
-              <div>
-                <h2>Comparative benchmark report</h2>
-                <p className="masthead-copy">
-                  Optimized for one workflow: question first, scores second, answer text third.
-                </p>
-              </div>
-              <div
-                className={`dropzone ${isDragging ? 'is-dragging' : ''}`}
-                onDragEnter={(event) => {
-                  event.preventDefault();
-                  setIsDragging(true);
-                }}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  setIsDragging(true);
-                }}
-                onDragLeave={(event) => {
-                  event.preventDefault();
-                  setIsDragging(false);
-                }}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  setIsDragging(false);
-                  void handleFiles(event.dataTransfer.files);
-                }}
-              >
-                <div className="dropzone-label">Drop `aggregate.json` here</div>
-                <p>Local only. Trim noise with model controls in sidebar.</p>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={maxErrorRatePercent}
+                  onChange={(event) => setMaxErrorRatePercent(Number(event.target.value))}
+                />
+              </label>
+              <div className="slider-filter-foot">
+                <span>Showing runs at or below {maxErrorRatePercent}% errors.</span>
+                {maxErrorRatePercent < 100 ? (
+                  <button type="button" className="button button-tiny" onClick={() => setMaxErrorRatePercent(100)}>
+                    Show all error rates
+                  </button>
+                ) : null}
               </div>
             </div>
-            <div className="stat-strip">
-              <StatPill label="Models visible" value={`${totals.visibleExecutions}/${totals.loadedExecutions}`} />
-              <StatPill label="Judge coverage" value={formatPercent(totals.judgeCoverageRate)} />
-              <StatPill label="Interesting questions" value={String(totals.interestingCount)} />
-              <StatPill label="Runs with errors" value={String(totals.runsWithErrors)} />
-            </div>
-          </header>
+          </details>
 
-          {bundleLoadError ? (
-            <section className="panel empty-panel">
-              <SectionHeader title="Bundled snapshot failed to load" subtitle="The app can still open uploaded aggregates once the benchmark metadata is available locally." />
-              <p>{bundleLoadError}</p>
-            </section>
-          ) : null}
-
-          {messages.length > 0 ? (
-            <section className="panel note-panel">
-              <SectionHeader title="Desk notes" subtitle="Recent parser and desk actions." compact />
-              <ul className="note-list">
-                {messages.map((message, index) => (
-                  <li key={`${message}-${index}`}>{message}</li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
-
-          {executions.length === 0 ? (
-            <section className="panel empty-panel">
-              <SectionHeader
-                title={bundledSnapshot ? 'No benchmark runs loaded' : 'Loading benchmark snapshot'}
-                subtitle={bundledSnapshot ? 'Restore recent runs from sidebar or upload fresh aggregates.' : 'Fetching bundled benchmark metadata and recent run summaries.'}
-              />
-              <p>
-                Bundled benchmark metadata: {questionBank.benchmarkName} · dataset {questionBank.datasetVersion} · rubric {questionBank.rubricVersion}
-              </p>
-            </section>
-          ) : visibleExecutions.length === 0 ? (
-            <section className="panel empty-panel">
-              <SectionHeader title="All models hidden" subtitle="Re-enable at least one model in sidebar to continue comparison." />
-              <div className="button-stack inline-stack">
-                <button type="button" className="button button-solid" onClick={showAllExecutions}>
-                  Show all models
+          <details className="sidebar-section" open>
+            <summary><span className="disclosure">Pareto frontier</span></summary>
+            <div className="sidebar-section-body">
+              <label className={`run-type-row ${paretoFrontierOnly ? '' : 'is-hidden'}`}>
+                <input
+                  type="checkbox"
+                  checked={paretoFrontierOnly}
+                  onChange={() => setParetoFrontierOnly((current) => !current)}
+                />
+                <span className="run-type-label">Only models on selected frontiers</span>
+                <span className="run-type-count">{selectedParetoFrontierModelCount}</span>
+              </label>
+              <div className="button-row">
+                <button
+                  type="button"
+                  className="button button-tiny"
+                  onClick={() => setSelectedParetoFrontierFilters(DEFAULT_PARETO_FRONTIER_FILTERS)}
+                >
+                  All charts
+                </button>
+                <button
+                  type="button"
+                  className="button button-tiny"
+                  onClick={() => setSelectedParetoFrontierFilters([])}
+                >
+                  No charts
                 </button>
               </div>
-            </section>
-          ) : (
-            <>
-              <section id="scoring-model" className="panel section-panel">
-                <SectionHeader
-                  title="How to read this benchmark now"
-                  subtitle="The visualizer follows the new judge-first structure: correctness and completeness are authoritative, reference verification is supporting context, and deterministic grading is a comparison tool."
-                />
-                <div className="scoring-guide-grid">
-                  <article className="guide-card">
-                    <div className="panel-topline">1. Judge correctness is the top call</div>
-                    <h4>Use the judge to answer “was the answer right?”</h4>
-                    <p>
-                      The primary axis is centered on <strong>-1 / 0 / 1</strong>, with legacy verdict labels only kept as a compatibility view.
-                    </p>
-                  </article>
-                  <article className="guide-card">
-                    <div className="panel-topline">2. Completeness depends on question shape</div>
-                    <h4>Targeted and synthesis questions are judged differently</h4>
-                    <p>
-                      Targeted questions need actionable implementation detail. Synthesis questions need the main buckets, tradeoffs, and organization.
-                    </p>
-                  </article>
-                  <article className="guide-card">
-                    <div className="panel-topline">3. Deterministic grading is secondary</div>
-                    <h4>Keep it for comparison and debugging</h4>
-                    <p>
-                      Answer score, rubric hits, grounding, and agreement stay visible, but they no longer lead the reading of the benchmark.
-                    </p>
-                  </article>
-                </div>
-              </section>
+              <div className="run-type-list">
+                {PARETO_FRONTIER_FILTERS.map((filter) => {
+                  const isSelected = selectedParetoFrontierFilters.includes(filter.key);
+                  const frontierCount = paretoFrontierExecutionIdsByFilter.get(filter.key)?.size ?? 0;
+                  return (
+                    <label key={filter.key} className={`run-type-row ${isSelected ? '' : 'is-hidden'}`}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() =>
+                          setSelectedParetoFrontierFilters((current) =>
+                            current.includes(filter.key)
+                              ? current.filter((key) => key !== filter.key)
+                              : [...current, filter.key],
+                          )
+                        }
+                      />
+                      <span className="run-type-label">{filter.label}</span>
+                      <span className="run-type-count">{frontierCount}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          </details>
 
-              <section id="overview" className="panel section-panel">
-                <SectionHeader
-                  title="Overview"
-                  subtitle="Read this left to right as judge outcome, judge coverage, and run health. Debug metrics still appear inside each expanded row."
-                />
-                <div className="ledger-table-head">
-                  <span>Model</span>
-                  <span>Judge score</span>
-                  <span>Judge correct</span>
-                  <span>Completeness</span>
-                  <span>Reference verified</span>
-                  <span>Judge coverage</span>
-                  <span>Cost / run</span>
-                  <span>Run health</span>
-                </div>
-                <div className="ledger-stack">
-                  {visibleExecutions.map((execution) => (
-                    <details key={execution.id} className="ledger-row panel-shell">
-                      <summary className="ledger-row-summary with-indicator">
-                        <div className="ledger-model-cell">
-                          <div className="run-overline">{execution.sourceName}</div>
-                          <strong>{execution.shortLabel}</strong>
-                          <span>{execution.label}</span>
-                        </div>
-                        <span>{formatNumber(getJudgeCorrectnessScore(execution.summary), 2)}</span>
-                        <span>{formatPercent(ratio(execution.summary.judge?.judgeCorrectCount, execution.summary.judge?.judgeRuns))}</span>
-                        <span>{formatNumber(execution.summary.judge?.meanCompleteness, 2)}</span>
-                        <span>{formatPercent(execution.summary.judge?.referenceVerifiedRate)}</span>
-                        <span>{formatCount(execution.summary.judge?.judgeRuns, execution.summary.runs)}</span>
-                        <span>{formatUsd(execution.summary.cost?.meanTotalCostUsdPerRun, 4)}</span>
-                        <span>{formatCount(execution.summary.errors?.runsWithAnyError, execution.summary.runs)}</span>
-                      </summary>
-                      <div className="ledger-row-body">
-                        <div className="metric-pair-grid compact-grid">
-                          <MetricPair label="Runs" value={String(execution.summary.runs ?? '—')} />
-                          <MetricPair label="Judge correctness score" value={formatNumber(getJudgeCorrectnessScore(execution.summary), 2)} />
-                          <MetricPair label="Judge correct rate" value={formatPercent(ratio(execution.summary.judge?.judgeCorrectCount, execution.summary.judge?.judgeRuns))} />
-                          <MetricPair label="Judge coverage" value={formatCount(execution.summary.judge?.judgeRuns, execution.summary.runs)} />
-                          <MetricPair label="Completeness" value={formatNumber(execution.summary.judge?.meanCompleteness, 2)} />
-                          <MetricPair label="Reference verified rate" value={formatPercent(execution.summary.judge?.referenceVerifiedRate)} />
-                          <MetricPair label="Answer score (debug)" value={formatNumber(execution.summary.meanAnswerScore, 2)} />
-                          <MetricPair label="MRR" value={formatNumber(execution.summary.meanRetrievalMrr, 2)} />
-                          <MetricPair label="Runs with errors" value={formatCount(execution.summary.errors?.runsWithAnyError, execution.summary.runs)} />
-                        </div>
-                        <div className="breakdown-ledger">
-                          {getSummaryBreakdownEntries(execution.summary).map((entry) => (
-                            <div
-                              key={`${execution.id}-${entry.evidenceBasis ?? entry.questionType ?? 'breakdown'}`}
-                              className="breakdown-ledger-row"
-                            >
-                              <strong>{humanizeToken(entry.evidenceBasis ?? entry.questionType ?? 'unknown')}</strong>
-                              <span>{entry.runs ?? 0} runs</span>
-                              <span>{formatPercent(ratio(entry.judge?.judgeCorrectCount, entry.judge?.judgeRuns))} correct</span>
-                              <span>{formatNumber(entry.judge?.meanCompleteness, 2)} completeness</span>
-                              <span>{formatPercent(entry.judge?.referenceVerifiedRate)} ref verified</span>
-                              <span>{formatNumber(entry.meanAnswerScore, 2)} score</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </details>
-                  ))}
-                </div>
-              </section>
-
-              <section id="question-review" className="panel section-panel question-review-section">
-                <SectionHeader
-                  title="Question review"
-                  subtitle="Start with the judge call on each question, then use deterministic grading and retrieval signals to explain disagreements or failures."
-                />
-
-                <div className="review-layout">
-                  <aside className="question-list-pane">
-                    <div className="question-list-toolbar">
-                      <label className="control-field search-field">
-                        <span>Search</span>
+          <details className="sidebar-section" open>
+            <summary><span className="disclosure">Models ({orderedExecutions.length})</span></summary>
+            <div className="sidebar-section-body">
+              <div className="button-row">
+                <button type="button" className="button button-tiny" onClick={showAllExecutions}>Show all</button>
+                <button type="button" className="button button-tiny" onClick={hideAllExecutions}>Hide all</button>
+              </div>
+              <div className="model-manager-list">
+                {orderedExecutions.map((execution, index) => {
+                  const isHidden = hiddenExecutionIds.includes(execution.id);
+                  return (
+                    <div key={execution.id} className={`model-manager-row ${isHidden ? 'is-hidden' : ''}`} title={execution.label}>
+                      <label className="model-visibility-toggle">
                         <input
-                          type="search"
-                          value={search}
-                          onChange={(event) => setSearch(event.target.value)}
-                          placeholder="q04, toolbar, deprecated, NavigationStack..."
+                          type="checkbox"
+                          checked={!isHidden}
+                          onChange={() => toggleExecutionVisibility(execution.id)}
                         />
+                        <span title={execution.label}>{execution.shortLabel}</span>
                       </label>
-                      <div className="question-filter-row">
-                        <label className="control-field">
-                          <span>Filter</span>
-                          <select value={filterMode} onChange={(event) => setFilterMode(event.target.value as FilterMode)}>
-                            <option value="interesting">Interesting only</option>
-                            <option value="all">All questions</option>
-                            <option value="errors">Errors only</option>
-                            <option value="disagreement">Disagreement only</option>
-                          </select>
-                        </label>
-                        <label className="control-field">
-                          <span>Sort</span>
-                          <select value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)}>
-                            <option value="dataset">Dataset order</option>
-                            <option value="judge-risk">Weakest judge outcomes first</option>
-                            <option value="most-disagreement">Most disagreement first</option>
-                          </select>
-                        </label>
+                      <div className="model-manager-actions">
+                        <button
+                          type="button"
+                          className="icon-button"
+                          disabled={index === 0}
+                          onClick={() => moveExecution(execution.id, -1)}
+                          aria-label={`Move ${execution.shortLabel} up`}
+                        >↑</button>
+                        <button
+                          type="button"
+                          className="icon-button"
+                          disabled={index === orderedExecutions.length - 1}
+                          onClick={() => moveExecution(execution.id, 1)}
+                          aria-label={`Move ${execution.shortLabel} down`}
+                        >↓</button>
+                        <button
+                          type="button"
+                          className="icon-button"
+                          onClick={() => removeExecution(execution.id)}
+                          aria-label={`Remove ${execution.shortLabel}`}
+                        >×</button>
                       </div>
                     </div>
-                    <div className="question-list-meta">{visibleQuestionGroups.length} questions in current view</div>
-                    <div className="question-list-rail">
-                      {visibleQuestionGroups.map((group) => {
-                        const isActive = group.meta.id === selectedQuestionId;
-                        return (
-                          <button
-                            key={group.meta.id}
-                            type="button"
-                            className={`question-list-item ${isActive ? 'is-active' : ''}`}
-                            onClick={() => setSelectedQuestionId(group.meta.id)}
-                          >
-                            <div className="question-list-item-top">
-                              <span>{padQuestionOrder(group.meta.order)}</span>
-                              <div className="question-list-badges">
-                                <Badge
-                                  tone={
-                                    group.judgeCorrectnessScore == null
-                                      ? 'neutral'
-                                      : group.judgeCorrectnessScore >= 0.25
-                                        ? 'success'
-                                        : group.judgeCorrectnessScore < 0
-                                          ? 'danger'
-                                          : 'warn'
-                                  }
-                                >
-                                  score {formatNumber(group.judgeCorrectnessScore, 2)}
-                                </Badge>
-                                <Badge
-                                  tone={
-                                    group.referenceVerifiedRate == null
-                                      ? 'neutral'
-                                      : group.referenceVerifiedRate >= 0.5
-                                        ? 'accent'
-                                        : 'warn'
-                                  }
-                                >
-                                  ref {formatPercent(group.referenceVerifiedRate)}
-                                </Badge>
-                                {group.hasErrors ? <Badge tone="danger">err</Badge> : null}
-                              </div>
-                            </div>
-                            <strong>{group.meta.title}</strong>
-                            <div className="question-list-item-foot">
-                              <span>{humanizeToken(group.meta.evidenceBasis)}</span>
-                              <span>{humanizeToken(group.meta.questionShape)}</span>
-                              <span>{formatCount(group.judgeCoverageCount, visibleExecutions.length)} judged</span>
-                              <span>{formatNumber(group.meanCompleteness, 2)} comp</span>
-                              <span>{group.disagreementCount} disagreement</span>
-                            </div>
-                          </button>
-                        );
-                      })}
+                  );
+                })}
+              </div>
+            </div>
+          </details>
+
+          <details className="sidebar-section">
+            <summary><span className="disclosure">Theme</span></summary>
+            <div className="sidebar-section-body">
+              <div className="theme-toggle" role="tablist" aria-label="Theme">
+                <button
+                  type="button"
+                  className={`theme-option ${theme === 'light' ? 'is-active' : ''}`}
+                  onClick={() => setTheme('light')}
+                >Light</button>
+                <button
+                  type="button"
+                  className={`theme-option ${theme === 'dark' ? 'is-active' : ''}`}
+                  onClick={() => setTheme('dark')}
+                >Dark</button>
+              </div>
+            </div>
+          </details>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json,.json"
+            multiple
+            hidden
+            onChange={(event) => {
+              void handleFiles(event.target.files);
+              event.currentTarget.value = '';
+            }}
+          />
+          <input
+            ref={folderInputRef}
+            type="file"
+            multiple
+            hidden
+            onChange={(event) => {
+              void handleFiles(event.target.files);
+              event.currentTarget.value = '';
+            }}
+            {...({ webkitdirectory: '' } as Record<string, string>)}
+          />
+        </div>
+      </aside>
+
+      <main className="report-main">
+        <header className="panel masthead">
+          <div className="masthead-top">
+            <div>
+              <h2>Comparative benchmark</h2>
+              <div className="masthead-meta">
+                {questionBank.benchmarkName} · dataset {questionBank.datasetVersion} · rubric {questionBank.rubricVersion} · snapshot {formatTimestamp(recentRunsBundle.generatedAt)}
+              </div>
+            </div>
+            <div
+              className={`dropzone ${isDragging ? 'is-dragging' : ''}`}
+              onDragEnter={(event) => { event.preventDefault(); setIsDragging(true); }}
+              onDragOver={(event) => { event.preventDefault(); setIsDragging(true); }}
+              onDragLeave={(event) => { event.preventDefault(); setIsDragging(false); }}
+              onDrop={(event) => {
+                event.preventDefault();
+                setIsDragging(false);
+                void handleFiles(event.dataTransfer.files);
+              }}
+            >
+              Drop aggregate.json
+            </div>
+          </div>
+          <div className="stat-strip">
+            <StatPill label="Models" value={`${totals.visibleExecutions}/${totals.loadedExecutions}`} />
+            <StatPill label="Judge coverage" value={formatPercent(totals.judgeCoverageRate)} />
+            <StatPill label="Interesting" value={String(totals.interestingCount)} />
+            <StatPill label="Errored runs" value={String(totals.runsWithErrors)} />
+          </div>
+        </header>
+
+        {bundleLoadError ? (
+          <section className="panel empty-panel">
+            <h3>Bundled snapshot failed to load</h3>
+            <p>{bundleLoadError}</p>
+          </section>
+        ) : null}
+
+        {messages.length > 0 ? (
+          <div className="note-strip">
+            {messages.join(' · ')}
+          </div>
+        ) : null}
+
+        {executions.length === 0 ? (
+          <section className="panel empty-panel">
+            <h3>{bundledSnapshot ? 'No benchmark runs loaded' : 'Loading benchmark snapshot…'}</h3>
+            <p>
+              {bundledSnapshot
+                ? 'Restore recent runs from the sidebar, drop an aggregate.json, or upload run folders.'
+                : 'Fetching bundled benchmark metadata and recent run summaries.'}
+            </p>
+          </section>
+        ) : visibleExecutions.length === 0 ? (
+          <section className="panel empty-panel">
+            <h3>All models hidden</h3>
+            <p>Re-enable at least one model in the sidebar to compare.</p>
+            <div className="button-row">
+              <button type="button" className="button button-solid" onClick={showAllExecutions}>Show all</button>
+            </div>
+          </section>
+        ) : (
+          <>
+            <section id="overview" className="panel section-panel">
+              <div className="section-heading">
+                <h3>Overview</h3>
+              </div>
+              {(() => {
+                const ledgerColumns: LedgerColumn[] = [
+                  { label: 'Correct', higherIsBetter: true, value: (ex) => ratio(ex.summary.judge?.judgeCorrectCount, ex.summary.judge?.judgeRuns), format: (v) => formatPercent(v) },
+                  { label: 'Complete', higherIsBetter: true, value: (ex) => ex.summary.judge?.meanCompleteness, format: (v) => formatNumber(v, 2) },
+                  { label: 'Total cost', higherIsBetter: false, value: (ex) => ex.summary.cost?.totalCostUsd, format: (v) => formatUsd(v, 2) },
+                  { label: 'Judge cost', higherIsBetter: false, value: (ex) => ex.summary.cost?.totalJudgeCostUsd, format: (v) => formatUsd(v, 2) },
+                  { label: 'Total time', higherIsBetter: false, value: (ex) => ex.summary.timing?.totalCollectMs, format: (v) => formatDuration(v) },
+                  { label: 'Coverage', higherIsBetter: true, value: (ex) => ratio(ex.summary.judge?.judgeRuns, ex.summary.runs), format: (_v, ex) => formatCount(ex?.summary.judge?.judgeRuns, ex?.summary.runs) },
+                  { label: 'Errors', higherIsBetter: false, value: (ex) => ratio(ex.summary.errors?.runsWithAnyError, ex.summary.runs), format: (_v, ex) => formatCount(ex?.summary.errors?.runsWithAnyError, ex?.summary.runs) },
+                ];
+                const extremes = ledgerColumns.map((column) => computeExtremes(visibleExecutions, column));
+                return (
+                  <>
+                    <div className="ledger-table-head">
+                      <span>Model</span>
+                      {ledgerColumns.map((column) => (
+                        <span key={column.label}>{column.label}</span>
+                      ))}
+                      <span aria-hidden />
                     </div>
-                  </aside>
-
-                  <div className="question-focus-pane">
-                    {selectedGroup ? (
-                      <>
-                        <div className="focus-nav">
-                          <button
-                            type="button"
-                            className="button button-tiny"
-                            disabled={selectedQuestionIndex <= 0}
-                            onClick={() => moveQuestionSelection(-1)}
-                          >
-                            ← Prev
-                          </button>
-                          <div className="focus-nav-meta">
-                            <div className="eyebrow">Question focus</div>
-                            <strong>{selectedQuestionIndex + 1} / {visibleQuestionGroups.length}</strong>
-                          </div>
-                          <button
-                            type="button"
-                            className="button button-tiny"
-                            disabled={selectedQuestionIndex < 0 || selectedQuestionIndex >= visibleQuestionGroups.length - 1}
-                            onClick={() => moveQuestionSelection(1)}
-                          >
-                            Next →
-                          </button>
-                        </div>
-
-                        <header className="focus-question-header">
-                          <div className="question-index large">{padQuestionOrder(selectedGroup.meta.order)}</div>
-                          <div>
-                            <h3>{selectedGroup.meta.title}</h3>
-                            <p>{selectedGroup.meta.question}</p>
-                            <div className="mini-note question-priority-note">
-                              Judge correctness/completeness and reference verification are the primary signals here; answer score stays as debug context.
+                    <div className="ledger-stack">
+                      {visibleExecutions.map((execution) => (
+                        <details key={execution.id} className="ledger-row">
+                          <summary className="ledger-row-summary">
+                            <div className="ledger-model-cell">
+                              <strong>{execution.shortLabel}</strong>
+                              <span>{execution.label}</span>
                             </div>
-                            <div className="tag-wrap header-tags">
-                              <Badge tone="neutral">{selectedGroup.meta.id}</Badge>
-                              <Badge tone="neutral">{humanizeToken(selectedGroup.meta.evidenceBasis)}</Badge>
-                              <Badge tone="neutral">{humanizeToken(selectedGroup.meta.questionShape)}</Badge>
-                              <Badge tone="neutral">{humanizeToken(selectedGroup.meta.platformScope)}</Badge>
-                              <Badge
-                                tone={
-                                  selectedGroup.judgeCorrectnessScore == null
-                                    ? 'neutral'
-                                    : selectedGroup.judgeCorrectnessScore >= 0.25
-                                      ? 'success'
-                                      : selectedGroup.judgeCorrectnessScore < 0
-                                        ? 'danger'
-                                        : 'warn'
-                                }
-                              >
-                                judge score {formatNumber(selectedGroup.judgeCorrectnessScore, 2)}
-                              </Badge>
-                              <Badge tone="neutral">
-                                completeness {formatNumber(selectedGroup.meanCompleteness, 2)}
-                              </Badge>
-                              <Badge
-                                tone={
-                                  selectedGroup.referenceVerifiedRate == null
-                                    ? 'neutral'
-                                    : selectedGroup.referenceVerifiedRate >= 0.5
-                                      ? 'accent'
-                                      : 'warn'
-                                }
-                              >
-                                ref verified {formatPercent(selectedGroup.referenceVerifiedRate)}
-                              </Badge>
-                              <Badge tone="neutral">
-                                judged {formatCount(selectedGroup.judgeCoverageCount, visibleExecutions.length)}
-                              </Badge>
-                              <Badge tone={selectedGroup.disagreementCount > 1 ? 'warn' : 'neutral'}>
-                                disagreement {selectedGroup.disagreementCount}
-                              </Badge>
-                              <Badge tone={selectedGroup.averageScore != null && selectedGroup.averageScore >= 1 ? 'success' : 'neutral'}>
-                                debug score {selectedGroup.averageScore === null ? '—' : formatNumber(selectedGroup.averageScore, 2)}
-                              </Badge>
-                              {selectedGroup.hasErrors ? <Badge tone="danger">has errors</Badge> : null}
+                            {ledgerColumns.map((column, index) => {
+                              const value = column.value(execution);
+                              const extreme = extremes[index];
+                              const rank = rankValue(value, extreme, column.higherIsBetter);
+                              return (
+                                <span key={column.label} className={`ledger-metric-cell ${rank}`}>
+                                  {column.format(value, execution)}
+                                </span>
+                              );
+                            })}
+                            <span className="ledger-row-chevron disclosure" aria-hidden />
+                          </summary>
+                          <div className="ledger-row-body">
+                            <div className="metric-pair-grid">
+                              <MetricPair label="Runs" value={String(execution.summary.runs ?? '—')} />
+                              <MetricPair label="Correct" value={formatPercent(ratio(execution.summary.judge?.judgeCorrectCount, execution.summary.judge?.judgeRuns))} />
+                              <MetricPair label="Completeness" value={formatNumber(execution.summary.judge?.meanCompleteness, 2)} />
+                              <MetricPair label="Reference verified" value={formatPercent(execution.summary.judge?.referenceVerifiedRate)} />
+                              <MetricPair label="Coverage" value={formatCount(execution.summary.judge?.judgeRuns, execution.summary.runs)} />
+                              <MetricPair label="Errored runs" value={formatCount(execution.summary.errors?.runsWithAnyError, execution.summary.runs)} />
+                              <MetricPair label="Total cost" value={formatUsd(execution.summary.cost?.totalCostUsd, 4)} />
+                              <MetricPair label="Total collect cost" value={formatUsd(execution.summary.cost?.totalCollectCostUsd, 4)} />
+                              <MetricPair label="Total judge cost" value={formatUsd(execution.summary.cost?.totalJudgeCostUsd, 4)} />
+                              <MetricPair label="Cost / question" value={formatUsd(execution.summary.cost?.meanTotalCostUsdPerRun, 4)} />
+                              <MetricPair label="Judge cost / question" value={formatUsd(execution.summary.cost?.meanJudgeCostUsdPerRun, 4)} />
+                              <MetricPair label="Total time" value={formatDuration(execution.summary.timing?.totalCollectMs)} />
+                              <MetricPair label="Time / question" value={formatDuration(execution.summary.timing?.meanCollectMsPerRun)} />
                             </div>
-                          </div>
-                        </header>
-
-                        <div className="question-dossier-grid">
-                          <section className="dossier-panel">
-                            <div className="panel-topline">Reference answer</div>
-                            <MarkdownBlock text={selectedGroup.meta.referenceAnswer} />
-                          </section>
-                          <section className="dossier-panel">
-                            <div className="panel-topline">How this question is judged</div>
-                            <p className="mini-copy">
-                              {selectedGroup.meta.questionShape === 'synthesis'
-                                ? 'Completeness here means covering the major buckets, tradeoffs, and organization a strong synthesis answer should include.'
-                                : 'Completeness here means giving actionable implementation detail, caveats, or code-level guidance when the question calls for it.'}
-                            </p>
-                            <p className="mini-copy">
-                              {selectedGroup.meta.evidenceBasis === 'corpus'
-                                ? 'Reference verification is meaningful here because the benchmark expects the answer to line up with corpus-backed source material.'
-                                : 'Reference verification is softer here because the benchmark treats this as curated guidance rather than a direct corpus lookup task.'}
-                            </p>
-                            <div className="metric-pair-grid compact-grid">
-                              <MetricPair label="Judge coverage" value={formatCount(selectedGroup.judgeCoverageCount, visibleExecutions.length)} />
-                              <MetricPair label="Judge correctness score" value={formatNumber(selectedGroup.judgeCorrectnessScore, 2)} />
-                              <MetricPair label="Judge correct rate" value={formatPercent(selectedGroup.judgeCorrectRate)} />
-                              <MetricPair label="Mean completeness" value={formatNumber(selectedGroup.meanCompleteness, 2)} />
-                              <MetricPair label="Reference verified" value={formatPercent(selectedGroup.referenceVerifiedRate)} />
-                            </div>
-                          </section>
-                          <section className="dossier-panel">
-                            <div className="panel-topline">Rubric and evidence</div>
-                            <RubricList title="Must mention" items={selectedGroup.meta.rubric.mustMention} tone="success" />
-                            <RubricGroupList title="Must mention one item from each group" groups={selectedGroup.meta.rubric.mustMentionAnyOf ?? []} tone="warn" />
-                            <RubricList title="Must not mention" items={selectedGroup.meta.rubric.mustNotMention} tone="danger" />
-                            {selectedGroup.meta.pitfall ? <p className="mini-copy">Pitfall: {selectedGroup.meta.pitfall}</p> : null}
-                            <div className="tag-wrap dossier-tags">
-                              {selectedGroup.meta.taxonomyTags.map((tag) => (
-                                <Badge key={`${selectedGroup.meta.id}-${tag}`} tone="neutral">
-                                  {tag}
-                                </Badge>
-                              ))}
-                            </div>
-                            {selectedGroup.meta.goldEvidence.length > 0 ? (
-                              <div>
-                                <div className="subtle-label">Gold evidence</div>
-                                <ul className="path-list compact">
-                                  {selectedGroup.meta.goldEvidence.map((evidence) => (
-                                    <li key={`${selectedGroup.meta.id}-${evidence.filePath}`}>{evidence.filePath}</li>
-                                  ))}
-                                </ul>
+                            {getSummaryBreakdownEntries(execution.summary).length > 0 ? (
+                              <div className="breakdown-ledger">
+                                {getSummaryBreakdownEntries(execution.summary).map((entry) => (
+                                  <div
+                                    key={`${execution.id}-${entry.evidenceBasis ?? entry.questionType ?? 'breakdown'}`}
+                                    className="breakdown-ledger-row"
+                                  >
+                                    <strong>{humanizeToken(entry.evidenceBasis ?? entry.questionType ?? 'unknown')}</strong>
+                                    <span>{entry.runs ?? 0} runs</span>
+                                    <span>{formatPercent(ratio(entry.judge?.judgeCorrectCount, entry.judge?.judgeRuns))} correct</span>
+                                    <span>{formatNumber(entry.judge?.meanCompleteness, 2)} complete</span>
+                                    <span>{formatPercent(entry.judge?.referenceVerifiedRate)} ref</span>
+                                  </div>
+                                ))}
                               </div>
                             ) : null}
-                          </section>
+                          </div>
+                        </details>
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
+            </section>
+
+            <section id="question-review" className="panel section-panel">
+              <div className="section-heading">
+                <h3>Question review</h3>
+              </div>
+
+              <div className="review-layout">
+                <aside className="question-list-pane">
+                  <div className="question-list-toolbar">
+                    <label className="control-field">
+                      <span>Search</span>
+                      <input
+                        type="search"
+                        value={search}
+                        onChange={(event) => setSearch(event.target.value)}
+                        placeholder="id, title, text…"
+                      />
+                    </label>
+                    <div className="question-filter-row">
+                      <label className="control-field">
+                        <span>Filter</span>
+                        <select value={filterMode} onChange={(event) => setFilterMode(event.target.value as FilterMode)}>
+                          <option value="interesting">Interesting</option>
+                          <option value="all">All</option>
+                          <option value="errors">Errors</option>
+                          <option value="disagreement">Disagreement</option>
+                        </select>
+                      </label>
+                      <label className="control-field">
+                        <span>Sort</span>
+                        <select value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)}>
+                          <option value="dataset">Dataset</option>
+                          <option value="judge-risk">Weakest first</option>
+                          <option value="most-disagreement">Disagreement</option>
+                        </select>
+                      </label>
+                    </div>
+                  </div>
+                  <div className="question-list-meta">{visibleQuestionGroups.length} question{visibleQuestionGroups.length === 1 ? '' : 's'}</div>
+                  <div className="question-list-rail">
+                    {visibleQuestionGroups.map((group) => {
+                      const isActive = group.meta.id === selectedQuestionId;
+                      return (
+                        <button
+                          key={group.meta.id}
+                          type="button"
+                          className={`question-list-item ${isActive ? 'is-active' : ''}`}
+                          onClick={() => setSelectedQuestionId(group.meta.id)}
+                        >
+                          <div className="question-list-item-top">
+                            <span className={`score-dot tone-${scoreTone(group.judgeCorrectnessScore)}`} />
+                            <span>{padQuestionOrder(group.meta.order)}</span>
+                            <span>{formatNumber(group.judgeCorrectnessScore, 2)}</span>
+                            {group.hasErrors ? <span style={{ color: 'var(--danger)' }}>err</span> : null}
+                          </div>
+                          <strong>{group.meta.title}</strong>
+                          <div className="question-list-item-foot">
+                            <span>{humanizeToken(group.meta.evidenceBasis)}</span>
+                            <span>{formatCount(group.judgeCoverageCount, visibleExecutions.length)} judged</span>
+                            {group.disagreementCount > 1 ? <span>disagree {group.disagreementCount}</span> : null}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </aside>
+
+                <div className="question-focus-pane">
+                  {selectedGroup ? (
+                    <>
+                      <div className="focus-nav">
+                        <button
+                          type="button"
+                          className="button button-tiny"
+                          disabled={selectedQuestionIndex <= 0}
+                          onClick={() => moveQuestionSelection(-1)}
+                        >← Prev</button>
+                        <div className="focus-nav-meta">
+                          {selectedQuestionIndex + 1} / {visibleQuestionGroups.length}
+                        </div>
+                        <button
+                          type="button"
+                          className="button button-tiny"
+                          disabled={selectedQuestionIndex < 0 || selectedQuestionIndex >= visibleQuestionGroups.length - 1}
+                          onClick={() => moveQuestionSelection(1)}
+                        >Next →</button>
+                      </div>
+
+                      <header className="focus-question-header">
+                        <h3>{padQuestionOrder(selectedGroup.meta.order)} · {selectedGroup.meta.title}</h3>
+                        <p>{selectedGroup.meta.question}</p>
+                        <div className="focus-meta-line">
+                          <span className="mono">{selectedGroup.meta.id}</span>
+                          <span>{humanizeToken(selectedGroup.meta.evidenceBasis)}</span>
+                          <span>{humanizeToken(selectedGroup.meta.questionShape)}</span>
+                          <span>{humanizeToken(selectedGroup.meta.platformScope)}</span>
+                          <span>{formatCount(selectedGroup.judgeCoverageCount, visibleExecutions.length)} judged</span>
+                          {selectedGroup.disagreementCount > 1 ? <span>disagreement {selectedGroup.disagreementCount}</span> : null}
+                        </div>
+                        <div className="focus-header-badges">
+                          <Badge tone={scoreTone(selectedGroup.judgeCorrectnessScore)}>
+                            correctness {formatNumber(selectedGroup.judgeCorrectnessScore, 2)}
+                          </Badge>
+                          <Badge tone="neutral">
+                            completeness {formatNumber(selectedGroup.meanCompleteness, 2)}
+                          </Badge>
+                          {selectedGroup.hasErrors ? <Badge tone="danger">errors</Badge> : null}
+                        </div>
+                      </header>
+
+                      <div className="question-dossier-grid">
+                        <section className="dossier-panel">
+                          <div className="panel-topline">Reference answer</div>
+                          <MarkdownBlock text={selectedGroup.meta.referenceAnswer} />
+                        </section>
+                        <section className="dossier-panel">
+                          <div className="panel-topline">Deterministic rubric</div>
+                          <RubricList title="Must mention" items={selectedGroup.meta.rubric.mustMention} tone="success" />
+                          <RubricGroupList title="One from each group" groups={selectedGroup.meta.rubric.mustMentionAnyOf ?? []} tone="warn" />
+                          <RubricList title="Must not mention" items={selectedGroup.meta.rubric.mustNotMention} tone="danger" />
+                          {selectedGroup.meta.pitfall ? (
+                            <div className="pitfall-line">Pitfall: {selectedGroup.meta.pitfall}</div>
+                          ) : null}
+                          {selectedGroup.meta.taxonomyTags.length > 0 ? (
+                            <div className="taxonomy-line">
+                              {selectedGroup.meta.taxonomyTags.map((tag) => (
+                                <span key={tag} className="mono">#{tag}</span>
+                              ))}
+                            </div>
+                          ) : null}
+                          {selectedGroup.meta.goldEvidence.length > 0 ? (
+                            <div>
+                              <div className="panel-topline" style={{ marginTop: 8 }}>Gold evidence</div>
+                              <ul className="path-list">
+                                {selectedGroup.meta.goldEvidence.map((evidence) => (
+                                  <li key={`${selectedGroup.meta.id}-${evidence.filePath}`}>{evidence.filePath}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
+                        </section>
+                      </div>
+
+                      <section className="focus-scoreboard">
+                        <div className="focus-scoreboard-head">
+                          <h4>Answers ({selectedAnswerRows.length})</h4>
+                          <div className="scoreboard-controls">
+                            <label className="inline-control">
+                              <span>Sort</span>
+                              <select value={answerSortMode} onChange={(event) => setAnswerSortMode(event.target.value as AnswerSortMode)}>
+                                <option value="execution-order">Model order</option>
+                                <option value="score-desc">Best score</option>
+                                <option value="judge-best">Best judge</option>
+                                <option value="cost-low">Lowest cost</option>
+                              </select>
+                            </label>
+                            <button type="button" className="button button-tiny" onClick={() => setAllVisibleAnswerRows(true)}>Expand all</button>
+                            <button type="button" className="button button-tiny" onClick={() => setAllVisibleAnswerRows(false)}>Collapse all</button>
+                          </div>
                         </div>
 
-                        <section className="focus-scoreboard panel-shell">
-                          <div className="focus-scoreboard-head">
-                            <div>
-                              <div className="run-overline">Comparison</div>
-                              <h4>Judge-first comparison</h4>
-                            </div>
-                            <div className="scoreboard-controls">
-                              <label className="control-field inline-control">
-                                <span>Row order</span>
-                                <select value={answerSortMode} onChange={(event) => setAnswerSortMode(event.target.value as AnswerSortMode)}>
-                                  <option value="execution-order">Model order</option>
-                                  <option value="score-desc">Best score first</option>
-                                  <option value="judge-best">Best judge verdict first</option>
-                                  <option value="cost-low">Lowest cost first</option>
-                                </select>
-                              </label>
-                              <div className="toolbar-inline">
-                                <button type="button" className="button button-tiny" onClick={() => setAllVisibleAnswerRows(true)}>
-                                  Expand all
-                                </button>
-                                <button type="button" className="button button-tiny" onClick={() => setAllVisibleAnswerRows(false)}>
-                                  Collapse all
-                                </button>
-                              </div>
-                            </div>
-                          </div>
+                        <div className="scoreboard-wrap">
+                          <table className="scoreboard-table">
+                            <thead>
+                              <tr>
+                                <th>Model</th>
+                                <th>Correctness</th>
+                                <th>Completeness</th>
+                                <th>Cost</th>
+                                <th aria-label="Expand" style={{ width: 40 }} />
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {selectedAnswerRows.map(({ execution, run }) => {
+                                const key = makeAnswerRowKey(selectedGroup.meta.id, execution.id);
+                                const isOpen = openAnswerRows[key] ?? false;
+                                const isBest =
+                                  run != null &&
+                                  selectedBestJudgeRun != null &&
+                                  compareJudgePriority(run, selectedBestJudgeRun) === 0;
+                                const hasError = Boolean(run?.errors?.collectHadError || run?.errors?.judgeHadError);
+                                const rowClassName = [
+                                  'score-row',
+                                  isBest ? 'is-best' : '',
+                                  hasError ? 'has-error' : '',
+                                ].filter(Boolean).join(' ');
 
-                          <div className="scoreboard-wrap">
-                            <table className="scoreboard-table">
-                              <thead>
-                                <tr>
-                                  <th>Model</th>
-                                  <th>Correctness</th>
-                                  <th>Completeness</th>
-                                  <th>Reference verified</th>
-                                  <th>Judge status</th>
-                                  <th>Deterministic</th>
-                                  <th>Cost</th>
-                                  <th>Error</th>
-                                  <th aria-label="Expand" />
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {selectedAnswerRows.map(({ execution, run }) => {
-                                  const key = makeAnswerRowKey(selectedGroup.meta.id, execution.id);
-                                  const isOpen = openAnswerRows[key] ?? false;
-                                  const isBest =
-                                    run != null &&
-                                    selectedBestJudgeRun != null &&
-                                    compareJudgePriority(run, selectedBestJudgeRun) === 0;
-                                  const rowClassName = [
-                                    'score-row',
-                                    isBest ? 'is-best' : '',
-                                    run?.errors?.collectHadError || run?.errors?.judgeHadError ? 'has-error' : '',
-                                  ]
-                                    .filter(Boolean)
-                                    .join(' ');
+                                return (
+                                  <FragmentRow key={`${selectedGroup.meta.id}-${execution.id}`}>
+                                    <tr
+                                      className={rowClassName}
+                                      onClick={() => toggleAnswerRow(selectedGroup.meta.id, execution.id)}
+                                      style={{ cursor: 'pointer' }}
+                                    >
+                                      <th>
+                                        <div className="table-model-cell">
+                                          <strong>{execution.shortLabel}</strong>
+                                          <span>{execution.sourceName}</span>
+                                        </div>
+                                      </th>
+                                      <td>
+                                        {run?.judge?.verdict || run?.judge?.correctness != null ? (
+                                          <Badge tone={verdictTone(run.judge?.verdict ?? judgeVerdictFromCorrectness(run.judge?.correctness) ?? 'unknown')}>
+                                            {humanizeToken(run.judge?.verdict ?? judgeVerdictFromCorrectness(run.judge?.correctness) ?? 'unknown')}
+                                          </Badge>
+                                        ) : '—'}
+                                      </td>
+                                      <td>{formatJudgeAxis(run?.judge?.completeness)}</td>
+                                      <td>{formatUsd(run?.cost?.totalUsd, 4)}</td>
+                                      <td>
+                                        <span className={`disclosure ${isOpen ? 'is-open' : ''}`} aria-hidden />
+                                      </td>
+                                    </tr>
+                                    {isOpen ? (
+                                      <tr className="score-detail-row">
+                                        <td colSpan={5}>
+                                          {run ? (
+                                            <div className="score-detail-body">
+                                              <section className="detail-answer-column">
+                                                <div className="detail-section-heading">Answer</div>
+                                                <MarkdownBlock text={run.answer?.finalAnswer ?? 'No answer captured.'} />
+                                                {run.answer?.evidenceSummary ? (
+                                                  <details className="inline-details">
+                                                    <summary><span className="disclosure">Evidence summary</span></summary>
+                                                    <div className="evidence-summary">{run.answer.evidenceSummary}</div>
+                                                  </details>
+                                                ) : null}
+                                                {run.answer?.citationFilePaths?.length ? (
+                                                  <details className="inline-details">
+                                                    <summary><span className="disclosure">Citations ({run.answer.citationFilePaths.length})</span></summary>
+                                                    <ul className="path-list">
+                                                      {run.answer.citationFilePaths.map((filePath) => (
+                                                        <li key={`${run.runId}-${filePath}`}>{filePath}</li>
+                                                      ))}
+                                                    </ul>
+                                                  </details>
+                                                ) : null}
+                                              </section>
+                                              <aside className="detail-meta-column">
+                                                <div className="detail-section">
+                                                  <div className="judge-primary">
+                                                    <div className="judge-primary-cell">
+                                                      <span>Correctness</span>
+                                                      <Badge tone={verdictTone(run.judge?.verdict ?? judgeVerdictFromCorrectness(run.judge?.correctness) ?? 'unknown')}>
+                                                        {humanizeToken(run.judge?.verdict ?? judgeVerdictFromCorrectness(run.judge?.correctness) ?? '—')}
+                                                      </Badge>
+                                                    </div>
+                                                    <div className="judge-primary-cell">
+                                                      <span>Completeness</span>
+                                                      <strong>{formatJudgeAxis(run.judge?.completeness)}</strong>
+                                                    </div>
+                                                  </div>
+                                                  {run.judge?.reasoning ? (
+                                                    <div className="judge-reasoning">{run.judge.reasoning}</div>
+                                                  ) : null}
+                                                </div>
 
-                                  return (
-                                    <FragmentRow key={`${selectedGroup.meta.id}-${execution.id}`}>
-                                      <tr className={rowClassName}>
-                                        <th>
-                                          <div className="table-model-cell">
-                                            <strong>{execution.shortLabel}</strong>
-                                            <span>{execution.sourceName}</span>
-                                          </div>
-                                        </th>
-                                        <td>
-                                          {run?.judge?.verdict || run?.judge?.correctness != null ? (
-                                            <Badge tone={verdictTone(run.judge?.verdict ?? judgeVerdictFromCorrectness(run.judge?.correctness) ?? 'unknown')}>
-                                              {run.judge?.verdict
-                                                ? humanizeToken(run.judge.verdict)
-                                                : humanizeToken(judgeVerdictFromCorrectness(run.judge?.correctness) ?? 'unknown')}
-                                            </Badge>
-                                          ) : '—'}
-                                        </td>
-                                        <td>{formatJudgeAxis(run?.judge?.completeness)}</td>
-                                        <td>{formatBoolean(run?.judge?.referenceVerified)}</td>
-                                        <td>{run?.judge?.status ?? '—'}</td>
-                                        <td>{run?.grade?.agreement ? humanizeToken(run.grade.agreement) : run?.grade?.score == null ? '—' : String(run.grade.score)}</td>
-                                        <td>{formatUsd(run?.cost?.totalUsd, 4)}</td>
-                                        <td>{run ? (run.errors?.collectHadError || run.errors?.judgeHadError ? 'yes' : 'no') : '—'}</td>
-                                        <td>
-                                          <button
-                                            type="button"
-                                            className="row-toggle"
-                                            onClick={() => toggleAnswerRow(selectedGroup.meta.id, execution.id)}
-                                            aria-expanded={isOpen}
-                                          >
-                                            <span>{isOpen ? 'Hide' : 'Open'}</span>
-                                            <span className={`chevron ${isOpen ? 'open' : ''}`}>▾</span>
-                                          </button>
-                                        </td>
-                                      </tr>
-                                      {isOpen ? (
-                                        <tr className="score-detail-row">
-                                          <td colSpan={9}>
-                                            {run ? (
-                                              <div className="score-detail-grid">
-                                                <section className="detail-answer-column">
-                                                  <div className="panel-topline">Answer</div>
-                                                  <MarkdownBlock text={run.answer?.finalAnswer ?? 'No answer captured.'} />
-                                                  {run.answer?.evidenceSummary ? (
-                                                    <div className="detail-inline-note">
-                                                      <div className="subtle-label">Evidence summary</div>
-                                                      <p>{run.answer.evidenceSummary}</p>
+                                                {hasError ? (
+                                                  <div className="detail-section">
+                                                    <div className="detail-section-heading">Errors</div>
+                                                    <div className="focus-header-badges">
+                                                      {run.errors?.collectHadError ? <Badge tone="danger">collect error</Badge> : null}
+                                                      {run.errors?.judgeHadError ? <Badge tone="danger">judge error</Badge> : null}
+                                                    </div>
+                                                  </div>
+                                                ) : null}
+
+                                                <details className="inline-details">
+                                                  <summary><span className="disclosure">Judge details</span></summary>
+                                                  <div className="metric-pair-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                                                    <MetricPair label="Ref verified" value={formatBoolean(run.judge?.referenceVerified)} />
+                                                    <MetricPair label="Status" value={run.judge?.status ?? '—'} />
+                                                    <MetricPair label="Code example" value={formatJudgeScore(run.judge?.codeExample)} />
+                                                    <MetricPair label="Explanation" value={formatJudgeScore(run.judge?.explanation)} />
+                                                    <MetricPair label="Retrieval" value={formatJudgeScore(run.judge?.retrievalQuality)} />
+                                                    <MetricPair label="Supports ref" value={formatBoolean(run.judge?.retrievalSupportsReferenceAnswer)} />
+                                                    <MetricPair label="Correct pattern" value={formatBoolean(run.judge?.recommendsCorrectPattern)} />
+                                                    <MetricPair label="Deprecated pattern" value={formatBoolean(run.judge?.recommendsDeprecatedPattern)} />
+                                                  </div>
+                                                </details>
+
+                                                <details className="inline-details">
+                                                  <summary><span className="disclosure">Deterministic grader</span></summary>
+                                                  <div className="metric-pair-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                                                    <MetricPair label="Score" value={run.grade?.score == null ? '—' : String(run.grade.score)} />
+                                                    <MetricPair label="Grounded" value={run.grade?.grounded ? 'yes' : 'no'} />
+                                                    <MetricPair label="Citations" value={String(run.answer?.citationCount ?? 0)} />
+                                                    <MetricPair label="Agreement" value={run.grade?.agreement ? humanizeToken(run.grade.agreement) : '—'} />
+                                                    <MetricPair label="Confidence" value={formatNumber(run.answer?.confidence, 2)} />
+                                                    <MetricPair label="Cost" value={formatUsd(run.cost?.totalUsd, 4)} />
+                                                    <MetricPair label="Time" value={formatDuration(run.timing?.collectMs)} />
+                                                  </div>
+                                                  {(run.grade?.mustMentionPassed?.length || run.grade?.mustMentionFailed?.length || run.grade?.mustNotMentionViolated?.length) ? (
+                                                    <div style={{ marginTop: 8 }}>
+                                                      <RubricList title="Passed" items={run.grade?.mustMentionPassed ?? []} tone="success" compact />
+                                                      <RubricList title="Missed" items={run.grade?.mustMentionFailed ?? []} tone="warn" compact />
+                                                      <RubricList title="Violated" items={run.grade?.mustNotMentionViolated ?? []} tone="danger" compact />
                                                     </div>
                                                   ) : null}
-                                                </section>
-                                                <aside className="detail-meta-column">
-                                                  <div className="tag-wrap top-tags compact-tags">
-                                                    {run.judge?.verdict || run.judge?.correctness != null ? (
-                                                      <Badge tone={verdictTone(run.judge?.verdict ?? judgeVerdictFromCorrectness(run.judge?.correctness) ?? 'unknown')}>
-                                                        judge {humanizeToken(run.judge?.verdict ?? judgeVerdictFromCorrectness(run.judge?.correctness) ?? 'unknown')}
-                                                      </Badge>
-                                                    ) : null}
-                                                    <Badge tone="neutral">
-                                                      completeness {formatJudgeAxis(run.judge?.completeness)}
-                                                    </Badge>
-                                                    <Badge
-                                                      tone={
-                                                        run.judge?.referenceVerified == null
-                                                          ? 'neutral'
-                                                          : run.judge.referenceVerified
-                                                            ? 'accent'
-                                                            : 'warn'
-                                                      }
-                                                    >
-                                                      reference verified {formatBoolean(run.judge?.referenceVerified)}
-                                                    </Badge>
-                                                    {run.errors?.collectHadError ? <Badge tone="danger">collect error</Badge> : null}
-                                                    {run.errors?.judgeHadError ? <Badge tone="danger">judge error</Badge> : null}
-                                                  </div>
-
-                                                  <div className="detail-sections">
-                                                    <section className="detail-section">
-                                                      <div className="panel-topline">Authoritative judge call</div>
-                                                      <p className="mini-copy">Start here. This is the benchmark's main read of correctness and completeness for this answer.</p>
-                                                      <div className="judge-block">
-                                                        <div className="judge-summary-row">
-                                                          <Badge tone={verdictTone(run.judge?.verdict ?? judgeVerdictFromCorrectness(run.judge?.correctness) ?? 'unknown')}>
-                                                            {run.judge?.verdict
-                                                              ? humanizeToken(run.judge.verdict)
-                                                              : humanizeToken(judgeVerdictFromCorrectness(run.judge?.correctness) ?? 'unknown')}
-                                                          </Badge>
-                                                          <Badge tone="neutral">
-                                                            status {run.judge?.status ?? '—'}
-                                                          </Badge>
-                                                          <Badge
-                                                            tone={
-                                                              run.judge?.referenceVerified == null
-                                                                ? 'neutral'
-                                                                : run.judge.referenceVerified
-                                                                  ? 'accent'
-                                                                  : 'warn'
-                                                            }
-                                                          >
-                                                            reference verified {formatBoolean(run.judge?.referenceVerified)}
-                                                          </Badge>
-                                                          <Badge tone={run.judge?.recommendsCorrectPattern ? 'success' : 'neutral'}>
-                                                            correct pattern {formatBoolean(run.judge?.recommendsCorrectPattern)}
-                                                          </Badge>
-                                                          <Badge tone={run.judge?.recommendsDeprecatedPattern ? 'danger' : 'neutral'}>
-                                                            deprecated pattern {formatBoolean(run.judge?.recommendsDeprecatedPattern)}
-                                                          </Badge>
-                                                        </div>
-
-                                                        <div className="judge-metric-grid">
-                                                          <MetricPair
-                                                            label="Correctness"
-                                                            value={
-                                                              run.judge?.verdict
-                                                                ? humanizeToken(run.judge.verdict)
-                                                                : humanizeToken(judgeVerdictFromCorrectness(run.judge?.correctness) ?? '—')
-                                                            }
-                                                          />
-                                                          <MetricPair label="Completeness" value={formatJudgeAxis(run.judge?.completeness)} />
-                                                          <MetricPair label="Code example" value={formatJudgeScore(run.judge?.codeExample)} />
-                                                          <MetricPair label="Explanation" value={formatJudgeScore(run.judge?.explanation)} />
-                                                          <MetricPair label="Retrieval quality" value={formatJudgeScore(run.judge?.retrievalQuality)} />
-                                                        </div>
-
-                                                        {run.judge?.reasoning ? (
-                                                          <div className="judge-reasoning">
-                                                            <div className="subtle-label">Judge reasoning</div>
-                                                            <p>{run.judge.reasoning}</p>
-                                                          </div>
-                                                        ) : null}
-                                                      </div>
-                                                    </section>
-
-                                                    <section className="detail-section">
-                                                      <div className="panel-topline">Support and caveats</div>
-                                                      <div className="judge-summary-row">
-                                                        <Badge tone={run.judge?.retrievalSupportsReferenceAnswer ? 'accent' : 'warn'}>
-                                                          retrieval supports ref {formatBoolean(run.judge?.retrievalSupportsReferenceAnswer)}
-                                                        </Badge>
-                                                        {run.grade?.agreement ? <Badge tone="neutral">agreement {humanizeToken(run.grade.agreement)}</Badge> : null}
-                                                        {run.grade?.rubricStrength ? <Badge tone="neutral">rubric {humanizeToken(run.grade.rubricStrength)}</Badge> : null}
-                                                        {run.errors?.collectHadError ? <Badge tone="danger">collect error</Badge> : null}
-                                                        {run.errors?.judgeHadError ? <Badge tone="danger">judge error</Badge> : null}
-                                                      </div>
-                                                      <div className="metric-pair-grid compact-grid detail-metrics-grid">
-                                                        <MetricPair label="Debug score" value={run.grade?.score == null ? '—' : String(run.grade.score)} />
-                                                        <MetricPair label="Grounded" value={run.grade?.grounded ? 'yes' : run ? 'no' : '—'} />
-                                                        <MetricPair label="Citations" value={String(run.answer?.citationCount ?? 0)} />
-                                                        <MetricPair label="Total cost" value={formatUsd(run.cost?.totalUsd, 4)} />
-                                                      </div>
-                                                    </section>
-
-                                                    <details className="detail-section detail-debug-panel">
-                                                      <summary className="with-indicator">Deterministic grade (comparison/debug)</summary>
-                                                      <p className="mini-copy">Use this section to explain disagreement or inspect rubric misses. It is no longer the authoritative score.</p>
-                                                      <RubricList title="Passed" items={run.grade?.mustMentionPassed ?? []} tone="success" />
-                                                      <RubricList title="Missing" items={run.grade?.mustMentionFailed ?? []} tone="warn" />
-                                                      <RubricList title="Violated" items={run.grade?.mustNotMentionViolated ?? []} tone="danger" />
-                                                      <RubricList title="Failures" items={run.grade?.failures ?? []} tone="neutral" />
-                                                      <div className="metric-pair-grid compact-grid detail-metrics-grid">
-                                                        <MetricPair label="Bytes read" value={formatWholeNumber(run.grade?.retrieval?.bytesRead)} />
-                                                        <MetricPair label="Files before relevant" value={formatWholeNumber(run.grade?.retrieval?.filesReadBeforeFirstRelevantDoc)} />
-                                                        <MetricPair
-                                                          label="Time to relevant"
-                                                          value={run.grade?.retrieval?.timeToFirstRelevantDocMs == null ? '—' : `${run.grade.retrieval.timeToFirstRelevantDocMs} ms`}
-                                                        />
-                                                        <MetricPair label="Confidence" value={formatNumber(run.answer?.confidence, 2)} />
-                                                      </div>
-                                                    </details>
-
-                                                    {run.answer?.citationFilePaths?.length ? (
-                                                      <section className="detail-section">
-                                                        <div className="panel-topline">Citations</div>
-                                                        <ul className="path-list compact">
-                                                          {run.answer.citationFilePaths.map((filePath) => (
-                                                            <li key={`${run.runId}-${filePath}`}>{filePath}</li>
-                                                          ))}
-                                                        </ul>
-                                                      </section>
-                                                    ) : null}
-                                                  </div>
-                                                </aside>
-                                              </div>
-                                            ) : (
-                                              <div className="missing-answer">No matching run for this question.</div>
-                                            )}
-                                          </td>
-                                        </tr>
-                                      ) : null}
-                                    </FragmentRow>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        </section>
-                      </>
-                    ) : (
-                      <section className="panel empty-panel focus-empty">
-                        <SectionHeader title="No question in current filter" subtitle="Relax search or filter to resume review." />
+                                                </details>
+                                              </aside>
+                                            </div>
+                                          ) : (
+                                            <div className="missing-answer">No matching run for this question.</div>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    ) : null}
+                                  </FragmentRow>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
                       </section>
-                    )}
-                  </div>
+                    </>
+                  ) : (
+                    <section className="panel empty-panel">
+                      <h3>No question in current filter</h3>
+                      <p>Relax search or filter to resume review.</p>
+                    </section>
+                  )}
                 </div>
-              </section>
+              </div>
+            </section>
 
-              <section id="metric-desk" className="panel section-panel">
-                <SectionHeader
-                  title="Metric desk"
-                  subtitle="Secondary scan view. Ranked ledgers stay available when you want one metric across all visible models."
-                />
-                <div className="metric-desk-grid">
-                  {summaryMetrics.map((metric, index) => (
-                    <MetricDeskCard
-                      key={metric.label}
-                      metric={metric}
-                      executions={visibleExecutions}
-                      defaultOpen={index < 4}
-                    />
-                  ))}
+            <section id="metric-desk" className="panel section-panel">
+              <div className="section-heading metric-desk-heading">
+                <div>
+                  <h3>Metric desk</h3>
                 </div>
-              </section>
-            </>
-          )}
-        </main>
+                <div className="chart-score-toggle" role="tablist" aria-label="Chart score metric">
+                  <button
+                    type="button"
+                    className={`theme-option ${chartScoreMode === 'correct-rate' ? 'is-active' : ''}`}
+                    onClick={() => setChartScoreMode('correct-rate')}
+                    aria-pressed={chartScoreMode === 'correct-rate'}
+                  >
+                    Correct rate
+                  </button>
+                  <button
+                    type="button"
+                    className={`theme-option ${chartScoreMode === 'correctness-score' ? 'is-active' : ''}`}
+                    onClick={() => setChartScoreMode('correctness-score')}
+                    aria-pressed={chartScoreMode === 'correctness-score'}
+                  >
+                    Correctness score
+                  </button>
+                </div>
+              </div>
+              <div className="metric-desk-scatters">
+                <MetricDeskScatter
+                  executions={visibleExecutions}
+                  xAxis={{
+                    label: 'Cost / question',
+                    value: (execution) => execution.summary.cost?.meanTotalCostUsdPerRun,
+                    format: (value) => formatUsd(value, 4),
+                    higherIsBetter: false,
+                  }}
+                  yAxis={chartScoreAxis}
+                />
+                <MetricDeskScatter
+                  executions={visibleExecutions}
+                  xAxis={{
+                    label: 'Time / question',
+                    value: (execution) => execution.summary.timing?.meanCollectMsPerRun,
+                    format: (value) => formatDuration(value),
+                    higherIsBetter: false,
+                  }}
+                  yAxis={chartScoreAxis}
+                />
+              </div>
+              <div className="metric-desk">
+                {summaryMetrics.map((metric, index) => (
+                  <MetricDeskRow
+                    key={metric.label}
+                    metric={metric}
+                    executions={visibleExecutions}
+                    isPrimary={index === 0}
+                  />
+                ))}
+              </div>
+            </section>
+          </>
+        )}
+      </main>
+    </div>
+  );
+}
+
+function MetricDeskRow({
+  metric,
+  executions,
+  isPrimary = false,
+}: {
+  metric: MetricDefinition;
+  executions: LoadedExecution[];
+  isPrimary?: boolean;
+}) {
+  const rows = useMemo(() => {
+    return executions
+      .map((execution) => ({ execution, value: metric.value(execution) }))
+      .filter((row): row is { execution: LoadedExecution; value: number } => typeof row.value === 'number')
+      .sort((left, right) => compareMetricValues(left.value, right.value, metric.higherIsBetter));
+  }, [executions, metric]);
+
+  if (rows.length === 0) {
+    return (
+      <div className={`metric-card ${isPrimary ? 'is-primary' : ''}`}>
+        <div className="metric-card-head">
+          <strong>{metric.label}</strong>
+          <span>{metric.higherIsBetter ? 'higher wins' : 'lower wins'}{metric.sublabel ? ` · ${metric.sublabel}` : ''}</span>
+        </div>
+        <div className="empty-inline">no data</div>
+      </div>
+    );
+  }
+
+  const values = rows.map((row) => row.value);
+  const maxValue = Math.max(...values);
+  const minValue = Math.min(...values);
+  const scaleMax = Math.max(Math.abs(maxValue), Math.abs(minValue), Number.EPSILON);
+
+  return (
+    <div className={`metric-card ${isPrimary ? 'is-primary' : ''}`}>
+      <div className="metric-card-head">
+        <strong>{metric.label}</strong>
+        <span>{metric.higherIsBetter ? 'higher wins' : 'lower wins'}{metric.sublabel ? ` · ${metric.sublabel}` : ''}</span>
+      </div>
+      <div className="metric-bars">
+        {rows.map((row, index) => {
+          const width = Math.max(2, Math.round((Math.abs(row.value) / scaleMax) * 100));
+          const isNegative = row.value < 0;
+          const isLeader = index === 0;
+          return (
+            <div key={`${metric.label}-${row.execution.id}`} className="metric-bar-row">
+              <div className="metric-bar-model" title={row.execution.label}>{row.execution.shortLabel}</div>
+              <div className={`metric-bar-track ${isNegative ? 'is-negative' : ''}`}>
+                <div
+                  className={`metric-bar-fill ${isLeader ? 'is-leader' : ''} ${isNegative ? 'is-negative' : ''}`}
+                  style={{ width: `${width}%` }}
+                />
+              </div>
+              <div className="metric-bar-value">{metric.format(row.value)}</div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function MetricDeskCard({
-  metric,
-  executions,
-  defaultOpen,
-}: {
-  metric: MetricDefinition;
-  executions: LoadedExecution[];
-  defaultOpen: boolean;
-}) {
-  const sortedRows = useMemo(() => {
-    return executions
-      .map((execution) => ({ execution, value: metric.value(execution) }))
-      .filter((row) => row.value != null)
-      .sort((left, right) => compareMetricValues(left.value, right.value, metric.higherIsBetter));
-  }, [executions, metric]);
+const SCATTER_PALETTE = [
+  '#2563eb', '#dc2626', '#059669', '#d97706', '#7c3aed',
+  '#0891b2', '#db2777', '#65a30d', '#ea580c', '#4f46e5',
+  '#0d9488', '#be185d',
+];
 
-  const maxValue = sortedRows.reduce((max, row) => Math.max(max, row.value ?? 0), 0);
-  const minValue = sortedRows.reduce(
-    (min, row) => Math.min(min, row.value ?? Number.POSITIVE_INFINITY),
-    Number.POSITIVE_INFINITY,
-  );
+function MetricDeskScatter({
+  executions,
+  xAxis,
+  yAxis,
+}: {
+  executions: LoadedExecution[];
+  xAxis: ScatterAxis;
+  yAxis: ScatterAxis;
+}) {
+  const points = useMemo(() => {
+    return executions
+      .map((execution, index) => ({
+        execution,
+        x: xAxis.value(execution),
+        y: yAxis.value(execution),
+        color: SCATTER_PALETTE[index % SCATTER_PALETTE.length],
+      }))
+      .filter(
+        (point): point is {
+          execution: LoadedExecution;
+          x: number;
+          y: number;
+          color: string;
+        } => typeof point.x === 'number' && typeof point.y === 'number',
+      );
+  }, [executions, xAxis, yAxis]);
+
+  if (points.length === 0) {
+    return (
+      <div className="metric-card">
+        <div className="metric-card-head">
+          <strong>{yAxis.label} vs {xAxis.label}</strong>
+        </div>
+        <div className="empty-inline">no data</div>
+      </div>
+    );
+  }
+
+  const xValues = points.map((point) => point.x);
+  const yValues = points.map((point) => point.y);
+  const xDataMin = Math.min(...xValues);
+  const xDataMax = Math.max(...xValues);
+  const yDataMin = Math.min(...yValues);
+  const yDataMax = Math.max(...yValues);
+
+  const xDomain = niceDomain(xDataMin, xDataMax, xAxis.higherIsBetter);
+  const yDomain = niceDomain(yDataMin, yDataMax, yAxis.higherIsBetter);
+
+  const width = 420;
+  const height = 280;
+  const padLeft = 60;
+  const padRight = 18;
+  const padTop = 18;
+  const padBottom = 48;
+  const plotWidth = width - padLeft - padRight;
+  const plotHeight = height - padTop - padBottom;
+
+  const xRange = xDomain.max - xDomain.min || 1;
+  const yRange = yDomain.max - yDomain.min || 1;
+
+  const projectX = (value: number) => padLeft + ((value - xDomain.min) / xRange) * plotWidth;
+  const projectY = (value: number) => padTop + plotHeight - ((value - yDomain.min) / yRange) * plotHeight;
+
+  const xTicks = makeTicks(xDomain.min, xDomain.max, 5);
+  const yTicks = makeTicks(yDomain.min, yDomain.max, 5);
+
+  const frontier = computeParetoFrontier(points, xAxis.higherIsBetter, yAxis.higherIsBetter);
+  const [pinnedId, setPinnedId] = useState<string | null>(null);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const activeId = hoveredId ?? pinnedId;
+  const hasActive = activeId != null;
+  const activePoint = hasActive ? points.find((point) => point.execution.id === activeId) : undefined;
+
+  const togglePinned = (id: string) => {
+    setPinnedId((current) => (current === id ? null : id));
+  };
 
   return (
-    <details className="metric-card panel-shell" open={defaultOpen}>
-      <summary className="metric-card-summary with-indicator">
-        <div>
-          <div className="run-overline">Metric</div>
-          <strong>{metric.label}</strong>
-        </div>
-        <span>{metric.higherIsBetter ? 'higher wins' : 'lower wins'}</span>
-      </summary>
-      <div className="metric-card-body">
-        {sortedRows.length === 0 ? (
-          <div className="mini-note">No values available.</div>
-        ) : (
-          <div className="metric-ranking-list">
-            {sortedRows.map((row, index) => (
-              <div key={`${metric.label}-${row.execution.id}`} className="metric-ranking-row">
-                <span className="metric-rank">{index + 1}</span>
-                <div className="metric-ranking-main">
-                  <div className="metric-ranking-label">{row.execution.shortLabel}</div>
-                  <div className="metric-bar-track">
-                    <div
-                      className="metric-bar-fill"
-                      style={{
-                        width: `${metricWidth(row.value, minValue, maxValue, metric.higherIsBetter)}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-                <strong>{metric.format(row.value)}</strong>
-              </div>
-            ))}
-          </div>
-        )}
+    <div className="metric-card scatter-card">
+      <div className="metric-card-head">
+        <strong>{yAxis.label} vs {xAxis.label}</strong>
+        <span>{paretoCornerLabel(xAxis.higherIsBetter, yAxis.higherIsBetter)} is best</span>
       </div>
-    </details>
+      <svg className="scatter-plot" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${yAxis.label} vs ${xAxis.label}`}>
+        <rect
+          x={padLeft}
+          y={padTop}
+          width={plotWidth}
+          height={plotHeight}
+          className="scatter-plot-area"
+        />
+        {yTicks.map((tick) => (
+          <g key={`y-${tick}`}>
+            <line x1={padLeft} y1={projectY(tick)} x2={width - padRight} y2={projectY(tick)} className="scatter-gridline" />
+            <text x={padLeft - 8} y={projectY(tick)} className="scatter-axis-label" textAnchor="end" dominantBaseline="middle">
+              {yAxis.format(tick)}
+            </text>
+          </g>
+        ))}
+        {xTicks.map((tick) => (
+          <g key={`x-${tick}`}>
+            <line x1={projectX(tick)} y1={padTop} x2={projectX(tick)} y2={height - padBottom} className="scatter-gridline" />
+            <text x={projectX(tick)} y={height - padBottom + 14} className="scatter-axis-label" textAnchor="middle">
+              {xAxis.format(tick)}
+            </text>
+          </g>
+        ))}
+        <line x1={padLeft} y1={height - padBottom} x2={width - padRight} y2={height - padBottom} className="scatter-axis" />
+        <line x1={padLeft} y1={padTop} x2={padLeft} y2={height - padBottom} className="scatter-axis" />
+        <text
+          x={padLeft + plotWidth / 2}
+          y={height - 8}
+          className="scatter-axis-title"
+          textAnchor="middle"
+        >
+          {xAxis.label}
+        </text>
+        <text
+          x={14}
+          y={padTop + plotHeight / 2}
+          className="scatter-axis-title"
+          textAnchor="middle"
+          transform={`rotate(-90 14 ${padTop + plotHeight / 2})`}
+        >
+          {yAxis.label}
+        </text>
+        {frontier.length >= 2 ? (
+          <polyline
+            className="scatter-frontier"
+            points={frontier
+              .map((point) => `${projectX(point.x)},${projectY(point.y)}`)
+              .join(' ')}
+          />
+        ) : null}
+        {points.map((point) => {
+          const isFrontier = frontier.some((frontierPoint) => frontierPoint.execution.id === point.execution.id);
+          const isActive = activeId === point.execution.id;
+          const isPinned = pinnedId === point.execution.id;
+          const isDimmed = hasActive && !isActive;
+          const radius = isActive ? 8 : isFrontier ? 7 : 5.5;
+          return (
+            <g
+              key={point.execution.id}
+              className={`scatter-point ${isDimmed ? 'is-dimmed' : ''} ${isActive ? 'is-active' : ''}`}
+              onMouseEnter={() => setHoveredId(point.execution.id)}
+              onMouseLeave={() => setHoveredId((current) => (current === point.execution.id ? null : current))}
+              onClick={() => togglePinned(point.execution.id)}
+              style={{ cursor: 'pointer' }}
+            >
+              <title>{`${point.execution.label}\n${yAxis.label}: ${yAxis.format(point.y)}\n${xAxis.label}: ${xAxis.format(point.x)}`}</title>
+              <circle
+                cx={projectX(point.x)}
+                cy={projectY(point.y)}
+                r={radius}
+                className={`scatter-dot ${isFrontier ? 'is-frontier' : ''} ${isPinned ? 'is-pinned' : ''}`}
+                style={{ fill: point.color }}
+              />
+            </g>
+          );
+        })}
+        {activePoint ? (
+          <ScatterCallout
+            point={activePoint}
+            xAxis={xAxis}
+            yAxis={yAxis}
+            projectX={projectX}
+            projectY={projectY}
+            plotRight={width - padRight}
+            plotTop={padTop}
+            plotBottom={height - padBottom}
+            plotLeft={padLeft}
+          />
+        ) : null}
+      </svg>
+      <div className="scatter-legend">
+        {points.map((point) => {
+          const isActive = activeId === point.execution.id;
+          const isPinned = pinnedId === point.execution.id;
+          const isDimmed = hasActive && !isActive;
+          return (
+            <button
+              key={point.execution.id}
+              type="button"
+              className={`scatter-legend-item ${isActive ? 'is-active' : ''} ${isPinned ? 'is-pinned' : ''} ${isDimmed ? 'is-dimmed' : ''}`}
+              title={point.execution.label}
+              onMouseEnter={() => setHoveredId(point.execution.id)}
+              onMouseLeave={() => setHoveredId((current) => (current === point.execution.id ? null : current))}
+              onClick={() => togglePinned(point.execution.id)}
+            >
+              <span className="scatter-legend-swatch" style={{ background: point.color }} />
+              <span className="scatter-legend-label">{point.execution.shortLabel}</span>
+              <span className="scatter-legend-value">
+                {yAxis.format(point.y)} · {xAxis.format(point.x)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
-function SidebarSection({
-  children,
-  defaultOpen,
-  title,
+function ScatterCallout({
+  point,
+  xAxis,
+  yAxis,
+  projectX,
+  projectY,
+  plotLeft,
+  plotRight,
+  plotTop,
+  plotBottom,
 }: {
-  children: ReactNode;
-  defaultOpen?: boolean;
-  title: string;
+  point: { execution: LoadedExecution; x: number; y: number; color: string };
+  xAxis: ScatterAxis;
+  yAxis: ScatterAxis;
+  projectX: (value: number) => number;
+  projectY: (value: number) => number;
+  plotLeft: number;
+  plotRight: number;
+  plotTop: number;
+  plotBottom: number;
 }) {
+  const cx = projectX(point.x);
+  const cy = projectY(point.y);
+  const labelLines = [
+    point.execution.shortLabel,
+    `${yAxis.format(point.y)} · ${xAxis.format(point.x)}`,
+  ];
+  const maxLineLen = Math.max(...labelLines.map((line) => line.length));
+  const boxWidth = Math.max(110, Math.min(220, maxLineLen * 6.4 + 16));
+  const boxHeight = 34;
+  const gap = 12;
+
+  let boxX = cx + gap;
+  let anchor = 'start';
+  if (boxX + boxWidth > plotRight) {
+    boxX = cx - gap - boxWidth;
+    anchor = 'end';
+  }
+  if (boxX < plotLeft) {
+    boxX = Math.min(Math.max(cx - boxWidth / 2, plotLeft), plotRight - boxWidth);
+    anchor = 'start';
+  }
+
+  let boxY = cy - boxHeight / 2;
+  if (boxY < plotTop) boxY = plotTop;
+  if (boxY + boxHeight > plotBottom) boxY = plotBottom - boxHeight;
+
+  const textX = anchor === 'end' ? boxX + boxWidth - 8 : boxX + 8;
+  const textAnchor = anchor === 'end' ? 'end' : 'start';
+
   return (
-    <details className="sidebar-section" open={defaultOpen}>
-      <summary className="with-indicator">{title}</summary>
-      <div className="sidebar-section-body">{children}</div>
-    </details>
+    <g className="scatter-callout" pointerEvents="none">
+      <rect
+        x={boxX}
+        y={boxY}
+        width={boxWidth}
+        height={boxHeight}
+        rx={4}
+        className="scatter-callout-box"
+      />
+      <rect
+        x={boxX}
+        y={boxY}
+        width={3}
+        height={boxHeight}
+        className="scatter-callout-accent"
+        style={{ fill: point.color }}
+      />
+      <text x={textX} y={boxY + 14} textAnchor={textAnchor} className="scatter-callout-title">
+        {labelLines[0]}
+      </text>
+      <text x={textX} y={boxY + 28} textAnchor={textAnchor} className="scatter-callout-sub">
+        {labelLines[1]}
+      </text>
+    </g>
   );
+}
+
+function getRunTypeInfo(execution: LoadedExecution): { key: string; label: string } {
+  const mode = execution.summary.mode ?? 'unknown';
+  const toolSet = execution.summary.toolSet?.name ?? 'none';
+  const key = `${mode}/${toolSet}`;
+  const label = runTypeLabel(mode, toolSet);
+  return { key, label };
+}
+
+function runTypeLabel(mode: string, toolSet: string): string {
+  if (mode === 'closed_book') return 'Closed book';
+  if (mode === 'open_book' && toolSet === 'read_grep') return 'Open book · read/grep';
+  if (mode === 'open_book' && toolSet === 'swift_docs_hybrid') return 'Open book · swift_docs_hybrid';
+  if (mode === 'open_book') return `Open book · ${humanizeToken(toolSet)}`;
+  return `${humanizeToken(mode)} · ${humanizeToken(toolSet)}`;
+}
+
+function paretoCornerLabel(xHigherIsBetter: boolean, yHigherIsBetter: boolean): string {
+  const vertical = yHigherIsBetter ? 'top' : 'bottom';
+  const horizontal = xHigherIsBetter ? 'right' : 'left';
+  return `${vertical}-${horizontal}`;
+}
+
+function niceDomain(min: number, max: number, higherIsBetter: boolean): { min: number; max: number } {
+  if (min === max) {
+    const delta = Math.abs(min) * 0.1 || 1;
+    return { min: min - delta, max: max + delta };
+  }
+  const range = max - min;
+  const pad = range * 0.08;
+  let domainMin = min - pad;
+  let domainMax = max + pad;
+  if (min >= 0 && min < range * 0.4) domainMin = 0;
+  if (!higherIsBetter && domainMin < 0 && min >= 0) domainMin = 0;
+  return { min: domainMin, max: domainMax };
+}
+
+function computeParetoFrontier<T extends { x: number; y: number; execution: LoadedExecution }>(
+  points: T[],
+  xHigherIsBetter: boolean,
+  yHigherIsBetter: boolean,
+): T[] {
+  const frontier = points.filter((candidate) => {
+    return !points.some((other) => {
+      if (other === candidate) return false;
+      const xDominates = xHigherIsBetter ? other.x >= candidate.x : other.x <= candidate.x;
+      const yDominates = yHigherIsBetter ? other.y >= candidate.y : other.y <= candidate.y;
+      const strictlyBetter =
+        (xHigherIsBetter ? other.x > candidate.x : other.x < candidate.x) ||
+        (yHigherIsBetter ? other.y > candidate.y : other.y < candidate.y);
+      return xDominates && yDominates && strictlyBetter;
+    });
+  });
+  return frontier.sort((left, right) => left.x - right.x);
+}
+
+function makeTicks(min: number, max: number, count: number): number[] {
+  if (min === max) return [min];
+  const step = (max - min) / count;
+  const ticks: number[] = [];
+  for (let i = 0; i <= count; i++) ticks.push(min + step * i);
+  return ticks;
 }
 
 function FragmentRow({ children }: { children: ReactNode }) {
   return <>{children}</>;
-}
-
-function SectionHeader({
-  title,
-  subtitle,
-  compact,
-}: {
-  title: string;
-  subtitle: string;
-  compact?: boolean;
-}) {
-  return (
-    <div className={`section-heading ${compact ? 'compact' : ''}`}>
-      <div>
-        <h3>{title}</h3>
-        <p>{subtitle}</p>
-      </div>
-    </div>
-  );
 }
 
 function StatPill({ label, value }: { label: string; value: string }) {
@@ -1450,13 +1828,7 @@ function MetricPair({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Badge({
-  children,
-  tone,
-}: {
-  children: ReactNode;
-  tone: 'success' | 'warn' | 'danger' | 'accent' | 'neutral';
-}) {
+function Badge({ children, tone }: { children: ReactNode; tone: Tone }) {
   return <span className={`badge badge-${tone}`}>{children}</span>;
 }
 
@@ -1464,24 +1836,25 @@ function RubricList({
   title,
   items,
   tone,
+  compact,
 }: {
   title: string;
   items: string[];
   tone: 'success' | 'warn' | 'danger' | 'neutral';
+  compact?: boolean;
 }) {
+  if (compact && items.length === 0) return null;
   return (
     <div className="rubric-block">
-      <div className="subtle-label">{title}</div>
+      <div className={`rubric-block-title tone-${tone}`}>{title}</div>
       {items.length === 0 ? (
         <div className="empty-inline">none</div>
       ) : (
-        <div className="tag-wrap">
+        <ul className="rubric-list">
           {items.map((item) => (
-            <Badge key={`${title}-${item}`} tone={tone}>
-              {item}
-            </Badge>
+            <li key={`${title}-${item}`}>{item}</li>
           ))}
-        </div>
+        </ul>
       )}
     </div>
   );
@@ -1496,24 +1869,20 @@ function RubricGroupList({
   groups: string[][];
   tone: 'success' | 'warn' | 'danger' | 'neutral';
 }) {
+  if (groups.length === 0) return null;
   return (
     <div className="rubric-block">
-      <div className="subtle-label">{title}</div>
-      {groups.length === 0 ? (
-        <div className="empty-inline">none</div>
-      ) : (
-        <div className="stack-sm">
-          {groups.map((group, index) => (
-            <div key={`${title}-${index}`} className="tag-wrap">
-              {group.map((item) => (
-                <Badge key={`${title}-${index}-${item}`} tone={tone}>
-                  {item}
-                </Badge>
-              ))}
-            </div>
-          ))}
+      <div className={`rubric-block-title tone-${tone}`}>{title}</div>
+      {groups.map((group, index) => (
+        <div key={`${title}-${index}`} className="rubric-group">
+          <div className="rubric-group-label">group {index + 1}</div>
+          <ul className="rubric-list">
+            {group.map((item) => (
+              <li key={`${title}-${index}-${item}`}>{item}</li>
+            ))}
+          </ul>
         </div>
-      )}
+      ))}
     </div>
   );
 }
@@ -1543,15 +1912,9 @@ function getSummaryBreakdownEntries(summary: LoadedExecution['summary']): Summar
 function judgeVerdictFromCorrectness(
   correctness: number | undefined,
 ): 'correct' | 'partially_correct' | 'incorrect' | undefined {
-  if (correctness === 1) {
-    return 'correct';
-  }
-  if (correctness === 0) {
-    return 'partially_correct';
-  }
-  if (correctness === -1) {
-    return 'incorrect';
-  }
+  if (correctness === 1) return 'correct';
+  if (correctness === 0) return 'partially_correct';
+  if (correctness === -1) return 'incorrect';
   return undefined;
 }
 
@@ -1577,20 +1940,17 @@ function buildQuestionGroups(executions: LoadedExecution[], questionList: Questi
 
     const judgeAnswers = answers
       .map(({ run }) => run)
-      .filter(
-        (run): run is EnrichedRun =>
-          Boolean(
-            run?.judge &&
-              (run.judge.verdict !== undefined ||
-                run.judge.correctness !== undefined ||
-                run.judge.completeness !== undefined),
-          ),
+      .filter((run): run is EnrichedRun =>
+        Boolean(
+          run?.judge &&
+            (run.judge.verdict !== undefined ||
+              run.judge.correctness !== undefined ||
+              run.judge.completeness !== undefined),
+        ),
       );
     const judgeRuns = judgeAnswers.length;
     const judgeCorrectCount = judgeAnswers.reduce((count, run) => {
-      if (run.judge?.verdict === 'correct' || run.judge?.correctness === 1) {
-        return count + 1;
-      }
+      if (run.judge?.verdict === 'correct' || run.judge?.correctness === 1) return count + 1;
       return count;
     }, 0);
     const completenessScores = judgeAnswers
@@ -1618,7 +1978,7 @@ function buildQuestionGroups(executions: LoadedExecution[], questionList: Questi
     const judgeCoverageRate = answers.length > 0 ? judgeRuns / answers.length : null;
     const judgeCorrectnessScore =
       answers.length > 0
-        ? judgeAnswers.reduce((sum, run) => sum + (run.judge?.correctness ?? 0), 0) / answers.length
+        ? answers.reduce((sum, { run }) => sum + getRunCorrectnessScore(run), 0) / answers.length
         : null;
 
     const disagreementTokens = new Set<string>();
@@ -1658,23 +2018,10 @@ function sortAnswerRows(
   mode: AnswerSortMode,
 ): QuestionGroup['answers'] {
   const rows = [...answers];
-
-  if (mode === 'execution-order') {
-    return rows;
-  }
-
-  if (mode === 'score-desc') {
-    return rows.sort((left, right) => compareNullableNumbers(right.run?.grade?.score, left.run?.grade?.score));
-  }
-
-  if (mode === 'judge-best') {
-    return rows.sort((left, right) => compareJudgePriority(right.run, left.run));
-  }
-
-  if (mode === 'cost-low') {
-    return rows.sort((left, right) => compareNullableNumbers(left.run?.cost?.totalUsd, right.run?.cost?.totalUsd));
-  }
-
+  if (mode === 'execution-order') return rows;
+  if (mode === 'score-desc') return rows.sort((left, right) => compareNullableNumbers(right.run?.grade?.score, left.run?.grade?.score));
+  if (mode === 'judge-best') return rows.sort((left, right) => compareJudgePriority(right.run, left.run));
+  if (mode === 'cost-low') return rows.sort((left, right) => compareNullableNumbers(left.run?.cost?.totalUsd, right.run?.cost?.totalUsd));
   return rows;
 }
 
@@ -1689,11 +2036,9 @@ function compareQuestionGroups(left: QuestionGroup, right: QuestionGroup, sortMo
       left.meta.order - right.meta.order
     );
   }
-
   if (sortMode === 'most-disagreement') {
     return right.disagreementCount - left.disagreementCount || left.meta.order - right.meta.order;
   }
-
   return left.meta.order - right.meta.order;
 }
 
@@ -1702,62 +2047,23 @@ function compareMetricValues(
   right: number | undefined,
   higherIsBetter: boolean,
 ): number {
-  if (left == null && right == null) {
-    return 0;
-  }
-  if (left == null) {
-    return 1;
-  }
-  if (right == null) {
-    return -1;
-  }
+  if (left == null && right == null) return 0;
+  if (left == null) return 1;
+  if (right == null) return -1;
   return higherIsBetter ? right - left : left - right;
 }
 
 function compareNullableNumbers(left: number | undefined, right: number | undefined): number {
-  if (left == null && right == null) {
-    return 0;
-  }
-  if (left == null) {
-    return 1;
-  }
-  if (right == null) {
-    return -1;
-  }
+  if (left == null && right == null) return 0;
+  if (left == null) return 1;
+  if (right == null) return -1;
   return left - right;
 }
 
-function metricWidth(
-  value: number | undefined,
-  minValue: number,
-  maxValue: number,
-  higherIsBetter: boolean,
-): number {
-  if (value == null || Number.isNaN(value)) {
-    return 0;
-  }
-
-  if (!Number.isFinite(minValue) || maxValue === minValue) {
-    return 100;
-  }
-
-  const ratioValue = higherIsBetter
-    ? (value - minValue) / (maxValue - minValue)
-    : (maxValue - value) / (maxValue - minValue);
-
-  return Math.max(16, Math.round(ratioValue * 100));
-}
-
 function verdictRank(verdict: string | undefined): number {
-  if (verdict === 'correct') {
-    return 3;
-  }
-  if (verdict === 'partially_correct') {
-    return 2;
-  }
-  if (verdict === 'incorrect') {
-    return 1;
-  }
+  if (verdict === 'correct') return 3;
+  if (verdict === 'partially_correct') return 2;
+  if (verdict === 'incorrect') return 1;
   return 0;
 }
 
@@ -1775,38 +2081,17 @@ function compareJudgePriority(
   left: EnrichedRun | null | undefined,
   right: EnrichedRun | null | undefined,
 ): number {
-  const leftVerdict = verdictRank(
-    left?.judge?.verdict ?? judgeVerdictFromCorrectness(left?.judge?.correctness),
-  );
-  const rightVerdict = verdictRank(
-    right?.judge?.verdict ?? judgeVerdictFromCorrectness(right?.judge?.correctness),
-  );
-  if (leftVerdict !== rightVerdict) {
-    return leftVerdict - rightVerdict;
-  }
+  const leftVerdict = verdictRank(left?.judge?.verdict ?? judgeVerdictFromCorrectness(left?.judge?.correctness));
+  const rightVerdict = verdictRank(right?.judge?.verdict ?? judgeVerdictFromCorrectness(right?.judge?.correctness));
+  if (leftVerdict !== rightVerdict) return leftVerdict - rightVerdict;
 
   const leftCompleteness = left?.judge?.completeness ?? Number.NEGATIVE_INFINITY;
   const rightCompleteness = right?.judge?.completeness ?? Number.NEGATIVE_INFINITY;
-  if (leftCompleteness !== rightCompleteness) {
-    return leftCompleteness - rightCompleteness;
-  }
+  if (leftCompleteness !== rightCompleteness) return leftCompleteness - rightCompleteness;
 
-  const leftReferenceVerified =
-    left?.judge?.referenceVerified === true
-      ? 1
-      : left?.judge?.referenceVerified === false
-        ? 0
-        : -1;
-  const rightReferenceVerified =
-    right?.judge?.referenceVerified === true
-      ? 1
-      : right?.judge?.referenceVerified === false
-        ? 0
-        : -1;
-  if (leftReferenceVerified !== rightReferenceVerified) {
-    return leftReferenceVerified - rightReferenceVerified;
-  }
-
+  const leftReferenceVerified = left?.judge?.referenceVerified === true ? 1 : left?.judge?.referenceVerified === false ? 0 : -1;
+  const rightReferenceVerified = right?.judge?.referenceVerified === true ? 1 : right?.judge?.referenceVerified === false ? 0 : -1;
+  if (leftReferenceVerified !== rightReferenceVerified) return leftReferenceVerified - rightReferenceVerified;
   return 0;
 }
 
@@ -1816,54 +2101,47 @@ function makeAnswerRowKey(questionId: string, executionId: string): string {
 
 function getJudgeCorrectnessScore(summary: LoadedExecution['summary']): number | undefined {
   const runs = summary.runs;
-  if (runs == null || runs === 0) {
-    return undefined;
-  }
-
+  if (runs == null || runs === 0) return undefined;
   const judge = summary.judge;
-  if (!judge) {
-    return undefined;
-  }
-
-  const points =
-    (judge.correctnessPositiveCount ?? judge.judgeCorrectCount ?? 0) -
-    (judge.correctnessNegativeCount ?? judge.judgeIncorrectCount ?? 0);
-
+  if (!judge) return undefined;
+  const positiveCount = judge.correctnessPositiveCount ?? judge.judgeCorrectCount ?? 0;
+  const negativeCount = judge.correctnessNegativeCount ?? judge.judgeIncorrectCount ?? 0;
+  const errorCount = summary.errors?.runsWithAnyError ?? 0;
+  const points = positiveCount - negativeCount - errorCount;
   return points / runs;
 }
 
+function getRunCorrectnessScore(run: EnrichedRun | null | undefined): number {
+  if (!run) return 0;
+  if (typeof run.judge?.correctness === 'number') return run.judge.correctness;
+  if (run.judge?.verdict === 'correct') return 1;
+  if (run.judge?.verdict === 'incorrect') return -1;
+  if (run.judge?.verdict === 'partially_correct') return 0;
+  if (run.errors?.collectHadError || run.errors?.judgeHadError) return -1;
+  return 0;
+}
+
+function getExecutionErrorRate(summary: LoadedExecution['summary']): number | undefined {
+  return ratio(summary.errors?.runsWithAnyError, summary.runs);
+}
+
 function ratio(numerator: number | undefined, denominator: number | undefined): number | undefined {
-  if (numerator == null || denominator == null || denominator === 0) {
-    return undefined;
-  }
+  if (numerator == null || denominator == null || denominator === 0) return undefined;
   return numerator / denominator;
 }
 
 function formatNumber(value: number | undefined | null, digits = 2): string {
-  if (value == null || Number.isNaN(value)) {
-    return '—';
-  }
+  if (value == null || Number.isNaN(value)) return '—';
   return value.toFixed(digits);
 }
 
-function formatWholeNumber(value: number | undefined | null): string {
-  if (value == null || Number.isNaN(value)) {
-    return '—';
-  }
-  return new Intl.NumberFormat('en-US').format(value);
-}
-
 function formatPercent(value: number | undefined | null, digits = 0): string {
-  if (value == null || Number.isNaN(value)) {
-    return '—';
-  }
+  if (value == null || Number.isNaN(value)) return '—';
   return `${(value * 100).toFixed(digits)}%`;
 }
 
 function formatUsd(value: number | undefined | null, digits = 4): string {
-  if (value == null || Number.isNaN(value)) {
-    return '—';
-  }
+  if (value == null || Number.isNaN(value)) return '—';
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -1872,77 +2150,63 @@ function formatUsd(value: number | undefined | null, digits = 4): string {
   }).format(value);
 }
 
+function formatDuration(ms: number | undefined | null): string {
+  if (ms == null || Number.isNaN(ms)) return '—';
+  const totalSeconds = Math.round(ms / 1000);
+  return `${totalSeconds.toLocaleString('en-US')}s`;
+}
+
 function formatBoolean(value: boolean | undefined): string {
-  if (value == null) {
-    return '—';
-  }
+  if (value == null) return '—';
   return value ? 'yes' : 'no';
 }
 
 function formatJudgeAxis(value: number | undefined): string {
-  if (value == null) {
-    return '—';
-  }
-  if (value === 1) {
-    return '+1';
-  }
-  if (value === 0) {
-    return '0';
-  }
-  if (value === -1) {
-    return '−1';
-  }
+  if (value == null) return '—';
+  if (value === 1) return '+1';
+  if (value === 0) return '0';
+  if (value === -1) return '−1';
   return formatNumber(value, 2);
 }
 
 function formatJudgeScore(value: number | undefined): string {
-  if (value == null) {
-    return '—';
-  }
+  if (value == null) return '—';
   return `${value}/2`;
 }
 
 function formatCount(value: number | undefined, total: number | undefined): string {
-  if (value == null) {
-    return '—';
-  }
-  if (total == null) {
-    return String(value);
-  }
+  if (value == null) return '—';
+  if (total == null) return String(value);
   return `${value}/${total}`;
 }
 
 function formatTimestamp(value: string | undefined): string {
-  if (!value) {
-    return '—';
-  }
-
+  if (!value) return '—';
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
+  if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat('en-US', {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(date);
 }
 
-function verdictTone(verdict: string): 'success' | 'warn' | 'danger' | 'neutral' {
-  if (verdict === 'correct') {
-    return 'success';
-  }
-  if (verdict === 'partially_correct') {
-    return 'warn';
-  }
-  if (verdict === 'incorrect') {
-    return 'danger';
-  }
+function verdictTone(verdict: string): Tone {
+  if (verdict === 'correct') return 'success';
+  if (verdict === 'partially_correct') return 'warn';
+  if (verdict === 'incorrect') return 'danger';
   return 'neutral';
 }
 
-function humanizeToken(value: string): string {
-  return value.replace(/_/g, ' ');
+function scoreTone(score: number | null | undefined): Tone {
+  if (score == null) return 'neutral';
+  if (score >= 0.25) return 'success';
+  if (score < 0) return 'danger';
+  return 'warn';
+}
+
+function humanizeToken(token: string | undefined): string {
+  if (!token) return '—';
+  return token.replace(/_/g, ' ');
 }
 
 function padQuestionOrder(order: number): string {
@@ -1950,16 +2214,11 @@ function padQuestionOrder(order: number): string {
 }
 
 function getInitialTheme(): ThemeMode {
-  if (typeof window === 'undefined') {
-    return 'dark';
-  }
-
+  if (typeof window === 'undefined') return 'light';
   const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-  if (stored === 'light' || stored === 'dark') {
-    return stored;
-  }
-
-  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  if (stored === 'dark' || stored === 'light') return stored;
+  if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) return 'dark';
+  return 'light';
 }
 
 export default App;
