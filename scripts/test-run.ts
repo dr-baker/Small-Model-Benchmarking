@@ -7,7 +7,7 @@ import { runCollect } from "../src/collect/run.js";
 import { loadToolSetCatalog } from "../src/collect/tool-sets.js";
 import { gradeRun } from "../src/grade/run.js";
 import { judgeRun } from "../src/judge/run.js";
-import type { AnswerCollectionMode, DatasetQuestion, ModelRef, ToolSetName } from "../src/shared/contracts.js";
+import type { AnswerCollectionMode, DatasetQuestion, ModelRef, RetryPolicyConfig, ToolSetName } from "../src/shared/contracts.js";
 import { loadBenchmarkConfigWithMeta, getCandidateModelRefs, getJudgeModelRef, getJudgeTransportConfig, getPromptTemplatePath, parseModelRefFromString, type BenchmarkBatchNumber, type BenchmarkConfig, type BenchmarkConfigPaths } from "../src/shared/config.js";
 import { readJsonFile, writeJsonFile, writeTextFile } from "../src/shared/io.js";
 
@@ -52,7 +52,8 @@ function parsePositiveInteger(raw: string, flagName: string): number {
 }
 
 function parseBatchNumber(raw: string): BenchmarkBatchNumber {
-  return raw === "auto" ? "auto" : parsePositiveInteger(raw, "--batch-number");
+  if (raw === "auto" || raw === "all") return raw;
+  return parsePositiveInteger(raw, "--batch-number");
 }
 
 function parseCsv(raw: string): string[] {
@@ -172,7 +173,84 @@ async function isRunComplete(runDirectory: string): Promise<boolean> {
   return pathExists(join(runDirectory, "grade.json"));
 }
 
-async function detectNextIncompleteBatchNumber(params: {
+const DEFAULT_COLLECT_RETRY_POLICY: RetryPolicyConfig = {
+  maxAttempts: 4,
+  initialDelayMs: 5000,
+  backoffMultiplier: 2,
+  maxDelayMs: 45000,
+  jitterMs: 1000,
+};
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getRetryDelayMs(policy: RetryPolicyConfig, attemptIndex: number): number {
+  const exponentialDelay = policy.initialDelayMs * (policy.backoffMultiplier ** attemptIndex);
+  const cappedDelay = Math.min(policy.maxDelayMs, Math.round(exponentialDelay));
+  if (!policy.jitterMs) return cappedDelay;
+  return cappedDelay + Math.floor(Math.random() * (policy.jitterMs + 1));
+}
+
+function toLowerSerializedErrorText(value: unknown): string {
+  try {
+    return JSON.stringify(value).toLowerCase();
+  } catch {
+    return String(value).toLowerCase();
+  }
+}
+
+function isRetryableCollectError(params: { traceError: unknown; parseError?: string | null }): boolean {
+  if (!params.traceError) return false;
+  const text = `${toLowerSerializedErrorText(params.traceError)}\n${(params.parseError ?? "").toLowerCase()}`;
+  return text.includes("api error 408")
+    || text.includes("api error 409")
+    || text.includes("api error 425")
+    || text.includes("api error 429")
+    || /api error 5\d\d/.test(text)
+    || text.includes("rate limit")
+    || text.includes("rate_limit")
+    || text.includes("too many requests")
+    || text.includes("retry after")
+    || text.includes("timeout")
+    || text.includes("timed out")
+    || text.includes("temporarily unavailable")
+    || text.includes("server_error")
+    || text.includes("service unavailable")
+    || text.includes("overloaded");
+}
+
+class CollectStartLimiter {
+  private nextStartAt = 0;
+
+  constructor(private readonly spacingMs: number) {}
+
+  async waitTurn(): Promise<number> {
+    if (this.spacingMs <= 0) return 0;
+    const now = Date.now();
+    const scheduledAt = Math.max(now, this.nextStartAt);
+    this.nextStartAt = scheduledAt + this.spacingMs;
+    const delayMs = scheduledAt - now;
+    if (delayMs > 0) {
+      await sleep(delayMs);
+    }
+    return delayMs;
+  }
+}
+
+async function runWithConcurrency<T>(items: T[], limit: number, worker: (item: T, index: number) => Promise<void>): Promise<void> {
+  const queue = items.map((item, index) => ({ item, index }));
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (queue.length > 0) {
+      const next = queue.shift();
+      if (!next) return;
+      await worker(next.item, next.index);
+    }
+  });
+  await Promise.all(workers);
+}
+
+async function detectIncompleteBatchNumbers(params: {
   questions: DatasetQuestion[];
   batchSize: number;
   executionDirectory: string;
@@ -180,7 +258,8 @@ async function detectNextIncompleteBatchNumber(params: {
   modes: string[];
   resolveToolSetName: (mode: string) => string;
   getDefaultToolSetName: (mode: string) => string;
-}): Promise<number> {
+}): Promise<number[]> {
+  const incompleteBatchNumbers: number[] = [];
   const totalBatches = countBatches(params.questions, params.batchSize);
   for (let batchNumber = 1; batchNumber <= totalBatches; batchNumber += 1) {
     const batchQuestions = applyBatch(params.questions, params.batchSize, batchNumber);
@@ -202,10 +281,23 @@ async function detectNextIncompleteBatchNumber(params: {
       if (!batchComplete) break;
     }
 
-    if (!batchComplete) return batchNumber;
+    if (!batchComplete) incompleteBatchNumbers.push(batchNumber);
   }
+  return incompleteBatchNumbers;
+}
 
-  return totalBatches;
+async function detectNextIncompleteBatchNumber(params: {
+  questions: DatasetQuestion[];
+  batchSize: number;
+  executionDirectory: string;
+  models: ModelRef[];
+  modes: string[];
+  resolveToolSetName: (mode: string) => string;
+  getDefaultToolSetName: (mode: string) => string;
+}): Promise<number> {
+  const incompleteBatchNumbers = await detectIncompleteBatchNumbers(params);
+  if (incompleteBatchNumbers.length > 0) return incompleteBatchNumbers[0];
+  return countBatches(params.questions, params.batchSize);
 }
 
 function normalizeTransportForArtifact(transport: BenchmarkConfig["transport"]): Record<string, unknown> {
@@ -239,7 +331,7 @@ async function writeExecutionArtifacts(params: {
   toolSetOverride?: ToolSetName;
   batchSize: number | null;
   configuredBatchNumber: BenchmarkBatchNumber;
-  resolvedBatchNumber: number;
+  resolvedBatchNumbers: number[];
   batchQuestions: DatasetQuestion[];
   executionResume: boolean;
   stopOnError: boolean;
@@ -271,7 +363,8 @@ async function writeExecutionArtifacts(params: {
     batch: {
       size: params.batchSize,
       requestedNumber: params.configuredBatchNumber,
-      resolvedNumber: params.resolvedBatchNumber,
+      ...(params.resolvedBatchNumbers.length === 1 ? { resolvedNumber: params.resolvedBatchNumbers[0] } : {}),
+      resolvedNumbers: params.resolvedBatchNumbers,
       questionIds: params.batchQuestions.map((question) => question.id),
     },
     systemPrompts: params.config.systemPrompts,
@@ -310,6 +403,231 @@ async function writeExecutionArtifacts(params: {
       runsJsonl: join(params.executionDirectory, "aggregate-runs.jsonl"),
     },
   });
+}
+
+interface BatchSelection {
+  batchNumbers: number[];
+  questions: DatasetQuestion[];
+}
+
+interface RunWorkItem {
+  modelRef: ModelRef;
+  question: DatasetQuestion;
+  mode: keyof BenchmarkConfig["modes"];
+  toolSetName: string;
+  defaultToolSetName: string;
+}
+
+async function resolveBatchSelection(params: {
+  selectedQuestions: DatasetQuestion[];
+  batchSize: number | null;
+  configuredBatchNumber: BenchmarkBatchNumber;
+  executionResume: boolean;
+  executionDirectory: string;
+  candidateModels: ModelRef[];
+  modes: Array<keyof BenchmarkConfig["modes"]>;
+  resolveToolSetName: (mode: string) => string;
+  getDefaultToolSetName: (mode: string) => string;
+}): Promise<BatchSelection> {
+  if (params.batchSize === null) {
+    return {
+      batchNumbers: [1],
+      questions: params.selectedQuestions,
+    };
+  }
+
+  const totalBatches = countBatches(params.selectedQuestions, params.batchSize);
+  if (params.configuredBatchNumber === "auto") {
+    const batchNumber = await detectNextIncompleteBatchNumber({
+      questions: params.selectedQuestions,
+      batchSize: params.batchSize,
+      executionDirectory: params.executionDirectory,
+      models: params.candidateModels,
+      modes: params.modes,
+      resolveToolSetName: params.resolveToolSetName,
+      getDefaultToolSetName: params.getDefaultToolSetName,
+    });
+    return {
+      batchNumbers: [batchNumber],
+      questions: applyBatch(params.selectedQuestions, params.batchSize, batchNumber),
+    };
+  }
+
+  if (params.configuredBatchNumber === "all") {
+    const batchNumbers = params.executionResume
+      ? await detectIncompleteBatchNumbers({
+          questions: params.selectedQuestions,
+          batchSize: params.batchSize,
+          executionDirectory: params.executionDirectory,
+          models: params.candidateModels,
+          modes: params.modes,
+          resolveToolSetName: params.resolveToolSetName,
+          getDefaultToolSetName: params.getDefaultToolSetName,
+        })
+      : Array.from({ length: totalBatches }, (_value, index) => index + 1);
+    return {
+      batchNumbers,
+      questions: batchNumbers.flatMap((batchNumber) => applyBatch(params.selectedQuestions, params.batchSize!, batchNumber)),
+    };
+  }
+
+  return {
+    batchNumbers: [params.configuredBatchNumber],
+    questions: applyBatch(params.selectedQuestions, params.batchSize, params.configuredBatchNumber),
+  };
+}
+
+async function runCollectWithRetries(params: {
+  input: Parameters<typeof runCollect>[0];
+  retryPolicy: RetryPolicyConfig | undefined;
+  collectStartLimiter: CollectStartLimiter;
+  logPrefix: string;
+}): Promise<Awaited<ReturnType<typeof runCollect>>> {
+  const policy = params.retryPolicy ?? DEFAULT_COLLECT_RETRY_POLICY;
+
+  for (let attempt = 1; attempt <= policy.maxAttempts; attempt += 1) {
+    const spacingDelayMs = await params.collectStartLimiter.waitTurn();
+    if (spacingDelayMs > 0) {
+      console.log(`${params.logPrefix} collect: staggered start delay ${spacingDelayMs}ms`);
+    }
+
+    const output = await runCollect(params.input);
+    const shouldRetry = output.hasError && isRetryableCollectError({
+      traceError: output.trace.error,
+      parseError: output.normalizedAnswer.parseError,
+    });
+
+    if (!shouldRetry || attempt >= policy.maxAttempts) {
+      return output;
+    }
+
+    const delayMs = getRetryDelayMs(policy, attempt - 1);
+    console.warn(`${params.logPrefix} collect: transient error detected, retrying attempt ${attempt + 1}/${policy.maxAttempts} after ${delayMs}ms`);
+    await sleep(delayMs);
+  }
+
+  throw new Error("Collect retry loop exhausted unexpectedly.");
+}
+
+async function processRunWorkItem(params: {
+  item: RunWorkItem;
+  executionDirectory: string;
+  catalog: Awaited<ReturnType<typeof loadToolSetCatalog>>;
+  config: BenchmarkConfig;
+  transport: BenchmarkConfig["transport"];
+  judgeTransport: BenchmarkConfig["transport"];
+  judgeModelRef: ModelRef;
+  executionResume: boolean;
+  stopOnError: boolean;
+  answerCollectionMode: AnswerCollectionMode;
+  collectStartLimiter: CollectStartLimiter;
+}): Promise<{ collectHadError: boolean; judgeHadError: boolean }> {
+  const { item } = params;
+  const toolSet = params.catalog.get(item.toolSetName);
+  if (!toolSet) throw new Error(`Unknown tool set: ${item.toolSetName}`);
+
+  const runId = getRunId(item.modelRef, item.mode, item.question.id, item.toolSetName, item.defaultToolSetName);
+  const runDirectory = join(params.executionDirectory, runId);
+  const stageState = await getRunStageState(runDirectory);
+  assertResumableCollectState(runDirectory, stageState);
+
+  if (!params.executionResume && (stageState.manifest || stageState.trace || stageState.normalizedAnswer || stageState.judge || stageState.grade)) {
+    throw new Error(`Run directory already exists: ${runDirectory}. Set execution.resume=true or choose a different runId.`);
+  }
+
+  const logPrefix = `   [${item.modelRef.provider}/${item.modelRef.modelId} | ${item.mode.toUpperCase()} | toolSet=${item.toolSetName} | ${item.question.id}]`;
+  if (params.executionResume && stageState.grade) {
+    console.log(`\n==> ${logPrefix} Skipping completed run.`);
+    return { collectHadError: false, judgeHadError: false };
+  }
+
+  console.log(`\n==> ${logPrefix}`);
+
+  let collectHadError = false;
+  let collectParseRetriesUsed = 0;
+  if (!stageState.manifest || !stageState.trace || !stageState.normalizedAnswer) {
+    console.log(`${logPrefix} collect: running`);
+    const collectOutput = await runCollectWithRetries({
+      input: {
+        contractVersion: "benchmark-contract.v1",
+        runId,
+        executionDirectory: params.executionDirectory,
+        benchmarkName: params.config.benchmarkName,
+        model: item.modelRef,
+        transport: params.transport,
+        mode: item.mode,
+        toolSet,
+        promptTemplateId: "benchmark-answer-v1",
+        promptTemplatePath: getPromptTemplatePath(params.config, "benchmark-answer-v1"),
+        promptTemplateVersion: "v1",
+        responseSchemaVersion: "answer-response.v1",
+        rubricVersion: "rubric.v1",
+        corpus: params.config.corpus,
+        ...(params.config.swiftDocs ? { swiftDocs: params.config.swiftDocs } : {}),
+        question: item.question,
+        sampling: {},
+        systemPrompt: params.config.systemPrompts.collect,
+        answerCollectionMode: params.answerCollectionMode,
+        maxParseRetries: params.config.execution.maxParseRetries,
+      },
+      retryPolicy: params.config.execution.collectRetry,
+      collectStartLimiter: params.collectStartLimiter,
+      logPrefix,
+    });
+    collectHadError = collectOutput.hasError;
+    collectParseRetriesUsed = collectOutput.trace.collectRetry?.parseRetriesUsed ?? 0;
+  } else {
+    console.log(`${logPrefix} collect: skipped (artifacts already exist)`);
+    const normalizedAnswer = await readJsonFile<{ parseError?: string }>(join(runDirectory, "normalized-answer.json"));
+    const trace = await readJsonFile<{ error?: unknown; collectRetry?: { parseRetriesUsed?: number } }>(join(runDirectory, "trace.json"));
+    collectHadError = typeof normalizedAnswer.parseError === "string" || trace.error !== undefined;
+    collectParseRetriesUsed = trace.collectRetry?.parseRetriesUsed ?? 0;
+  }
+
+  if (collectParseRetriesUsed > 0) {
+    console.log(`${logPrefix} collect: parse retries used = ${collectParseRetriesUsed}`);
+  }
+
+  let judgeHadError = false;
+  if (!stageState.judge) {
+    console.log(`${logPrefix} judge: running`);
+    const judgeOutput = await judgeRun({
+      runDirectory,
+      datasetPath: params.config.paths.dataset,
+      judgeProfile: params.config.judge.profile,
+      promptTemplatePath: getPromptTemplatePath(params.config, "judge-answer-v1"),
+      systemPrompt: params.config.systemPrompts.judge,
+      toolSetCatalogPath: params.config.paths.toolSets,
+      transport: params.judgeTransport,
+      retryPolicy: params.config.judge.retry,
+      judgeModelOverride: params.judgeModelRef,
+    });
+    judgeHadError = judgeOutput.artifact.status === "error";
+  } else {
+    console.log(`${logPrefix} judge: skipped (artifact already exists)`);
+    const judgeArtifact = await readJsonFile<{ status?: string }>(join(runDirectory, "judge.json"));
+    judgeHadError = judgeArtifact.status === "error";
+  }
+
+  if (!stageState.grade) {
+    console.log(`${logPrefix} grade: running`);
+    await gradeRun({
+      runDirectory,
+      rubricPath: params.config.paths.rubric,
+      datasetPath: params.config.paths.dataset,
+    });
+  } else {
+    console.log(`${logPrefix} grade: skipped (artifact already exists)`);
+  }
+
+  if (collectHadError || judgeHadError) {
+    console.warn(`${logPrefix} warning: run completed with recorded errors (${collectHadError ? "collect" : ""}${collectHadError && judgeHadError ? ", " : ""}${judgeHadError ? "judge" : ""})`);
+    if (params.stopOnError) {
+      throw new Error(`Stopping early because stopOnError=true and run recorded errors: ${runDirectory}`);
+    }
+  }
+
+  return { collectHadError, judgeHadError };
 }
 
 async function main() {
@@ -353,21 +671,18 @@ async function main() {
     ? cli.modes as Array<keyof typeof config.modes>
     : (Object.keys(config.modes) as Array<keyof typeof config.modes>);
 
-  const batchNumber = batchSize === null
-    ? 1
-    : configuredBatchNumber === "auto"
-      ? await detectNextIncompleteBatchNumber({
-          questions: selectedQuestions,
-          batchSize,
-          executionDirectory,
-          models: candidateModels,
-          modes,
-          resolveToolSetName,
-          getDefaultToolSetName,
-        })
-      : configuredBatchNumber;
-
-  const questions = applyBatch(selectedQuestions, batchSize, batchNumber);
+  const batchSelection = await resolveBatchSelection({
+    selectedQuestions,
+    batchSize,
+    configuredBatchNumber,
+    executionResume,
+    executionDirectory,
+    candidateModels,
+    modes,
+    resolveToolSetName,
+    getDefaultToolSetName,
+  });
+  const questions = batchSelection.questions;
 
   await writeExecutionArtifacts({
     executionDirectory,
@@ -383,7 +698,7 @@ async function main() {
     toolSetOverride: cli.toolSet,
     batchSize,
     configuredBatchNumber,
-    resolvedBatchNumber: batchNumber,
+    resolvedBatchNumbers: batchSelection.batchNumbers,
     batchQuestions: questions,
     executionResume,
     stopOnError,
@@ -393,118 +708,45 @@ async function main() {
 
   console.log(`Selected ${questions.length} question(s), ${candidateModels.length} model(s), ${modes.length} mode(s).`);
   if (batchSize !== null) {
-    const autoLabel = configuredBatchNumber === "auto" ? " (auto-detected)" : "";
-    console.log(`Batch ${batchNumber} with size ${batchSize}.${autoLabel}`);
-  }
-
-  let observedErrors = false;
-
-  for (const modelRef of candidateModels) {
-    for (const question of questions) {
-      for (const mode of modes) {
-        const toolSetName = resolveToolSetName(mode);
-        const defaultToolSetName = getDefaultToolSetName(mode);
-        const toolSet = catalog.get(toolSetName);
-        if (!toolSet) throw new Error(`Unknown tool set: ${toolSetName}`);
-
-        const runId = getRunId(modelRef, mode, question.id, toolSetName, defaultToolSetName);
-        const runDirectory = join(executionDirectory, runId);
-        const stageState = await getRunStageState(runDirectory);
-        assertResumableCollectState(runDirectory, stageState);
-
-        if (!executionResume && (stageState.manifest || stageState.trace || stageState.normalizedAnswer || stageState.judge || stageState.grade)) {
-          throw new Error(`Run directory already exists: ${runDirectory}. Set execution.resume=true or choose a different runId.`);
-        }
-
-        if (executionResume && stageState.grade) {
-          console.log(`\n==> [${modelRef.provider}/${modelRef.modelId} | ${mode.toUpperCase()} | toolSet=${toolSetName} | ${question.id}] Skipping completed run.`);
-          continue;
-        }
-
-        console.log(`\n==> [${modelRef.provider}/${modelRef.modelId} | ${mode.toUpperCase()} | toolSet=${toolSetName} | ${question.id}]`);
-
-        let collectHadError = false;
-        let collectParseRetriesUsed = 0;
-        if (!stageState.manifest || !stageState.trace || !stageState.normalizedAnswer) {
-          console.log("   collect: running");
-          const collectOutput = await runCollect({
-            contractVersion: "benchmark-contract.v1",
-            runId,
-            executionDirectory,
-            benchmarkName: config.benchmarkName,
-            model: modelRef,
-            transport,
-            mode,
-            toolSet,
-            promptTemplateId: "benchmark-answer-v1",
-            promptTemplatePath: getPromptTemplatePath(config, "benchmark-answer-v1"),
-            promptTemplateVersion: "v1",
-            responseSchemaVersion: "answer-response.v1",
-            rubricVersion: "rubric.v1",
-            corpus: config.corpus,
-            ...(config.swiftDocs ? { swiftDocs: config.swiftDocs } : {}),
-            question,
-            sampling: {},
-            systemPrompt: config.systemPrompts.collect,
-            answerCollectionMode,
-            maxParseRetries: config.execution.maxParseRetries,
-          });
-          collectHadError = collectOutput.hasError;
-          collectParseRetriesUsed = collectOutput.trace.collectRetry?.parseRetriesUsed ?? 0;
-        } else {
-          console.log("   collect: skipped (artifacts already exist)");
-          const normalizedAnswer = await readJsonFile<{ parseError?: string }>(join(runDirectory, "normalized-answer.json"));
-          const trace = await readJsonFile<{ error?: unknown; collectRetry?: { parseRetriesUsed?: number } }>(join(runDirectory, "trace.json"));
-          collectHadError = typeof normalizedAnswer.parseError === "string" || trace.error !== undefined;
-          collectParseRetriesUsed = trace.collectRetry?.parseRetriesUsed ?? 0;
-        }
-
-        if (collectParseRetriesUsed > 0) {
-          console.log(`   collect: parse retries used = ${collectParseRetriesUsed}`);
-        }
-
-        let judgeHadError = false;
-        if (!stageState.judge) {
-          console.log("   judge: running");
-          const judgeOutput = await judgeRun({
-            runDirectory,
-            datasetPath: config.paths.dataset,
-            judgeProfile: config.judge.profile,
-            promptTemplatePath: getPromptTemplatePath(config, "judge-answer-v1"),
-            systemPrompt: config.systemPrompts.judge,
-            toolSetCatalogPath: config.paths.toolSets,
-            transport: judgeTransport,
-            retryPolicy: config.judge.retry,
-            judgeModelOverride: judgeModelRef,
-          });
-          judgeHadError = judgeOutput.artifact.status === "error";
-        } else {
-          console.log("   judge: skipped (artifact already exists)");
-          const judgeArtifact = await readJsonFile<{ status?: string }>(join(runDirectory, "judge.json"));
-          judgeHadError = judgeArtifact.status === "error";
-        }
-
-        if (!stageState.grade) {
-          console.log("   grade: running");
-          await gradeRun({
-            runDirectory,
-            rubricPath: config.paths.rubric,
-            datasetPath: config.paths.dataset,
-          });
-        } else {
-          console.log("   grade: skipped (artifact already exists)");
-        }
-
-        if (collectHadError || judgeHadError) {
-          observedErrors = true;
-          console.warn(`   warning: run completed with recorded errors (${collectHadError ? "collect" : ""}${collectHadError && judgeHadError ? ", " : ""}${judgeHadError ? "judge" : ""})`);
-          if (stopOnError) {
-            throw new Error(`Stopping early because stopOnError=true and run recorded errors: ${runDirectory}`);
-          }
-        }
-      }
+    if (batchSelection.batchNumbers.length === 0) {
+      console.log(`No incomplete batches remain for size ${batchSize}.`);
+    } else if (batchSelection.batchNumbers.length === 1) {
+      const autoLabel = configuredBatchNumber === "auto" ? " (auto-detected)" : "";
+      console.log(`Batch ${batchSelection.batchNumbers[0]} with size ${batchSize}.${autoLabel}`);
+    } else {
+      console.log(`Batches ${batchSelection.batchNumbers.join(", ")} with size ${batchSize}.`);
     }
   }
+  console.log(`Question concurrency: ${config.execution.questionConcurrency} | collect start spacing: ${config.execution.questionStartSpacingMs}ms`);
+
+  let observedErrors = false;
+  const collectStartLimiter = new CollectStartLimiter(config.execution.questionStartSpacingMs);
+  const workItems: RunWorkItem[] = candidateModels.flatMap((modelRef) => questions.flatMap((question) => modes.map((mode) => ({
+    modelRef,
+    question,
+    mode,
+    toolSetName: resolveToolSetName(mode),
+    defaultToolSetName: getDefaultToolSetName(mode),
+  }))));
+
+  await runWithConcurrency(workItems, config.execution.questionConcurrency, async (item) => {
+    const result = await processRunWorkItem({
+      item,
+      executionDirectory,
+      catalog,
+      config,
+      transport,
+      judgeTransport,
+      judgeModelRef,
+      executionResume,
+      stopOnError,
+      answerCollectionMode,
+      collectStartLimiter,
+    });
+    if (result.collectHadError || result.judgeHadError) {
+      observedErrors = true;
+    }
+  });
 
   const aggregateReadyRunDirs = await listAggregateReadyRunDirectories(executionDirectory);
   if (aggregateReadyRunDirs.length === 0) {

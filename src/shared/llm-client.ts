@@ -152,6 +152,18 @@ function getOpenRouterRetryDelayMs(transport: ModelTransportConfig, attempt: num
   return delays[Math.min(attempt, delays.length - 1)] ?? 10000;
 }
 
+function parseRetryAfterMs(response: Response): number | undefined {
+  const raw = response.headers.get("retry-after");
+  if (!raw) return undefined;
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.round(seconds * 1000);
+  }
+  const retryAt = Date.parse(raw);
+  if (!Number.isFinite(retryAt)) return undefined;
+  return Math.max(0, retryAt - Date.now());
+}
+
 function failTool(
   invocation: ToolInvocationTrace,
   messages: ChatMessage[],
@@ -335,7 +347,9 @@ async function runOpenRouterClient(config: LlmClientConfig, deps: LlmClientDeps 
           throw new Error(`API error ${response.status}: ${errorText}`);
         }
 
-        const delayMs = getOpenRouterRetryDelayMs(config.transport, requestAttempt);
+        const configuredDelayMs = getOpenRouterRetryDelayMs(config.transport, requestAttempt);
+        const retryAfterMs = parseRetryAfterMs(response);
+        const delayMs = Math.max(configuredDelayMs, retryAfterMs ?? 0);
         events.push({
           observedAt: new Date().toISOString(),
           eventType: "llm_request_retry_scheduled",
@@ -345,6 +359,7 @@ async function runOpenRouterClient(config: LlmClientConfig, deps: LlmClientDeps 
             requestAttempt: requestAttempt + 1,
             status: response.status,
             delayMs,
+            ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
             errorText,
           }),
         });

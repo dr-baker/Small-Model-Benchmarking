@@ -56,19 +56,27 @@ corpus:
   manifestPath: corpus/swift-docs-2026-04-10/manifest.json
   manifestSha256: d71285e0
 
-# Optional local-only Swift Docs hybrid search config belongs in benchmark.local.yaml.
+# Optional local-only Swift Docs search config belongs in benchmark.local.yaml.
 
 # Execution controls
 execution:
-  resume: true                   # true = skip completed runs and continue partial executions when runId is explicit
-  stopOnError: false             # false = keep going and record failures instead of aborting the whole matrix
-  maxParseRetries: 3             # retry collect-stage normalization failures up to N times before recording the failure
+  resume: true                    # true = skip completed runs and continue partial executions when runId is explicit
+  stopOnError: false              # false = keep going and record failures instead of aborting the whole matrix
+  maxParseRetries: 3              # retry collect-stage normalization failures up to N times before recording the failure
   answerCollectionMode: lazy_text # structured_json = require JSON answer contract; lazy_text = accept plain answers and extract fields when possible
+  questionConcurrency: 5          # max concurrent question pipelines per benchmark invocation
+  questionStartSpacingMs: 750     # stagger collect starts a bit to reduce bursty provider traffic
+  collectRetry:
+    maxAttempts: 4
+    initialDelayMs: 5000
+    backoffMultiplier: 2
+    maxDelayMs: 45000
+    jitterMs: 1000
 
 # Batch controls
 batch:
-  size: 10                       # null = all selected questions, or a positive integer batch size
-  number: auto                   # 1-based batch number, or auto to pick the next incomplete batch from artifacts
+  size: 10                        # null = all selected questions, or a positive integer batch size
+  number: all                     # all = queue every incomplete batch in one invocation; auto = only the next incomplete batch
 
 # System prompts
 systemPrompts:
@@ -76,7 +84,8 @@ systemPrompts:
   judge: "You are a benchmark judge. Follow the response schema exactly."
 
 # Run matrix: which modes to run + default toolSet per mode
-# Use --tool-set=swift_docs_hybrid to benchmark database-assisted retrieval.
+# Use --tool-set=swift_docs_search_read for the new opinionated search+read flow,
+# or --tool-set=swift_docs_hybrid for the legacy low-level hybrid tool.
 modes:
   open_book: read_grep
   closed_book: none

@@ -1,3 +1,4 @@
+import { createWriteStream } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -175,9 +176,9 @@ function mergeValue<T>(baseValue: T, overrideValue: unknown): T {
 
 function parseBatchNumber(raw: unknown): BenchmarkBatchNumber | undefined {
   if (raw === undefined) return undefined;
-  if (raw === "auto") return "auto";
+  if (raw === "auto" || raw === "all") return raw;
   if (typeof raw === "number" && Number.isInteger(raw) && raw > 0) return raw;
-  throw new Error("batchNumber must be 'auto' or a positive integer when provided");
+  throw new Error("batchNumber must be 'auto', 'all', or a positive integer when provided");
 }
 
 function getEntryKey(entry: MatrixEntry): string {
@@ -263,8 +264,8 @@ async function writeTempBenchmarkConfig(config: BenchmarkConfig): Promise<{ conf
 function buildCommandArgs(entry: MatrixEntry, defaults: MatrixDefaults): string[] {
   const questionIds = entry.questionIds ?? defaults.questionIds;
   const modes = entry.modes ?? defaults.modes ?? ["open_book"];
-  const batchSize = entry.batchSize ?? defaults.batchSize ?? (questionIds?.length ?? 1);
-  const batchNumber = entry.batchNumber ?? defaults.batchNumber ?? 1;
+  const batchSize = entry.batchSize ?? defaults.batchSize ?? (questionIds && questionIds.length > 0 ? questionIds.length : undefined);
+  const batchNumber = entry.batchNumber ?? defaults.batchNumber ?? (batchSize !== undefined ? 1 : undefined);
   const resume = entry.resume ?? defaults.resume ?? false;
   const stopOnError = entry.stopOnError ?? defaults.stopOnError ?? false;
 
@@ -275,11 +276,12 @@ function buildCommandArgs(entry: MatrixEntry, defaults: MatrixDefaults): string[
     `--run-id=${entry.runId}`,
     `--model=${entry.model}`,
     `--mode=${modes.join(",")}`,
-    `--batch-size=${batchSize}`,
-    `--batch-number=${batchNumber}`,
     `--resume=${resume}`,
     `--stop-on-error=${stopOnError}`,
   ];
+
+  if (batchSize !== undefined) args.push(`--batch-size=${batchSize}`);
+  if (batchNumber !== undefined) args.push(`--batch-number=${batchNumber}`);
 
   if (questionIds && questionIds.length > 0) {
     args.push(`--question=${questionIds.join(",")}`);
@@ -306,6 +308,15 @@ async function loadExecutionSnapshot(executionDirectory: string): Promise<EntryE
         ? execution.answerCollectionMode
         : undefined,
   };
+}
+
+async function waitForStreamFinish(stream: ReturnType<typeof createWriteStream>): Promise<void> {
+  if (stream.closed || stream.destroyed) return;
+  await new Promise<void>((resolvePromise, rejectPromise) => {
+    stream.once("finish", () => resolvePromise());
+    stream.once("error", rejectPromise);
+    stream.end();
+  });
 }
 
 async function runEntry(entry: MatrixEntry, defaults: MatrixDefaults, baseConfig: BenchmarkConfig): Promise<RunEntrySuccess> {
@@ -335,13 +346,24 @@ async function runEntry(entry: MatrixEntry, defaults: MatrixDefaults, baseConfig
         stdio: ["ignore", "pipe", "pipe"],
       });
 
-      const chunks: Buffer[] = [];
-      child.stdout.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
-      child.stderr.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
-      child.on("error", rejectPromise);
+      const logStream = createWriteStream(logPath, { flags: "w" });
+      logStream.write(`# ${new Date().toISOString()}\n`);
+      logStream.write(`$ npm ${args.join(" ")}\n\n`);
+
+      const handleChunk = (chunk: Buffer | string) => {
+        logStream.write(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      };
+
+      child.stdout.on("data", handleChunk);
+      child.stderr.on("data", handleChunk);
+      child.on("error", async (error) => {
+        logStream.write(`\n[runner-error] ${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
+        await waitForStreamFinish(logStream).catch(() => {});
+        rejectPromise(error);
+      });
       child.on("close", async (code) => {
-        const output = Buffer.concat(chunks).toString("utf8");
-        await writeFile(logPath, output, "utf8");
+        logStream.write(`\n[exit-code] ${code ?? "null"}\n`);
+        await waitForStreamFinish(logStream);
         if (code === 0) resolvePromise();
         else rejectPromise(new Error(`Entry ${entry.runId} failed with exit code ${code}. See ${logPath}`));
       });
@@ -540,7 +562,9 @@ async function main() {
     console.log(`Running ${phaseEntries.length} entry/entries with parallelism=${parallelism}`);
 
     await runWithConcurrency(phaseEntries, parallelism, async (entry) => {
+      const liveLogPath = join(LOG_ROOT, `${basename(entry.runId)}.log`);
       console.log(`\n==> ${entry.runId}`);
+      console.log(`log (live): ${liveLogPath}`);
       try {
         const result = await runEntry(entry, resolvedDefaults, config);
         successes.push(result);

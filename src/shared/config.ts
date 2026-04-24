@@ -45,9 +45,12 @@ export interface BenchmarkExecutionConfig {
   stopOnError: boolean;
   maxParseRetries: number;
   answerCollectionMode: AnswerCollectionMode;
+  questionConcurrency: number;
+  questionStartSpacingMs: number;
+  collectRetry?: RetryPolicyConfig;
 }
 
-export type BenchmarkBatchNumber = number | "auto";
+export type BenchmarkBatchNumber = number | "auto" | "all";
 
 export interface BenchmarkBatchConfig {
   size: number | null;
@@ -254,14 +257,23 @@ function validateConfig(raw: unknown): asserts raw is BenchmarkConfig {
   if (execution.answerCollectionMode !== "structured_json" && execution.answerCollectionMode !== "lazy_text") {
     throw new Error("execution.answerCollectionMode must be 'structured_json' or 'lazy_text'");
   }
+  if (!isPositiveInteger(execution.questionConcurrency)) {
+    throw new Error("execution.questionConcurrency must be a positive integer");
+  }
+  if (!isNonNegativeInteger(execution.questionStartSpacingMs)) {
+    throw new Error("execution.questionStartSpacingMs must be a non-negative integer");
+  }
+  if (execution.collectRetry !== undefined) {
+    validateRetryPolicyConfig(execution.collectRetry, "execution.collectRetry");
+  }
 
   if (!c.batch || typeof c.batch !== "object") throw new Error("Missing batch");
   const batch = c.batch as Record<string, unknown>;
   if (!(batch.size === null || isPositiveInteger(batch.size))) {
     throw new Error("batch.size must be null or a positive integer");
   }
-  if (!(batch.number === "auto" || isPositiveInteger(batch.number))) {
-    throw new Error("batch.number must be 'auto' or a positive integer");
+  if (!(batch.number === "auto" || batch.number === "all" || isPositiveInteger(batch.number))) {
+    throw new Error("batch.number must be 'auto', 'all', or a positive integer");
   }
 
   if (!c.systemPrompts || typeof c.systemPrompts !== "object") throw new Error("Missing systemPrompts");
@@ -338,8 +350,16 @@ export async function loadBenchmarkConfigWithMeta(path?: string): Promise<Loaded
   const mergedRaw = overrideRaw === undefined ? baseRaw : mergeConfigValue(baseRaw, overrideRaw);
   if (mergedRaw && typeof mergedRaw === "object") {
     const execution = (mergedRaw as Record<string, unknown>).execution;
-    if (execution && typeof execution === "object" && !("answerCollectionMode" in execution)) {
-      (execution as Record<string, unknown>).answerCollectionMode = "structured_json";
+    if (execution && typeof execution === "object") {
+      if (!("answerCollectionMode" in execution)) {
+        (execution as Record<string, unknown>).answerCollectionMode = "structured_json";
+      }
+      if (!("questionConcurrency" in execution)) {
+        (execution as Record<string, unknown>).questionConcurrency = 1;
+      }
+      if (!("questionStartSpacingMs" in execution)) {
+        (execution as Record<string, unknown>).questionStartSpacingMs = 0;
+      }
     }
   }
 

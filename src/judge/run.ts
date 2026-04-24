@@ -24,7 +24,7 @@ import { createToolsForToolSet, loadToolSetDefinition } from "../collect/tool-se
 import { runLlmClient } from "../shared/llm-client.js";
 import { buildJudgeVerdictResponseFormat } from "../shared/response-schemas.js";
 import { resolveModelApiKey } from "../shared/api-key.js";
-import { parseSwiftDocsHybridToolResult } from "../shared/swift-docs-search.js";
+import { isSwiftDocsSearchToolName, parseSwiftDocsHybridToolResult } from "../shared/swift-docs-search.js";
 
 const REPO_ROOT = resolve(import.meta.dirname ?? ".", "../..");
 
@@ -48,6 +48,7 @@ export interface JudgeRunOptions {
   systemPrompt: string;
   toolSetCatalogPath: string;
   transport: ModelTransportConfig;
+  retryPolicy?: RetryPolicyConfig;
   judgeModelOverride: ModelRef;
 }
 
