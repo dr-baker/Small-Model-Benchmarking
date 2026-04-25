@@ -56,11 +56,11 @@ function VersionPicker({
   onChange: (version: VisualizerVersionKey) => void;
 }) {
   return (
-    <aside className="version-picker" aria-label="Visualizer version picker">
-      <div className="version-picker-current">
+    <details className="version-picker" aria-label="Visualizer version picker">
+      <summary className="version-picker-current">
         <span>Site version</span>
         <strong>{activeVersion.shortLabel}</strong>
-      </div>
+      </summary>
       <div className="version-picker-menu">
         {VISUALIZER_VERSIONS.map((version) => {
           const isActive = version.key === activeVersion.key;
@@ -78,7 +78,7 @@ function VersionPicker({
           );
         })}
       </div>
-    </aside>
+    </details>
   );
 }
 
