@@ -2,6 +2,8 @@ import type {
   AggregateFile,
   AggregateRun,
   AggregateSummary,
+  BenchmarkRunMetrics,
+  BenchmarkRunProfile,
   BundledSnapshot,
   EnrichedRun,
   EvidenceBasis,
@@ -12,7 +14,13 @@ import type {
   QuestionMetaInput,
   RecentRunsBundle,
 } from '../types';
-import { buildExecutionDisplayProfile } from './execution-profile';
+import {
+  buildExecutionDisplayProfile,
+  buildToolsetProfile,
+  deriveTransportRoute,
+  modelDisplayFamily,
+  modelDisplayLabel,
+} from './execution-profile';
 
 const GENERATED_ASSET_ROOT = `${import.meta.env.BASE_URL}generated`;
 
@@ -56,7 +64,9 @@ export async function loadBundledSnapshot(): Promise<BundledSnapshot> {
     (recentRunsBundle.runs ?? [])
       .map((entry) => {
         try {
-          return parseAggregateData(entry.aggregate, entry.sourceName, questionBank);
+          const aggregate = entry.benchmarkRun?.aggregate ?? entry.aggregate;
+          if (!aggregate) return null;
+          return parseAggregateData(aggregate, entry.sourceName, questionBank, entry.benchmarkRun);
         } catch {
           return null;
         }
@@ -114,6 +124,7 @@ function parseAggregateData(
   aggregate: AggregateFile,
   sourceName: string,
   questionBank: QuestionBank,
+  bundledBenchmarkRun?: BenchmarkRunProfile,
 ): LoadedExecution {
   const normalizedAggregate = normalizeAggregateFile(aggregate);
   const summary = normalizedAggregate.summaries?.[0];
@@ -133,6 +144,9 @@ function parseAggregateData(
   const label = display.fullLabel;
   const shortLabel = display.compactLabel;
   const id = [sourceName, label, normalizedAggregate.generatedAt ?? 'unknown'].join('::');
+  const benchmarkRun = bundledBenchmarkRun
+    ? { ...bundledBenchmarkRun, aggregate: normalizedAggregate }
+    : buildBenchmarkRunProfile(id, sourceName, normalizedAggregate, summary, runs, questionBank);
 
   return {
     id,
@@ -140,10 +154,86 @@ function parseAggregateData(
     label,
     shortLabel,
     display,
+    benchmarkRun,
+    toolset: benchmarkRun.toolset,
     aggregate: normalizedAggregate,
     summary,
+    metrics: benchmarkRun.metrics,
     runs,
     runsByQuestionId,
+  };
+}
+
+function buildBenchmarkRunProfile(
+  id: string,
+  sourceName: string,
+  aggregate: AggregateFile,
+  summary: AggregateSummary,
+  runs: EnrichedRun[],
+  questionBank: QuestionBank,
+): BenchmarkRunProfile {
+  const provider = summary.model?.provider ?? 'unknown-provider';
+  const modelId = summary.model?.modelId ?? 'unknown-model';
+  const route = deriveTransportRoute(summary, sourceName);
+  const firstManifestCorpus = findFirstManifestCorpus(runs);
+  return {
+    id,
+    sourceName,
+    benchmarkName: aggregate.benchmarkName,
+    generatedAt: aggregate.generatedAt,
+    model: {
+      provider,
+      modelId,
+      label: modelDisplayLabel(modelId),
+      family: modelDisplayFamily(modelId),
+    },
+    toolset: buildToolsetProfile(summary),
+    mode: summary.mode,
+    answerCollectionMode: summary.answerCollectionMode,
+    thinkingLevel: deriveThinkingLevel(sourceName, modelId),
+    transport: {
+      kind: summary.transport?.kind,
+      route,
+      reasoning: deriveReasoningLabel(sourceName, modelId),
+    },
+    corpus: {
+      datasetVersion: questionBank.datasetVersion,
+      rubricVersion: aggregate.rubricVersion ?? questionBank.rubricVersion,
+      snapshotId: firstManifestCorpus?.snapshotId,
+      manifestSha256: firstManifestCorpus?.manifestSha256,
+    },
+    metrics: buildBenchmarkRunMetrics(summary, runs),
+    aggregate,
+  };
+}
+
+function buildBenchmarkRunMetrics(summary: AggregateSummary, runs: EnrichedRun[]): BenchmarkRunMetrics {
+  const questionCount = summary.runs ?? runs.length;
+  const judgedQuestionCount = summary.judge?.judgeRuns ?? runs.filter(hasRunJudgeSignal).length;
+  const correctCount = summary.judge?.judgeCorrectCount ?? runs.filter((run) => run.judge?.correctness === 1 || run.judge?.verdict === 'correct').length;
+  const partialCount = summary.judge?.judgePartiallyCorrectCount ?? runs.filter((run) => run.judge?.correctness === 0 || run.judge?.verdict === 'partially_correct').length;
+  const incorrectCount = summary.judge?.judgeIncorrectCount ?? runs.filter((run) => run.judge?.correctness === -1 || run.judge?.verdict === 'incorrect').length;
+  const errorCount = summary.errors?.runsWithAnyError ?? runs.filter((run) => run.errors?.collectHadError || run.errors?.judgeHadError).length;
+  return {
+    questionCount,
+    judgedQuestionCount,
+    correctCount,
+    partialCount,
+    incorrectCount,
+    correctRate: ratio(correctCount, judgedQuestionCount),
+    correctnessScore: summary.judge?.meanCorrectness,
+    completenessScore: summary.judge?.meanCompleteness,
+    referenceVerifiedRate: summary.judge?.referenceVerifiedRate,
+    totalCostUsd: summary.cost?.totalCostUsd,
+    collectCostUsd: summary.cost?.totalCollectCostUsd,
+    judgeCostUsd: summary.cost?.totalJudgeCostUsd,
+    costPerQuestionUsd: summary.cost?.meanTotalCostUsdPerRun,
+    totalCollectMs: summary.timing?.totalCollectMs,
+    collectMsPerQuestion: summary.timing?.meanCollectMsPerRun,
+    errorCount,
+    collectErrorCount: summary.errors?.collectErrorRuns ?? runs.filter((run) => run.errors?.collectHadError).length,
+    judgeErrorCount: summary.errors?.judgeErrorRuns ?? runs.filter((run) => run.errors?.judgeHadError).length,
+    errorRate: ratio(errorCount, questionCount),
   };
 }
 
@@ -359,6 +449,34 @@ function resolveEvidenceBasis(
   }
 
   return 'curated';
+}
+
+function hasRunJudgeSignal(run: AggregateRun): boolean {
+  return Boolean(run.judge?.verdict || typeof run.judge?.correctness === 'number');
+}
+
+function ratio(numerator: number | undefined, denominator: number | undefined): number | undefined {
+  if (typeof numerator !== 'number' || typeof denominator !== 'number' || denominator === 0) {
+    return undefined;
+  }
+  return numerator / denominator;
+}
+
+function deriveThinkingLevel(sourceName: string, modelId: string): string | undefined {
+  const source = `${sourceName} ${modelId}`.toLowerCase();
+  if (source.includes('think-hard') || source.includes('thinking-high')) return 'high';
+  if (source.includes('thinking') || source.includes('think')) return 'medium';
+  return undefined;
+}
+
+function deriveReasoningLabel(sourceName: string, modelId: string): string | undefined {
+  const source = `${sourceName} ${modelId}`.toLowerCase();
+  if (source.includes('thinking') || source.includes('reasoning') || source.includes('think-hard')) return 'reasoning enabled';
+  return undefined;
+}
+
+function findFirstManifestCorpus(_runs: EnrichedRun[]): { snapshotId?: string; manifestSha256?: string } | undefined {
+  return undefined;
 }
 
 function deriveSourceName(

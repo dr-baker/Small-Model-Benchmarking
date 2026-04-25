@@ -74,6 +74,7 @@ interface LedgerExtremes {
 interface ToolsetSummary {
   key: string;
   label: string;
+  icon: string;
   executions: LoadedExecution[];
   runCount: number;
   judgedRuns: number;
@@ -1488,9 +1489,10 @@ function App() {
 
 function ExecutionLabel({ execution, compact = false }: { execution: LoadedExecution; compact?: boolean }) {
   const chips = [
-    execution.display.toolSetLabel,
-    compact ? null : execution.display.modeLabel,
+    `${execution.toolset.icon} ${execution.toolset.label}`,
     execution.display.routeLabel ? `via ${execution.display.routeLabel}` : null,
+    execution.benchmarkRun.thinkingLevel ? `${execution.benchmarkRun.thinkingLevel} thinking` : null,
+    compact ? null : execution.display.answerModeLabel,
     ...execution.display.variants,
   ].filter((chip): chip is string => Boolean(chip));
 
@@ -1566,7 +1568,7 @@ function ToolsetStorySection({
           <tbody>
             {summaries.map((summary, index) => (
               <tr key={summary.key} className={index === 0 ? 'is-leader' : ''}>
-                <th>{summary.label}</th>
+                <th><span className="toolset-name"><span aria-hidden>{summary.icon}</span>{summary.label}</span></th>
                 <td>{formatCount(summary.judgedRuns, summary.runCount)}</td>
                 <td>{formatPercent(summary.correctRate)}</td>
                 <td>{formatNumber(summary.correctnessScore, 2)}</td>
@@ -1632,7 +1634,7 @@ function ToolsetComparisonBars({ summaries }: { summaries: ToolsetSummary[] }) {
           return (
             <div key={summary.key} className="toolset-bars-row">
               <div className="toolset-bars-label">
-                <strong>{summary.label}</strong>
+                <strong><span className="toolset-name"><span aria-hidden>{summary.icon}</span>{summary.label}</span></strong>
                 <span>{formatCount(summary.judgedRuns, summary.runCount)} judged · {formatPercent(summary.errorRate)} errors</span>
               </div>
               <ToolsetBar label="Score" value={formatNumber(summary.correctnessScore, 2)} width={scoreWidth} tone={scoreTone(summary.correctnessScore)} />
@@ -2001,7 +2003,8 @@ function summarizeToolset(key: string, executions: LoadedExecution[]): ToolsetSu
 
   return {
     key,
-    label: executions[0]?.display.toolSetLabel ?? humanizeToken(key),
+    label: executions[0]?.toolset.label ?? executions[0]?.display.toolSetLabel ?? humanizeToken(key),
+    icon: executions[0]?.toolset.icon ?? '🧰',
     executions,
     runCount: runs.length,
     judgedRuns: judgedRuns.length,
@@ -2033,7 +2036,7 @@ function buildSearchStoryHighlights(summaries: ToolsetSummary[]): SearchStoryHig
 function buildModelToolMatrix(executions: LoadedExecution[]): ModelToolMatrix {
   const models = Array.from(new Set(executions.map((execution) => execution.display.primaryLabel))).sort();
   const toolsetMap = new Map<string, string>();
-  for (const execution of executions) toolsetMap.set(execution.display.toolSetKey, execution.display.toolSetLabel);
+  for (const execution of executions) toolsetMap.set(execution.toolset.key, `${execution.toolset.icon} ${execution.toolset.label}`);
   const toolsets = Array.from(toolsetMap.entries())
     .map(([key, label]) => ({ key, label }))
     .sort((left, right) => toolsetSortRank(left.key) - toolsetSortRank(right.key) || left.label.localeCompare(right.label));
@@ -2041,7 +2044,7 @@ function buildModelToolMatrix(executions: LoadedExecution[]): ModelToolMatrix {
 
   for (const execution of executions) {
     const model = execution.display.primaryLabel;
-    const key = matrixKey(model, execution.display.toolSetKey);
+    const key = matrixKey(model, execution.toolset.key);
     const cell = summarizeMatrixCell(execution);
     const existing = cells.get(key);
     if (!existing || compareMatrixCells(cell, existing) < 0) {

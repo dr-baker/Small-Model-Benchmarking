@@ -1,4 +1,4 @@
-import type { AggregateSummary, ExecutionDisplayProfile } from '../types';
+import type { AggregateSummary, ExecutionDisplayProfile, ToolsetProfile } from '../types';
 
 const MODEL_NAME_OVERRIDES: Record<string, string> = {
   'openai/gpt-oss-120b': 'GPT OSS 120B',
@@ -11,12 +11,21 @@ const MODEL_NAME_OVERRIDES: Record<string, string> = {
 };
 
 const TOOLSET_LABELS: Record<string, string> = {
-  none: 'Closed book',
+  none: 'No tools',
   read_only: 'Read only',
   read_grep: 'Read + grep',
   read_grep_glob: 'Read + grep + glob',
   swift_docs_hybrid: 'RAG v1',
   swift_docs_search_read: 'RAG v2',
+};
+
+const TOOLSET_ICONS: Record<string, string> = {
+  none: '◇',
+  read_only: '📄',
+  read_grep: '⌕',
+  read_grep_glob: '🗂️',
+  swift_docs_hybrid: '🧭',
+  swift_docs_search_read: '🔎',
 };
 
 export function buildExecutionDisplayProfile(summary: AggregateSummary, sourceName: string): ExecutionDisplayProfile {
@@ -27,9 +36,9 @@ export function buildExecutionDisplayProfile(summary: AggregateSummary, sourceNa
   const route = deriveRoute(summary, sourceName);
   const answerMode = summary.answerCollectionMode;
   const variants = deriveVariants(summary, sourceName);
+  const toolset = buildToolsetProfile(summary);
   const chips = [
-    toolSetLabel(toolSetKey),
-    modeLabel(modeKey),
+    `${toolset.icon} ${toolset.label}`,
     route ? `via ${humanizeLoose(route)}` : null,
     answerMode ? answerModeLabel(answerMode) : null,
     ...variants,
@@ -41,7 +50,8 @@ export function buildExecutionDisplayProfile(summary: AggregateSummary, sourceNa
     modelLabel: modelLabel(modelId),
     modelFamily: modelFamily(modelId),
     toolSetKey,
-    toolSetLabel: toolSetLabel(toolSetKey),
+    toolSetLabel: toolset.label,
+    toolSetIcon: toolset.icon,
     modeKey,
     modeLabel: modeLabel(modeKey),
     route,
@@ -51,11 +61,35 @@ export function buildExecutionDisplayProfile(summary: AggregateSummary, sourceNa
     variants,
     primaryLabel: modelLabel(modelId),
     secondaryLabel: chips.join(' · '),
-    compactLabel: [modelLabel(modelId), toolSetLabel(toolSetKey)].join(' · '),
+    compactLabel: [modelLabel(modelId), `${toolset.icon} ${toolset.label}`].join(' · '),
     fullLabel: [provider, modelId, toolSetKey, modeKey, route, answerMode, ...variants]
       .filter((part): part is string => Boolean(part))
       .join(' / '),
   };
+}
+
+export function buildToolsetProfile(summary: AggregateSummary): ToolsetProfile {
+  const key = summary.toolSet?.name ?? (summary.mode === 'closed_book' ? 'none' : 'unknown-tools');
+  return {
+    key,
+    label: toolSetLabel(key),
+    icon: TOOLSET_ICONS[key] ?? '🧰',
+    version: summary.toolSet?.version,
+    description: summary.toolSet?.description,
+    toolNames: summary.toolSet?.toolNames ?? [],
+  };
+}
+
+export function modelDisplayLabel(modelId: string): string {
+  return modelLabel(modelId);
+}
+
+export function modelDisplayFamily(modelId: string): string {
+  return modelFamily(modelId);
+}
+
+export function deriveTransportRoute(summary: AggregateSummary, sourceName: string): string | undefined {
+  return deriveRoute(summary, sourceName);
 }
 
 function modelLabel(modelId: string): string {

@@ -237,6 +237,15 @@ export interface EnrichedRun extends AggregateRun {
   meta: QuestionMeta | null;
 }
 
+export interface ToolsetProfile {
+  key: string;
+  label: string;
+  icon: string;
+  version?: string;
+  description?: string;
+  toolNames: string[];
+}
+
 export interface ExecutionDisplayProfile {
   provider: string;
   modelId: string;
@@ -244,6 +253,7 @@ export interface ExecutionDisplayProfile {
   modelFamily: string;
   toolSetKey: string;
   toolSetLabel: string;
+  toolSetIcon: string;
   modeKey: string;
   modeLabel: string;
   route?: string;
@@ -257,14 +267,69 @@ export interface ExecutionDisplayProfile {
   fullLabel: string;
 }
 
+export interface BenchmarkRunMetrics {
+  questionCount: number;
+  judgedQuestionCount: number;
+  correctCount: number;
+  partialCount: number;
+  incorrectCount: number;
+  correctRate?: number;
+  correctnessScore?: number;
+  completenessScore?: number;
+  referenceVerifiedRate?: number;
+  totalCostUsd?: number;
+  collectCostUsd?: number;
+  judgeCostUsd?: number;
+  costPerQuestionUsd?: number;
+  totalCollectMs?: number;
+  collectMsPerQuestion?: number;
+  errorCount: number;
+  collectErrorCount: number;
+  judgeErrorCount: number;
+  errorRate?: number;
+}
+
+export interface BenchmarkRunProfile {
+  id: string;
+  sourceName: string;
+  benchmarkName?: string;
+  generatedAt?: string;
+  model: {
+    provider: string;
+    modelId: string;
+    label: string;
+    family: string;
+  };
+  toolset: ToolsetProfile;
+  mode?: string;
+  answerCollectionMode?: string;
+  thinkingLevel?: string;
+  transport: {
+    kind?: string;
+    reasoning?: string;
+    route?: string;
+  };
+  corpus: {
+    datasetVersion?: string;
+    rubricVersion?: string;
+    snapshotId?: string;
+    manifestSha256?: string;
+  };
+  metrics: BenchmarkRunMetrics;
+  aggregate: AggregateFile;
+}
+
 export interface LoadedExecution {
   id: string;
   sourceName: string;
   label: string;
   shortLabel: string;
   display: ExecutionDisplayProfile;
+  benchmarkRun: BenchmarkRunProfile;
+  toolset: ToolsetProfile;
   aggregate: AggregateFile;
   summary: AggregateSummary;
+  metrics: BenchmarkRunMetrics;
   runs: EnrichedRun[];
   runsByQuestionId: Record<string, EnrichedRun>;
 }
@@ -274,7 +339,8 @@ export interface RecentRunsBundle {
   count: number;
   runs: Array<{
     sourceName: string;
-    aggregate: AggregateFile;
+    aggregate?: AggregateFile;
+    benchmarkRun?: BenchmarkRunProfile;
   }>;
 }
 
