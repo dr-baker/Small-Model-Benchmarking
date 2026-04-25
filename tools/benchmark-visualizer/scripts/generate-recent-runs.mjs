@@ -42,7 +42,9 @@ function enrichAggregateWithTiming(aggregate) {
 
 const appRoot = process.cwd();
 const repoRoot = path.resolve(appRoot, '..', '..');
-const benchmarkResultsRoot = path.join(repoRoot, 'benchmark-results');
+const benchmarkResultsRoot = process.env.BENCHMARK_RESULTS_ROOT
+  ? path.resolve(process.env.BENCHMARK_RESULTS_ROOT)
+  : path.join(repoRoot, 'benchmark-results');
 const datasetPath = path.join(repoRoot, 'benchmark', 'dataset', 'swiftui-docs-chatbot-benchmark.v1.json');
 const outputPath = path.join(appRoot, 'public', 'generated', 'recent-runs.json');
 const completeRunThreshold = readExpectedQuestionCount(datasetPath);
