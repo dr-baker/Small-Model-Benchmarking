@@ -237,11 +237,32 @@ export interface EnrichedRun extends AggregateRun {
   meta: QuestionMeta | null;
 }
 
+export interface ExecutionDisplayProfile {
+  provider: string;
+  modelId: string;
+  modelLabel: string;
+  modelFamily: string;
+  toolSetKey: string;
+  toolSetLabel: string;
+  modeKey: string;
+  modeLabel: string;
+  route?: string;
+  routeLabel?: string;
+  answerMode?: string;
+  answerModeLabel?: string;
+  variants: string[];
+  primaryLabel: string;
+  secondaryLabel: string;
+  compactLabel: string;
+  fullLabel: string;
+}
+
 export interface LoadedExecution {
   id: string;
   sourceName: string;
   label: string;
   shortLabel: string;
+  display: ExecutionDisplayProfile;
   aggregate: AggregateFile;
   summary: AggregateSummary;
   runs: EnrichedRun[];

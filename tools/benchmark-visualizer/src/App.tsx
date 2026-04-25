@@ -26,6 +26,11 @@ type ChartScoreMode = 'correct-rate' | 'correctness-score';
 type ParetoFrontierFilterKey = 'cost-correct-rate' | 'time-correct-rate' | 'cost-correctness-score' | 'time-correctness-score';
 type Tone = 'success' | 'warn' | 'danger' | 'accent' | 'neutral';
 
+const ALL_METADATA_FILTER_VALUE = '__all__';
+const OTHER_PLATFORM_FILTER_VALUE = '__other__';
+
+type QuestionMetadataFilterValue = typeof ALL_METADATA_FILTER_VALUE | string;
+
 interface QuestionGroup {
   meta: QuestionMeta;
   answers: Array<{
@@ -158,6 +163,43 @@ interface LedgerExtremes {
   distinctCount: number;
 }
 
+interface ToolsetSummary {
+  key: string;
+  label: string;
+  executions: LoadedExecution[];
+  runCount: number;
+  judgedRuns: number;
+  correctRate: number | null;
+  correctnessScore: number | null;
+  medianCorrectnessScore: number | null;
+  referenceVerifiedRate: number | null;
+  retrievalQuality: number | null;
+  costPerQuestion: number | null;
+  timePerQuestionMs: number | null;
+  errorRate: number | null;
+}
+
+interface MatrixCellSummary {
+  execution: LoadedExecution;
+  correctRate: number | null;
+  correctnessScore: number | null;
+  costPerQuestion: number | null;
+  errorRate: number | null;
+}
+
+interface ModelToolMatrix {
+  models: string[];
+  toolsets: Array<{ key: string; label: string }>;
+  cells: Map<string, MatrixCellSummary>;
+}
+
+interface SearchStoryHighlights {
+  bestOverall: ToolsetSummary | null;
+  cheapestGood: ToolsetSummary | null;
+  fastestGood: ToolsetSummary | null;
+  unstable: ToolsetSummary[];
+}
+
 function computeExtremes(executions: LoadedExecution[], column: LedgerColumn): LedgerExtremes | null {
   const values: number[] = [];
   for (const execution of executions) {
@@ -280,6 +322,10 @@ function App() {
   const [maxErrorRatePercent, setMaxErrorRatePercent] = useState(10);
   const [paretoFrontierOnly, setParetoFrontierOnly] = useState(false);
   const [selectedParetoFrontierFilters, setSelectedParetoFrontierFilters] = useState<ParetoFrontierFilterKey[]>(DEFAULT_PARETO_FRONTIER_FILTERS);
+  const [selectedTaxonomyTag, setSelectedTaxonomyTag] = useState<QuestionMetadataFilterValue>(ALL_METADATA_FILTER_VALUE);
+  const [selectedPlatformScope, setSelectedPlatformScope] = useState<QuestionMetadataFilterValue>(ALL_METADATA_FILTER_VALUE);
+  const [selectedQuestionShape, setSelectedQuestionShape] = useState<QuestionMetadataFilterValue>(ALL_METADATA_FILTER_VALUE);
+  const [selectedEvidenceBasis, setSelectedEvidenceBasis] = useState<QuestionMetadataFilterValue>(ALL_METADATA_FILTER_VALUE);
   const [openAnswerRows, setOpenAnswerRows] = useState<Record<string, boolean>>({});
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -414,6 +460,21 @@ function App() {
     [questionList, visibleExecutions],
   );
 
+  const toolsetSummaries = useMemo(
+    () => buildToolsetSummaries(visibleExecutions),
+    [visibleExecutions],
+  );
+
+  const modelToolMatrix = useMemo(
+    () => buildModelToolMatrix(visibleExecutions),
+    [visibleExecutions],
+  );
+
+  const searchStoryHighlights = useMemo(
+    () => buildSearchStoryHighlights(toolsetSummaries),
+    [toolsetSummaries],
+  );
+
   const chartScoreAxis = useMemo<ScatterAxis>(() => {
     if (chartScoreMode === 'correctness-score') {
       return {
@@ -432,6 +493,27 @@ function App() {
     };
   }, [chartScoreMode]);
 
+  const questionMetadataOptions = useMemo(() => {
+    const taxonomyTags = new Set<string>();
+    const platformScopes = new Set<string>();
+    const questionShapes = new Set<string>();
+    const evidenceBases = new Set<string>();
+
+    for (const group of questionGroups) {
+      group.meta.taxonomyTags.forEach((tag) => taxonomyTags.add(tag));
+      if (group.meta.platformScope) platformScopes.add(group.meta.platformScope);
+      if (group.meta.questionShape) questionShapes.add(group.meta.questionShape);
+      if (group.meta.evidenceBasis) evidenceBases.add(group.meta.evidenceBasis);
+    }
+
+    return {
+      taxonomyTags: Array.from(taxonomyTags).sort((left, right) => left.localeCompare(right)),
+      platformScopes: Array.from(platformScopes).sort((left, right) => left.localeCompare(right)),
+      questionShapes: Array.from(questionShapes).sort((left, right) => left.localeCompare(right)),
+      evidenceBases: Array.from(evidenceBases).sort((left, right) => left.localeCompare(right)),
+    };
+  }, [questionGroups]);
+
   const visibleQuestionGroups = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
 
@@ -441,9 +523,17 @@ function App() {
         group.meta.id.toLowerCase().includes(normalizedSearch) ||
         group.meta.title.toLowerCase().includes(normalizedSearch) ||
         group.meta.question.toLowerCase().includes(normalizedSearch) ||
-        group.meta.referenceAnswer.toLowerCase().includes(normalizedSearch);
+        group.meta.referenceAnswer.toLowerCase().includes(normalizedSearch) ||
+        group.meta.taxonomyTags.some((tag) => tag.toLowerCase().includes(normalizedSearch));
+      const taxonomyMatches =
+        selectedTaxonomyTag === ALL_METADATA_FILTER_VALUE || group.meta.taxonomyTags.includes(selectedTaxonomyTag);
+      const platformMatches = matchesPlatformScopeFilter(selectedPlatformScope, group.meta.platformScope);
+      const shapeMatches =
+        selectedQuestionShape === ALL_METADATA_FILTER_VALUE || group.meta.questionShape === selectedQuestionShape;
+      const evidenceMatches =
+        selectedEvidenceBasis === ALL_METADATA_FILTER_VALUE || group.meta.evidenceBasis === selectedEvidenceBasis;
 
-      if (!textMatches) return false;
+      if (!textMatches || !taxonomyMatches || !platformMatches || !shapeMatches || !evidenceMatches) return false;
       if (filterMode === 'all') return true;
       if (filterMode === 'interesting') return group.hasIncorrect || group.hasErrors || group.disagreementCount > 1;
       if (filterMode === 'errors') return group.hasErrors;
@@ -452,7 +542,16 @@ function App() {
     });
 
     return filtered.sort((left, right) => compareQuestionGroups(left, right, sortMode));
-  }, [filterMode, questionGroups, search, sortMode]);
+  }, [
+    filterMode,
+    questionGroups,
+    search,
+    selectedEvidenceBasis,
+    selectedPlatformScope,
+    selectedQuestionShape,
+    selectedTaxonomyTag,
+    sortMode,
+  ]);
 
   useEffect(() => {
     if (visibleQuestionGroups.length === 0) {
@@ -655,6 +754,7 @@ function App() {
             <summary><span className="disclosure">Jump to</span></summary>
             <nav className="section-nav">
               <a href="#overview">Overview</a>
+              <a href="#search-story">Search story</a>
               <a href="#question-review">Question review</a>
               <a href="#metric-desk">Metric desk</a>
             </nav>
@@ -767,6 +867,52 @@ function App() {
           </details>
 
           <details className="sidebar-section" open>
+            <summary><span className="disclosure">Question metadata</span></summary>
+            <div className="sidebar-section-body">
+              <label className="control-field">
+                <span>Taxonomy tag</span>
+                <select value={selectedTaxonomyTag} onChange={(event) => setSelectedTaxonomyTag(event.target.value)}>
+                  <option value={ALL_METADATA_FILTER_VALUE}>All tags</option>
+                  {questionMetadataOptions.taxonomyTags.map((tag) => (
+                    <option key={tag} value={tag}>{humanizeToken(tag)}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="control-field">
+                <span>Platform</span>
+                <select value={selectedPlatformScope} onChange={(event) => setSelectedPlatformScope(event.target.value)}>
+                  <option value={ALL_METADATA_FILTER_VALUE}>All platforms</option>
+                  <option value={OTHER_PLATFORM_FILTER_VALUE}>Other (not macOS)</option>
+                  {questionMetadataOptions.platformScopes.map((scope) => (
+                    <option key={scope} value={scope}>{formatPlatformScopeLabel(scope)}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="control-field">
+                <span>Question shape</span>
+                <select value={selectedQuestionShape} onChange={(event) => setSelectedQuestionShape(event.target.value)}>
+                  <option value={ALL_METADATA_FILTER_VALUE}>All shapes</option>
+                  {questionMetadataOptions.questionShapes.map((shape) => (
+                    <option key={shape} value={shape}>{humanizeToken(shape)}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="control-field">
+                <span>Evidence basis</span>
+                <select value={selectedEvidenceBasis} onChange={(event) => setSelectedEvidenceBasis(event.target.value)}>
+                  <option value={ALL_METADATA_FILTER_VALUE}>All evidence</option>
+                  {questionMetadataOptions.evidenceBases.map((basis) => (
+                    <option key={basis} value={basis}>{humanizeToken(basis)}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="question-list-meta">
+                {visibleQuestionGroups.length} matching question{visibleQuestionGroups.length === 1 ? '' : 's'}
+              </div>
+            </div>
+          </details>
+
+          <details className="sidebar-section" open>
             <summary><span className="disclosure">Models ({orderedExecutions.length})</span></summary>
             <div className="sidebar-section-body">
               <div className="button-row">
@@ -777,14 +923,14 @@ function App() {
                 {orderedExecutions.map((execution, index) => {
                   const isHidden = hiddenExecutionIds.includes(execution.id);
                   return (
-                    <div key={execution.id} className={`model-manager-row ${isHidden ? 'is-hidden' : ''}`} title={execution.label}>
+                    <div key={execution.id} className={`model-manager-row ${isHidden ? 'is-hidden' : ''}`} title={execution.display.fullLabel}>
                       <label className="model-visibility-toggle">
                         <input
                           type="checkbox"
                           checked={!isHidden}
                           onChange={() => toggleExecutionVisibility(execution.id)}
                         />
-                        <span title={execution.label}>{execution.shortLabel}</span>
+                        <span title={execution.display.fullLabel}>{execution.display.primaryLabel}</span>
                       </label>
                       <div className="model-manager-actions">
                         <button
@@ -792,20 +938,20 @@ function App() {
                           className="icon-button"
                           disabled={index === 0}
                           onClick={() => moveExecution(execution.id, -1)}
-                          aria-label={`Move ${execution.shortLabel} up`}
+                          aria-label={`Move ${execution.display.primaryLabel} up`}
                         >↑</button>
                         <button
                           type="button"
                           className="icon-button"
                           disabled={index === orderedExecutions.length - 1}
                           onClick={() => moveExecution(execution.id, 1)}
-                          aria-label={`Move ${execution.shortLabel} down`}
+                          aria-label={`Move ${execution.display.primaryLabel} down`}
                         >↓</button>
                         <button
                           type="button"
                           className="icon-button"
                           onClick={() => removeExecution(execution.id)}
-                          aria-label={`Remove ${execution.shortLabel}`}
+                          aria-label={`Remove ${execution.display.primaryLabel}`}
                         >×</button>
                       </div>
                     </div>
@@ -864,7 +1010,7 @@ function App() {
             <div>
               <h2>Comparative benchmark</h2>
               <div className="masthead-meta">
-                {questionBank.benchmarkName} · dataset {questionBank.datasetVersion} · rubric {questionBank.rubricVersion} · snapshot {formatTimestamp(recentRunsBundle.generatedAt)}
+                Which models search docs well, which toolsets help most, and what quality/cost/time tradeoffs each run makes · dataset {questionBank.datasetVersion} · rubric {questionBank.rubricVersion} · snapshot {formatTimestamp(recentRunsBundle.generatedAt)}
               </div>
             </div>
             <div
@@ -881,6 +1027,43 @@ function App() {
               Drop aggregate.json
             </div>
           </div>
+          <section className="summary-card">
+            <div className="summary-card-copy">
+              <h3>About this benchmark</h3>
+              <p>
+                This benchmark measures how quickly and how well different models answer Swift questions with different tool access.
+                It also gives a quantitative target for improving the Swift Docs RAG tool from the linked article and evaluating
+                whether retrieval changes actually help agent outcomes.
+              </p>
+              <p>
+                The main takeaway so far: base models did poorly on their own, improved a lot with read + grep access to the corpus,
+                and the updated RAG approach mostly improved retrieval efficiency rather than raw answer quality, with only a small
+                correctness tradeoff.
+              </p>
+            </div>
+            <div className="summary-card-metrics">
+              <div className="summary-mini-card">
+                <span>Judge</span>
+                <strong>openai-codex/gpt-5.4</strong>
+                <em>Full corpus access + article-author guidance on common mistakes</em>
+              </div>
+              <div className="summary-mini-card">
+                <span>Correctness score</span>
+                <strong>-1 / 0 / 1</strong>
+                <em>-1 = bad solution, 0 = passable or no real solution, 1 = modern recommended approach</em>
+              </div>
+              <div className="summary-mini-card">
+                <span>How to read 100%</span>
+                <strong>100% modern answers</strong>
+                <em>A perfect score means every judged answer landed on the modern approach rather than an outdated or weak one</em>
+              </div>
+              <div className="summary-mini-card">
+                <span>Completeness</span>
+                <strong>How fully the answer covers the needed guidance</strong>
+                <em>Use it alongside correctness to separate modern-but-thin answers from modern-and-complete ones</em>
+              </div>
+            </div>
+          </section>
           <div className="stat-strip">
             <StatPill label="Models" value={`${totals.visibleExecutions}/${totals.loadedExecutions}`} />
             <StatPill label="Judge coverage" value={formatPercent(totals.judgeCoverageRate)} />
@@ -950,8 +1133,7 @@ function App() {
                         <details key={execution.id} className="ledger-row">
                           <summary className="ledger-row-summary">
                             <div className="ledger-model-cell">
-                              <strong>{execution.shortLabel}</strong>
-                              <span>{execution.label}</span>
+                              <ExecutionLabel execution={execution} />
                             </div>
                             {ledgerColumns.map((column, index) => {
                               const value = column.value(execution);
@@ -1005,6 +1187,12 @@ function App() {
                 );
               })()}
             </section>
+
+            <ToolsetStorySection
+              summaries={toolsetSummaries}
+              matrix={modelToolMatrix}
+              highlights={searchStoryHighlights}
+            />
 
             <section id="question-review" className="panel section-panel">
               <div className="section-heading">
@@ -1100,7 +1288,7 @@ function App() {
                           <span className="mono">{selectedGroup.meta.id}</span>
                           <span>{humanizeToken(selectedGroup.meta.evidenceBasis)}</span>
                           <span>{humanizeToken(selectedGroup.meta.questionShape)}</span>
-                          <span>{humanizeToken(selectedGroup.meta.platformScope)}</span>
+                          <span>{formatPlatformScopeLabel(selectedGroup.meta.platformScope)}</span>
                           <span>{formatCount(selectedGroup.judgeCoverageCount, visibleExecutions.length)} judged</span>
                           {selectedGroup.disagreementCount > 1 ? <span>disagreement {selectedGroup.disagreementCount}</span> : null}
                         </div>
@@ -1129,10 +1317,13 @@ function App() {
                             <div className="pitfall-line">Pitfall: {selectedGroup.meta.pitfall}</div>
                           ) : null}
                           {selectedGroup.meta.taxonomyTags.length > 0 ? (
-                            <div className="taxonomy-line">
-                              {selectedGroup.meta.taxonomyTags.map((tag) => (
-                                <span key={tag} className="mono">#{tag}</span>
-                              ))}
+                            <div>
+                              <div className="panel-topline" style={{ marginTop: 8 }}>Taxonomy tags</div>
+                              <ul className="path-list">
+                                {selectedGroup.meta.taxonomyTags.map((tag) => (
+                                  <li key={`${selectedGroup.meta.id}-${tag}`}>{tag}</li>
+                                ))}
+                              </ul>
                             </div>
                           ) : null}
                           {selectedGroup.meta.goldEvidence.length > 0 ? (
@@ -1201,8 +1392,7 @@ function App() {
                                     >
                                       <th>
                                         <div className="table-model-cell">
-                                          <strong>{execution.shortLabel}</strong>
-                                          <span>{execution.sourceName}</span>
+                                          <ExecutionLabel execution={execution} compact />
                                         </div>
                                       </th>
                                       <td>
@@ -1395,6 +1585,133 @@ function App() {
   );
 }
 
+
+function ExecutionLabel({ execution, compact = false }: { execution: LoadedExecution; compact?: boolean }) {
+  const chips = [
+    execution.display.toolSetLabel,
+    compact ? null : execution.display.modeLabel,
+    execution.display.routeLabel ? `via ${execution.display.routeLabel}` : null,
+    ...execution.display.variants,
+  ].filter((chip): chip is string => Boolean(chip));
+
+  return (
+    <>
+      <strong>{execution.display.primaryLabel}</strong>
+      <span className="execution-chip-line">
+        {chips.map((chip) => (
+          <span key={`${execution.id}-${chip}`} className="execution-chip">{chip}</span>
+        ))}
+      </span>
+    </>
+  );
+}
+
+function ToolsetStorySection({
+  summaries,
+  matrix,
+  highlights,
+}: {
+  summaries: ToolsetSummary[];
+  matrix: ModelToolMatrix;
+  highlights: SearchStoryHighlights;
+}) {
+  if (summaries.length === 0) return null;
+  const highlightCards = [
+    { label: 'Best search quality', summary: highlights.bestOverall, value: (summary: ToolsetSummary) => formatPercent(summary.correctRate) },
+    { label: 'Best cheap option', summary: highlights.cheapestGood, value: (summary: ToolsetSummary) => formatUsd(summary.costPerQuestion, 4) },
+    { label: 'Fastest acceptable', summary: highlights.fastestGood, value: (summary: ToolsetSummary) => formatDuration(summary.timePerQuestionMs) },
+  ];
+
+  return (
+    <section id="search-story" className="panel section-panel">
+      <div className="section-heading">
+        <h3>Search story</h3>
+        <p>
+          This view groups the visible runs by toolset on corpus-backed questions so the page answers both questions at once:
+          which models can search the docs, and which search setup actually helps.
+        </p>
+      </div>
+
+      <div className="story-callouts">
+        {highlightCards.map((card) => (
+          <div key={card.label} className="story-callout-card">
+            <span>{card.label}</span>
+            <strong>{card.summary?.label ?? '—'}</strong>
+            <em>{card.summary ? card.value(card.summary) : 'no eligible toolset'}</em>
+          </div>
+        ))}
+        <div className="story-callout-card">
+          <span>Watch list</span>
+          <strong>{highlights.unstable.length === 0 ? 'No unstable toolsets' : `${highlights.unstable.length} unstable`}</strong>
+          <em>{highlights.unstable.map((summary) => summary.label).join(', ') || '≤10% error rate'}</em>
+        </div>
+      </div>
+
+      <div className="toolset-leaderboard-wrap">
+        <table className="toolset-leaderboard">
+          <thead>
+            <tr>
+              <th>Toolset</th>
+              <th>Runs</th>
+              <th>Correct</th>
+              <th>Mean score</th>
+              <th>Median</th>
+              <th>Ref verified</th>
+              <th>Retrieval</th>
+              <th>Cost/q</th>
+              <th>Time/q</th>
+              <th>Errors</th>
+            </tr>
+          </thead>
+          <tbody>
+            {summaries.map((summary, index) => (
+              <tr key={summary.key} className={index === 0 ? 'is-leader' : ''}>
+                <th>{summary.label}</th>
+                <td>{formatCount(summary.judgedRuns, summary.runCount)}</td>
+                <td>{formatPercent(summary.correctRate)}</td>
+                <td>{formatNumber(summary.correctnessScore, 2)}</td>
+                <td>{formatNumber(summary.medianCorrectnessScore, 2)}</td>
+                <td>{formatPercent(summary.referenceVerifiedRate)}</td>
+                <td>{formatJudgeScore(summary.retrievalQuality ?? undefined)}</td>
+                <td>{formatUsd(summary.costPerQuestion, 4)}</td>
+                <td>{formatDuration(summary.timePerQuestionMs)}</td>
+                <td>{formatPercent(summary.errorRate)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="model-tool-matrix-wrap">
+        <div className="panel-topline">Model × toolset matrix</div>
+        <div className="model-tool-matrix" style={{ gridTemplateColumns: `minmax(150px, 1.1fr) repeat(${matrix.toolsets.length}, minmax(120px, 1fr))` }}>
+          <div className="matrix-corner">Model</div>
+          {matrix.toolsets.map((toolset) => (
+            <div key={toolset.key} className="matrix-head">{toolset.label}</div>
+          ))}
+          {matrix.models.flatMap((model) => [
+            <div key={`${model}-label`} className="matrix-model">{model}</div>,
+            ...matrix.toolsets.map((toolset) => {
+              const cell = matrix.cells.get(matrixKey(model, toolset.key));
+              return (
+                <div key={`${model}-${toolset.key}`} className={`matrix-cell ${cell ? `tone-${scoreTone(cell.correctnessScore)}` : 'is-empty'}`} title={cell?.execution.display.fullLabel}>
+                  {cell ? (
+                    <>
+                      <strong>{formatPercent(cell.correctRate)}</strong>
+                      <span>{formatNumber(cell.correctnessScore, 2)} score</span>
+                      <em>{formatUsd(cell.costPerQuestion, 4)} · {formatPercent(cell.errorRate)} err</em>
+                    </>
+                  ) : '—'}
+                </div>
+              );
+            }),
+          ])}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function MetricDeskRow({
   metric,
   executions,
@@ -1441,7 +1758,7 @@ function MetricDeskRow({
           const isLeader = index === 0;
           return (
             <div key={`${metric.label}-${row.execution.id}`} className="metric-bar-row">
-              <div className="metric-bar-model" title={row.execution.label}>{row.execution.shortLabel}</div>
+              <div className="metric-bar-model" title={row.execution.display.fullLabel}>{row.execution.display.primaryLabel}</div>
               <div className={`metric-bar-track ${isNegative ? 'is-negative' : ''}`}>
                 <div
                   className={`metric-bar-fill ${isLeader ? 'is-leader' : ''} ${isNegative ? 'is-negative' : ''}`}
@@ -1612,7 +1929,7 @@ function MetricDeskScatter({
               onClick={() => togglePinned(point.execution.id)}
               style={{ cursor: 'pointer' }}
             >
-              <title>{`${point.execution.label}\n${yAxis.label}: ${yAxis.format(point.y)}\n${xAxis.label}: ${xAxis.format(point.x)}`}</title>
+              <title>{`${point.execution.display.fullLabel}\n${yAxis.label}: ${yAxis.format(point.y)}\n${xAxis.label}: ${xAxis.format(point.x)}`}</title>
               <circle
                 cx={projectX(point.x)}
                 cy={projectY(point.y)}
@@ -1647,13 +1964,13 @@ function MetricDeskScatter({
               key={point.execution.id}
               type="button"
               className={`scatter-legend-item ${isActive ? 'is-active' : ''} ${isPinned ? 'is-pinned' : ''} ${isDimmed ? 'is-dimmed' : ''}`}
-              title={point.execution.label}
+              title={point.execution.display.fullLabel}
               onMouseEnter={() => setHoveredId(point.execution.id)}
               onMouseLeave={() => setHoveredId((current) => (current === point.execution.id ? null : current))}
               onClick={() => togglePinned(point.execution.id)}
             >
               <span className="scatter-legend-swatch" style={{ background: point.color }} />
-              <span className="scatter-legend-label">{point.execution.shortLabel}</span>
+              <span className="scatter-legend-label">{point.execution.display.primaryLabel}</span>
               <span className="scatter-legend-value">
                 {yAxis.format(point.y)} · {xAxis.format(point.x)}
               </span>
@@ -1689,8 +2006,8 @@ function ScatterCallout({
   const cx = projectX(point.x);
   const cy = projectY(point.y);
   const labelLines = [
-    point.execution.shortLabel,
-    `${yAxis.format(point.y)} · ${xAxis.format(point.x)}`,
+    point.execution.display.primaryLabel,
+    `${point.execution.display.toolSetLabel} · ${yAxis.format(point.y)} · ${xAxis.format(point.x)}`,
   ];
   const maxLineLen = Math.max(...labelLines.map((line) => line.length));
   const boxWidth = Math.max(110, Math.min(220, maxLineLen * 6.4 + 16));
@@ -1743,20 +2060,152 @@ function ScatterCallout({
   );
 }
 
-function getRunTypeInfo(execution: LoadedExecution): { key: string; label: string } {
-  const mode = execution.summary.mode ?? 'unknown';
-  const toolSet = execution.summary.toolSet?.name ?? 'none';
-  const key = `${mode}/${toolSet}`;
-  const label = runTypeLabel(mode, toolSet);
-  return { key, label };
+
+function buildToolsetSummaries(executions: LoadedExecution[]): ToolsetSummary[] {
+  const groups = new Map<string, LoadedExecution[]>();
+  for (const execution of executions) {
+    const key = execution.display.toolSetKey;
+    const group = groups.get(key);
+    if (group) group.push(execution);
+    else groups.set(key, [execution]);
+  }
+
+  return Array.from(groups.entries())
+    .map(([key, groupExecutions]) => summarizeToolset(key, groupExecutions))
+    .sort((left, right) => compareNullableMetric(right.correctRate, left.correctRate)
+      || compareNullableMetric(right.correctnessScore, left.correctnessScore)
+      || compareNullableMetric(left.errorRate, right.errorRate)
+      || left.label.localeCompare(right.label));
 }
 
-function runTypeLabel(mode: string, toolSet: string): string {
-  if (mode === 'closed_book') return 'Closed book';
-  if (mode === 'open_book' && toolSet === 'read_grep') return 'Open book · read/grep';
-  if (mode === 'open_book' && toolSet === 'swift_docs_hybrid') return 'Open book · swift_docs_hybrid';
-  if (mode === 'open_book') return `Open book · ${humanizeToken(toolSet)}`;
-  return `${humanizeToken(mode)} · ${humanizeToken(toolSet)}`;
+function summarizeToolset(key: string, executions: LoadedExecution[]): ToolsetSummary {
+  const searchRuns = executions.flatMap((execution) => execution.runs.filter(isSearchBackedRun));
+  const runs = searchRuns.length > 0 ? searchRuns : executions.flatMap((execution) => execution.runs);
+  const judgedRuns = runs.filter(hasJudgeSignal);
+  const correctRuns = judgedRuns.filter((run) => run.judge?.verdict === 'correct' || run.judge?.correctness === 1).length;
+  const referenceRuns = judgedRuns.filter((run) => typeof run.judge?.referenceVerified === 'boolean');
+  const retrievalScores = judgedRuns
+    .map((run) => run.judge?.retrievalQuality)
+    .filter((value): value is number => typeof value === 'number');
+  const correctnessScores = runs.map((run) => getRunCorrectnessScore(run));
+  const totalRuns = executions.reduce((sum, execution) => sum + (execution.summary.runs ?? 0), 0);
+  const totalErrors = executions.reduce((sum, execution) => sum + (execution.summary.errors?.runsWithAnyError ?? 0), 0);
+
+  return {
+    key,
+    label: executions[0]?.display.toolSetLabel ?? humanizeToken(key),
+    executions,
+    runCount: runs.length,
+    judgedRuns: judgedRuns.length,
+    correctRate: judgedRuns.length > 0 ? correctRuns / judgedRuns.length : null,
+    correctnessScore: averageNumbers(correctnessScores),
+    medianCorrectnessScore: medianNumbers(correctnessScores),
+    referenceVerifiedRate: referenceRuns.length > 0
+      ? referenceRuns.filter((run) => run.judge?.referenceVerified === true).length / referenceRuns.length
+      : null,
+    retrievalQuality: averageNumbers(retrievalScores),
+    costPerQuestion: averageNumbers(executions.map((execution) => execution.summary.cost?.meanTotalCostUsdPerRun)),
+    timePerQuestionMs: averageNumbers(executions.map((execution) => execution.summary.timing?.meanCollectMsPerRun)),
+    errorRate: totalRuns > 0 ? totalErrors / totalRuns : null,
+  };
+}
+
+function buildSearchStoryHighlights(summaries: ToolsetSummary[]): SearchStoryHighlights {
+  const useful = summaries.filter((summary) => summary.key !== 'none' && summary.judgedRuns > 0);
+  const stable = useful.filter((summary) => (summary.errorRate ?? 0) <= 0.1);
+  const goodEnough = stable.filter((summary) => (summary.correctRate ?? Number.NEGATIVE_INFINITY) >= 0.5);
+  return {
+    bestOverall: useful[0] ?? null,
+    cheapestGood: [...(goodEnough.length > 0 ? goodEnough : stable)].sort((left, right) => compareNullableMetric(left.costPerQuestion, right.costPerQuestion))[0] ?? null,
+    fastestGood: [...(goodEnough.length > 0 ? goodEnough : stable)].sort((left, right) => compareNullableMetric(left.timePerQuestionMs, right.timePerQuestionMs))[0] ?? null,
+    unstable: useful.filter((summary) => (summary.errorRate ?? 0) > 0.1),
+  };
+}
+
+function buildModelToolMatrix(executions: LoadedExecution[]): ModelToolMatrix {
+  const models = Array.from(new Set(executions.map((execution) => execution.display.primaryLabel))).sort();
+  const toolsetMap = new Map<string, string>();
+  for (const execution of executions) toolsetMap.set(execution.display.toolSetKey, execution.display.toolSetLabel);
+  const toolsets = Array.from(toolsetMap.entries())
+    .map(([key, label]) => ({ key, label }))
+    .sort((left, right) => toolsetSortRank(left.key) - toolsetSortRank(right.key) || left.label.localeCompare(right.label));
+  const cells = new Map<string, MatrixCellSummary>();
+
+  for (const execution of executions) {
+    const model = execution.display.primaryLabel;
+    const key = matrixKey(model, execution.display.toolSetKey);
+    const cell = summarizeMatrixCell(execution);
+    const existing = cells.get(key);
+    if (!existing || compareMatrixCells(cell, existing) < 0) {
+      cells.set(key, cell);
+    }
+  }
+
+  return { models, toolsets, cells };
+}
+
+function summarizeMatrixCell(execution: LoadedExecution): MatrixCellSummary {
+  return {
+    execution,
+    correctRate: ratio(execution.summary.judge?.judgeCorrectCount, execution.summary.judge?.judgeRuns) ?? null,
+    correctnessScore: getJudgeCorrectnessScore(execution.summary) ?? null,
+    costPerQuestion: execution.summary.cost?.meanTotalCostUsdPerRun ?? null,
+    errorRate: ratio(execution.summary.errors?.runsWithAnyError, execution.summary.runs) ?? null,
+  };
+}
+
+function compareMatrixCells(left: MatrixCellSummary, right: MatrixCellSummary): number {
+  return compareNullableMetric(right.correctnessScore, left.correctnessScore)
+    || compareNullableMetric(right.correctRate, left.correctRate)
+    || compareNullableMetric(left.errorRate, right.errorRate)
+    || compareNullableMetric(left.costPerQuestion, right.costPerQuestion);
+}
+
+function matrixKey(model: string, toolsetKey: string): string {
+  return `${model}::${toolsetKey}`;
+}
+
+function toolsetSortRank(key: string): number {
+  const order = ['none', 'read_only', 'read_grep', 'read_grep_glob', 'swift_docs_hybrid', 'swift_docs_search_read'];
+  const index = order.indexOf(key);
+  return index >= 0 ? index : order.length;
+}
+
+function isSearchBackedRun(run: EnrichedRun): boolean {
+  return run.meta?.evidenceBasis === 'corpus' || run.question.evidenceBasis === 'corpus' || run.question.questionType === 'corpus_backed';
+}
+
+function averageNumbers(values: Array<number | null | undefined>): number | null {
+  const numbers = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  if (numbers.length === 0) return null;
+  return numbers.reduce((sum, value) => sum + value, 0) / numbers.length;
+}
+
+function medianNumbers(values: Array<number | null | undefined>): number | null {
+  const numbers = values
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+    .sort((left, right) => left - right);
+  if (numbers.length === 0) return null;
+  const middle = Math.floor(numbers.length / 2);
+  if (numbers.length % 2 === 1) return numbers[middle] ?? null;
+  const left = numbers[middle - 1];
+  const right = numbers[middle];
+  return left == null || right == null ? null : (left + right) / 2;
+}
+
+function compareNullableMetric(left: number | null | undefined, right: number | null | undefined): number {
+  const leftMissing = left == null || Number.isNaN(left);
+  const rightMissing = right == null || Number.isNaN(right);
+  if (leftMissing && rightMissing) return 0;
+  if (leftMissing) return 1;
+  if (rightMissing) return -1;
+  return left - right;
+}
+
+function getRunTypeInfo(execution: LoadedExecution): { key: string; label: string } {
+  const key = `${execution.display.modeKey}/${execution.display.toolSetKey}`;
+  const label = `${execution.display.modeLabel} · ${execution.display.toolSetLabel}`;
+  return { key, label };
 }
 
 function paretoCornerLabel(xHigherIsBetter: boolean, yHigherIsBetter: boolean): string {
@@ -2017,12 +2466,11 @@ function sortAnswerRows(
   answers: QuestionGroup['answers'],
   mode: AnswerSortMode,
 ): QuestionGroup['answers'] {
-  const rows = [...answers];
-  if (mode === 'execution-order') return rows;
-  if (mode === 'score-desc') return rows.sort((left, right) => compareNullableNumbers(right.run?.grade?.score, left.run?.grade?.score));
-  if (mode === 'judge-best') return rows.sort((left, right) => compareJudgePriority(right.run, left.run));
-  if (mode === 'cost-low') return rows.sort((left, right) => compareNullableNumbers(left.run?.cost?.totalUsd, right.run?.cost?.totalUsd));
-  return rows;
+  if (mode === 'execution-order') return answers;
+  if (mode === 'score-desc') return answers.sort((left, right) => compareNullableNumbers(right.run?.grade?.score, left.run?.grade?.score));
+  if (mode === 'judge-best') return answers.sort((left, right) => compareJudgePriority(right.run, left.run));
+  if (mode === 'cost-low') return answers.sort((left, right) => compareNullableNumbers(left.run?.cost?.totalUsd, right.run?.cost?.totalUsd));
+  return answers;
 }
 
 function compareQuestionGroups(left: QuestionGroup, right: QuestionGroup, sortMode: SortMode): number {
@@ -2054,9 +2502,7 @@ function compareMetricValues(
 }
 
 function compareNullableNumbers(left: number | undefined, right: number | undefined): number {
-  if (left == null && right == null) return 0;
-  if (left == null) return 1;
-  if (right == null) return -1;
+  if (left == null || right == null) return left == null ? 1 : -1;
   return left - right;
 }
 
@@ -2207,6 +2653,18 @@ function scoreTone(score: number | null | undefined): Tone {
 function humanizeToken(token: string | undefined): string {
   if (!token) return '—';
   return token.replace(/_/g, ' ');
+}
+
+function formatPlatformScopeLabel(platformScope: string | undefined): string {
+  if (!platformScope) return '—';
+  if (platformScope === 'all') return 'Cross-platform';
+  return humanizeToken(platformScope);
+}
+
+function matchesPlatformScopeFilter(filterValue: QuestionMetadataFilterValue, platformScope: string | undefined): boolean {
+  if (filterValue === ALL_METADATA_FILTER_VALUE) return true;
+  if (filterValue === OTHER_PLATFORM_FILTER_VALUE) return platformScope !== 'macos';
+  return platformScope === filterValue;
 }
 
 function padQuestionOrder(order: number): string {

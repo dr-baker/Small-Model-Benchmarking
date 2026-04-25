@@ -12,6 +12,7 @@ import type {
   QuestionMetaInput,
   RecentRunsBundle,
 } from '../types';
+import { buildExecutionDisplayProfile } from './execution-profile';
 
 const GENERATED_ASSET_ROOT = `${import.meta.env.BASE_URL}generated`;
 
@@ -128,8 +129,9 @@ function parseAggregateData(
 
   const runs = rawRuns.map((run) => enrichRun(run, questionBank));
   const runsByQuestionId = Object.fromEntries(runs.map((run) => [run.questionId, run]));
-  const label = deriveLabel(summary, sourceName);
-  const shortLabel = deriveShortLabel(summary, sourceName);
+  const display = buildExecutionDisplayProfile(summary, sourceName);
+  const label = display.fullLabel;
+  const shortLabel = display.compactLabel;
   const id = [sourceName, label, normalizedAggregate.generatedAt ?? 'unknown'].join('::');
 
   return {
@@ -137,6 +139,7 @@ function parseAggregateData(
     sourceName,
     label,
     shortLabel,
+    display,
     aggregate: normalizedAggregate,
     summary,
     runs,
@@ -384,76 +387,6 @@ function deriveSourceName(
   }
 
   return 'uploaded-aggregate';
-}
-
-function deriveLabel(summary: AggregateSummary, sourceName: string): string {
-  const model = summary.model?.modelId ?? 'unknown-model';
-  const provider = summary.model?.provider ?? 'unknown-provider';
-  const toolSet = summary.toolSet?.name ?? 'unknown-tools';
-  const mode = formatMode(summary.mode);
-  const tags = deriveExecutionTags(summary, sourceName);
-
-  return [provider, model, toolSet, mode, ...tags].join(' / ');
-}
-
-function deriveShortLabel(summary: AggregateSummary, sourceName: string): string {
-  const modelParts = summary.model?.modelId?.split('/') ?? [];
-  const model = modelParts[modelParts.length - 1] ?? 'unknown-model';
-  const toolSet = summary.toolSet?.name ?? 'unknown-tools';
-  const mode =
-    summary.mode === 'open_book'
-      ? 'open'
-      : summary.mode === 'closed_book'
-        ? 'closed'
-        : summary.mode ?? 'mode';
-  const tags = deriveExecutionTags(summary, sourceName);
-  return [model, toolSet, mode, ...tags].join(' · ');
-}
-
-function deriveExecutionTags(summary: AggregateSummary, sourceName: string): string[] {
-  const tags: string[] = [];
-  const answerMode = summary.answerCollectionMode;
-  if (answerMode === 'lazy_text') {
-    tags.push('lazy');
-  } else if (answerMode === 'structured_json') {
-    tags.push('structured');
-  }
-
-  const routeTag = deriveOpenRouterRouteTag(summary, sourceName);
-  if (routeTag) {
-    tags.push(routeTag);
-  }
-
-  const normalizedSourceName = sourceName.toLowerCase();
-  if (normalizedSourceName.includes('structured-probe')) {
-    tags.push('probe');
-  }
-  if (normalizedSourceName.includes('lazy-pilot')) {
-    tags.push('pilot');
-  }
-  if (normalizedSourceName.includes('think-hard-search-corpus')) {
-    tags.push('think-hard search');
-  }
-
-  return Array.from(new Set(tags));
-}
-
-function deriveOpenRouterRouteTag(summary: AggregateSummary, sourceName: string): string | null {
-  const routing = summary.transport?.openRouterRouting;
-  const routedProvider = routing?.only?.[0] ?? routing?.order?.[0];
-  if (typeof routedProvider === 'string' && routedProvider.length > 0) {
-    return routedProvider;
-  }
-
-  const normalizedSourceName = sourceName.toLowerCase();
-  if (normalizedSourceName.includes('cerebras')) {
-    return 'cerebras';
-  }
-  if (normalizedSourceName.includes('baseten')) {
-    return 'baseten';
-  }
-
-  return null;
 }
 
 export function formatMode(mode: string | undefined): string {
