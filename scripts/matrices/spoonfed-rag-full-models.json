@@ -1,0 +1,50 @@
+{
+  "parallelism": 2,
+  "defaults": {
+    "modes": ["open_book"],
+    "toolSet": "spoonfed_rag",
+    "answerCollectionMode": "lazy_text",
+    "batchSize": 10,
+    "batchNumber": "all",
+    "resume": true,
+    "stopOnError": false
+  },
+  "entries": [
+    {
+      "id": "gemma-spoonfed-rag",
+      "runId": "gemma-4-26b-a4b-it-google-vertex-spoonfed-rag",
+      "model": "openrouter/google/gemma-4-26b-a4b-it",
+      "transport": {
+        "openRouterRouting": {
+          "only": ["google-vertex"],
+          "order": ["google-vertex"]
+        }
+      }
+    },
+    {
+      "id": "grok-spoonfed-rag",
+      "runId": "grok-4-1-fast-spoonfed-rag",
+      "model": "openrouter/x-ai/grok-4.1-fast"
+    },
+    {
+      "id": "mercury-spoonfed-rag",
+      "runId": "mercury-2-spoonfed-rag",
+      "model": "openrouter/inception/mercury-2"
+    },
+    {
+      "id": "gpt-oss-120b-baseten-spoonfed-rag",
+      "runId": "gpt-oss-120b-baseten-spoonfed-rag",
+      "model": "openrouter/openai/gpt-oss-120b:baseten"
+    },
+    {
+      "id": "gpt-oss-safeguard-20b-spoonfed-rag",
+      "runId": "gpt-oss-safeguard-20b-spoonfed-rag",
+      "model": "openrouter/openai/gpt-oss-safeguard-20b"
+    },
+    {
+      "id": "lfm-2-5-1-2b-thinking-free-spoonfed-rag",
+      "runId": "lfm-2-5-1-2b-thinking-free-spoonfed-rag",
+      "model": "openrouter/liquid/lfm-2.5-1.2b-thinking:free"
+    }
+  ]
+}
