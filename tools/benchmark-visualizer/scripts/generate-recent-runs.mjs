@@ -8,6 +8,7 @@ const TOOLSET_LABELS = {
   read_grep_glob: 'Read + grep + glob',
   swift_docs_hybrid: 'RAG v1',
   swift_docs_search_read: 'RAG v2',
+  spoonfed_rag: 'Spoonfed RAG',
 };
 
 const TOOLSET_ICONS = {
@@ -17,10 +18,13 @@ const TOOLSET_ICONS = {
   read_grep_glob: '🗂️',
   swift_docs_hybrid: '🧭',
   swift_docs_search_read: '🔎',
+  spoonfed_rag: '🥄',
 };
 
 const MODEL_NAME_OVERRIDES = {
   'openai/gpt-oss-120b': 'GPT OSS 120B',
+  'openai/gpt-oss-120b:baseten': 'GPT OSS 120B',
+  'openai/gpt-oss-120b:nitro': 'GPT OSS 120B',
   'openai/gpt-oss-safeguard-20b': 'GPT OSS Safeguard 20B',
   'inception/mercury': 'Mercury',
   'nvidia/nemotron-3-super-120b': 'Nemotron 3 Super 120B',
@@ -145,15 +149,29 @@ function isCanonicalRecentRun(entry) {
 }
 
 function isExcludedRecentRun(entry) {
-  const modelId = entry.aggregate?.summaries?.[0]?.model?.modelId ?? '';
-  return modelId.includes('nemotron-3-super') || modelId.includes('trinity-mini');
+  const summary = entry.aggregate?.summaries?.[0] ?? {};
+  const modelId = summary.model?.modelId ?? '';
+  if (
+    modelId.includes('nemotron-3-super') ||
+    modelId.includes('trinity-mini') ||
+    modelId.includes('liquid/lfm-2.5-1.2b-thinking') ||
+    modelId.includes('x-ai/grok-4-fast')
+  ) return true;
+
+  const canonicalModelId = canonicalizeModelId(modelId);
+  if (canonicalModelId === 'openai/gpt-oss-120b') {
+    return deriveRoute(summary, entry.sourceName) !== 'baseten';
+  }
+
+  return false;
 }
 
 function buildBenchmarkRun(sourceName, aggregate, aggregatePath) {
   const summary = aggregate.summaries?.[0] ?? {};
   const runs = aggregate.runs ?? [];
   const provider = summary.model?.provider ?? 'unknown-provider';
-  const modelId = summary.model?.modelId ?? 'unknown-model';
+  const rawModelId = summary.model?.modelId ?? 'unknown-model';
+  const modelId = canonicalizeModelId(rawModelId);
   const toolset = buildToolsetProfile(summary);
   const route = deriveRoute(summary, sourceName);
   const corpus = readCorpusFromFirstManifest(runs);
@@ -261,12 +279,24 @@ function deriveRoute(summary, sourceName) {
   const routedProvider = routing?.only?.[0] ?? routing?.order?.[0];
   if (typeof routedProvider === 'string' && routedProvider.length > 0) return routedProvider;
 
+  const modelId = summary.model?.modelId?.toLowerCase() ?? '';
+  if (modelId.endsWith(':baseten')) return 'baseten';
+  if (modelId.endsWith(':nitro')) return 'nitro';
+
   const normalizedSourceName = sourceName.toLowerCase();
   if (normalizedSourceName.includes('cerebras')) return 'cerebras';
   if (normalizedSourceName.includes('baseten')) return 'baseten';
   if (normalizedSourceName.includes('deepinfra')) return 'deepinfra';
   if (normalizedSourceName.includes('groq')) return 'groq';
   return undefined;
+}
+
+function canonicalizeModelId(modelId) {
+  const normalized = modelId.toLowerCase();
+  if (normalized === 'openai/gpt-oss-120b:baseten' || normalized === 'openai/gpt-oss-120b:nitro') {
+    return 'openai/gpt-oss-120b';
+  }
+  return modelId;
 }
 
 function deriveThinkingLevel(sourceName, modelId) {
@@ -296,7 +326,7 @@ function modelLabel(modelId) {
 }
 
 function modelFamily(modelId) {
-  const leaf = modelId.split('/').pop() ?? modelId;
+  const leaf = (modelId.split('/').pop() ?? modelId).split(':')[0];
   return leaf.split(/[-_]/).slice(0, 2).join(' ') || leaf;
 }
 

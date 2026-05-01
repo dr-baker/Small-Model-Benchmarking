@@ -2,6 +2,8 @@ import type { AggregateSummary, ExecutionDisplayProfile, ToolsetProfile } from '
 
 const MODEL_NAME_OVERRIDES: Record<string, string> = {
   'openai/gpt-oss-120b': 'GPT OSS 120B',
+  'openai/gpt-oss-120b:baseten': 'GPT OSS 120B',
+  'openai/gpt-oss-120b:nitro': 'GPT OSS 120B',
   'openai/gpt-oss-safeguard-20b': 'GPT OSS Safeguard 20B',
   'inception/mercury': 'Mercury',
   'nvidia/nemotron-3-super-120b': 'Nemotron 3 Super 120B',
@@ -12,11 +14,12 @@ const MODEL_NAME_OVERRIDES: Record<string, string> = {
 
 const TOOLSET_LABELS: Record<string, string> = {
   none: 'No tools',
-  read_only: 'Read only',
+  read_only: 'Read',
   read_grep: 'Read + grep',
   read_grep_glob: 'Read + grep + glob',
-  swift_docs_hybrid: 'RAG v1',
-  swift_docs_search_read: 'RAG v2',
+  swift_docs_hybrid: 'Vector search',
+  swift_docs_search_read: 'Vector search + read',
+  spoonfed_rag: 'No-tools vector search',
 };
 
 const TOOLSET_ICONS: Record<string, string> = {
@@ -26,11 +29,13 @@ const TOOLSET_ICONS: Record<string, string> = {
   read_grep_glob: '🗂️',
   swift_docs_hybrid: '🧭',
   swift_docs_search_read: '🔎',
+  spoonfed_rag: '🥄',
 };
 
 export function buildExecutionDisplayProfile(summary: AggregateSummary, sourceName: string): ExecutionDisplayProfile {
   const provider = summary.model?.provider ?? 'unknown-provider';
-  const modelId = summary.model?.modelId ?? 'unknown-model';
+  const rawModelId = summary.model?.modelId ?? 'unknown-model';
+  const modelId = canonicalizeModelId(rawModelId);
   const toolSetKey = summary.toolSet?.name ?? (summary.mode === 'closed_book' ? 'none' : 'unknown-tools');
   const modeKey = summary.mode ?? 'unknown';
   const route = deriveRoute(summary, sourceName);
@@ -106,7 +111,7 @@ function modelLabel(modelId: string): string {
 }
 
 function modelFamily(modelId: string): string {
-  const leaf = modelId.split('/').pop() ?? modelId;
+  const leaf = (modelId.split('/').pop() ?? modelId).split(':')[0];
   return leaf.split(/[-_]/).slice(0, 2).join(' ') || leaf;
 }
 
@@ -131,6 +136,10 @@ function deriveRoute(summary: AggregateSummary, sourceName: string): string | un
   const routedProvider = routing?.only?.[0] ?? routing?.order?.[0];
   if (typeof routedProvider === 'string' && routedProvider.length > 0) return routedProvider;
 
+  const modelId = summary.model?.modelId?.toLowerCase() ?? '';
+  if (modelId.endsWith(':baseten')) return 'baseten';
+  if (modelId.endsWith(':nitro')) return 'nitro';
+
   const normalizedSourceName = sourceName.toLowerCase();
   if (normalizedSourceName.includes('cerebras')) return 'cerebras';
   if (normalizedSourceName.includes('baseten')) return 'baseten';
@@ -139,11 +148,18 @@ function deriveRoute(summary: AggregateSummary, sourceName: string): string | un
   return undefined;
 }
 
+function canonicalizeModelId(modelId: string): string {
+  const normalized = modelId.toLowerCase();
+  if (normalized === 'openai/gpt-oss-120b:baseten' || normalized === 'openai/gpt-oss-120b:nitro') {
+    return 'openai/gpt-oss-120b';
+  }
+  return modelId;
+}
+
 function deriveVariants(summary: AggregateSummary, sourceName: string): string[] {
   const variants: string[] = [];
   const source = `${sourceName} ${summary.model?.modelId ?? ''}`.toLowerCase();
   if (source.includes('thinking') || source.includes('think-hard')) variants.push('thinking');
-  if (source.includes('search-corpus')) variants.push('search corpus');
   if (source.includes('multiquery') || source.includes('multi-query')) variants.push('multi-query');
   if (source.includes('structured-probe')) variants.push('probe');
   if (source.includes('lazy-pilot')) variants.push('pilot');

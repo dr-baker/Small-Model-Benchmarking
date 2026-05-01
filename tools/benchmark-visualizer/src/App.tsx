@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import CleanVisualizerApp from './CleanVisualizerApp';
 import ClaudeVisualizerApp from './ClaudeVisualizerApp';
 import Gpt55VisualizerApp from './Gpt55VisualizerApp';
 
-type VisualizerVersionKey = 'claude' | 'gpt-5-5';
+type VisualizerVersionKey = 'clean' | 'claude' | 'gpt-5-5';
 
 interface VisualizerVersion {
   key: VisualizerVersionKey;
@@ -14,6 +15,12 @@ interface VisualizerVersion {
 const VISUALIZER_VERSION_STORAGE_KEY = 'benchmark-visualizer-version';
 
 const VISUALIZER_VERSIONS: VisualizerVersion[] = [
+  {
+    key: 'clean',
+    label: 'Clean layout',
+    shortLabel: 'Clean',
+    description: 'Section-aware sidebar, model-colored charts, and within-model toolset deltas.',
+  },
   {
     key: 'claude',
     label: 'Claude layout',
@@ -42,7 +49,13 @@ function App() {
 
   return (
     <>
-      {activeVersion.key === 'claude' ? <ClaudeVisualizerApp /> : <Gpt55VisualizerApp />}
+      {activeVersion.key === 'clean' ? (
+        <CleanVisualizerApp />
+      ) : activeVersion.key === 'claude' ? (
+        <ClaudeVisualizerApp />
+      ) : (
+        <Gpt55VisualizerApp />
+      )}
       <VersionPicker activeVersion={activeVersion} onChange={setActiveVersionKey} />
     </>
   );
@@ -83,15 +96,16 @@ function VersionPicker({
 }
 
 function getInitialVisualizerVersion(): VisualizerVersionKey {
-  if (typeof window === 'undefined') return 'claude';
+  if (typeof window === 'undefined') return 'clean';
   const params = new URLSearchParams(window.location.search);
   const queryVersion = normalizeVisualizerVersion(params.get('viz'));
   if (queryVersion) return queryVersion;
   const storedVersion = normalizeVisualizerVersion(window.localStorage.getItem(VISUALIZER_VERSION_STORAGE_KEY));
-  return storedVersion ?? 'claude';
+  return storedVersion ?? 'clean';
 }
 
 function normalizeVisualizerVersion(value: string | null): VisualizerVersionKey | null {
+  if (value === 'clean') return 'clean';
   if (value === 'claude') return 'claude';
   if (value === 'gpt-5-5' || value === '5.5' || value === 'gpt55') return 'gpt-5-5';
   return null;
