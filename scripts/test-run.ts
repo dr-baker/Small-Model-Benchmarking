@@ -9,6 +9,7 @@ import { gradeRun } from "../src/grade/run.js";
 import { judgeRun } from "../src/judge/run.js";
 import type { AnswerCollectionMode, DatasetQuestion, ModelRef, RetryPolicyConfig, ToolSetName } from "../src/shared/contracts.js";
 import { loadBenchmarkConfigWithMeta, getCandidateModelRefs, getJudgeModelRef, getJudgeTransportConfig, getPromptTemplatePath, parseModelRefFromString, type BenchmarkBatchNumber, type BenchmarkConfig, type BenchmarkConfigPaths } from "../src/shared/config.js";
+import { loadProjectEnvVars } from "../src/shared/env-api-keys.js";
 import { readJsonFile, writeJsonFile, writeTextFile } from "../src/shared/io.js";
 
 const REPO_ROOT = resolve(import.meta.dirname ?? ".", "..");
@@ -212,6 +213,12 @@ function isRetryableCollectError(params: { traceError: unknown; parseError?: str
     || text.includes("rate_limit")
     || text.includes("too many requests")
     || text.includes("retry after")
+    || text.includes("fetch failed")
+    || text.includes("networkerror")
+    || text.includes("network error")
+    || text.includes("econnreset")
+    || text.includes("enotfound")
+    || text.includes("eai_again")
     || text.includes("timeout")
     || text.includes("timed out")
     || text.includes("temporarily unavailable")
@@ -630,6 +637,67 @@ async function processRunWorkItem(params: {
   return { collectHadError, judgeHadError };
 }
 
+async function preflightOpenRouterKeyIfNeeded(required: boolean): Promise<void> {
+  if (!required) return;
+
+  const apiKey = loadProjectEnvVars(REPO_ROOT).OPENROUTER_API_KEY ?? process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENROUTER_API_KEY is required for OpenRouter benchmark runs.");
+  }
+
+  const response = await fetchOpenRouterKeyWithRetries(apiKey);
+
+  if (!response.ok) {
+    throw new Error(`OpenRouter key preflight failed: ${response.status} ${response.statusText}`);
+  }
+
+  const payload = await response.json() as {
+    data?: {
+      usage?: number;
+      limit?: number | null;
+      limit_remaining?: number | null;
+    };
+  };
+  const usage = payload.data?.usage;
+  const limit = payload.data?.limit;
+  const remaining = payload.data?.limit_remaining;
+
+  if (typeof remaining === "number" && remaining <= 0) {
+    throw new Error(`OpenRouter key preflight failed: monthly limit exhausted (usage $${formatUsdForLog(usage)} / limit $${formatUsdForLog(limit)}). Increase the key limit or switch keys before rerunning.`);
+  }
+
+  if (typeof usage === "number" && typeof limit === "number" && usage >= limit) {
+    throw new Error(`OpenRouter key preflight failed: monthly limit exhausted (usage $${formatUsdForLog(usage)} / limit $${formatUsdForLog(limit)}). Increase the key limit or switch keys before rerunning.`);
+  }
+}
+
+async function fetchOpenRouterKeyWithRetries(apiKey: string): Promise<Response> {
+  const maxAttempts = 5;
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await fetch("https://openrouter.ai/api/v1/auth/key", {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt === maxAttempts) break;
+      const delayMs = 1000 * attempt * attempt;
+      console.warn(`OpenRouter key preflight fetch failed; retrying in ${delayMs}ms (${attempt}/${maxAttempts})`);
+      await sleep(delayMs);
+    }
+  }
+
+  throw lastError;
+}
+
+function formatUsdForLog(value: number | null | undefined): string {
+  return typeof value === "number" && Number.isFinite(value) ? value.toFixed(2) : "unknown";
+}
+
 async function main() {
   const cli = parseCliArgs(process.argv);
   const { config, configPaths } = await loadBenchmarkConfigWithMeta();
@@ -653,6 +721,8 @@ async function main() {
     ...(cli.openRouterReasoningEffort ? { openRouterReasoningEffort: cli.openRouterReasoningEffort } : {}),
   };
   const judgeTransport = cli.transport ? { ...getJudgeTransportConfig(config), kind: cli.transport } : getJudgeTransportConfig(config);
+
+  await preflightOpenRouterKeyIfNeeded(transport.kind === "openrouter" || judgeTransport.kind === "openrouter");
 
   if (executionResume && effectiveRunId === "auto") {
     console.warn("Warning: execution.resume=true with runId=auto only resumes within this invocation. Set an explicit runId for resumable/idempotent batches across invocations.");

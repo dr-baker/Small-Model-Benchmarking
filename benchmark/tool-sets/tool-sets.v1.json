@@ -36,6 +36,12 @@
       "version": "1.0.0",
       "description": "Use the benchmark-specific Swift Docs search tool to shortlist the best docs, then read the returned files directly before answering.",
       "toolNames": ["swift_docs_search", "read"]
+    },
+    {
+      "name": "spoonfed_rag",
+      "version": "1.0.0",
+      "description": "Externally orchestrated question-only RAG: model generates search queries, harness searches/reads docs, then model answers from spoon-fed evidence.",
+      "toolNames": []
     }
   ]
 }

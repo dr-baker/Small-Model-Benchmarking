@@ -1,0 +1,73 @@
+benchmarkName: swiftui-docs-chatbot-benchmark
+runId: gemma-rag-force-read-minimal-test
+transport:
+  kind: openrouter
+  openRouterRouting:
+    only: [google-vertex]
+    order: [google-vertex]
+  openRouterUseStructuredOutputs: false
+  openRouterRetryDelaysMs: [3000, 10000, 20000]
+models:
+  candidates:
+    - openrouter/google/gemma-4-26b-a4b-it
+judge:
+  model: openai-codex/gpt-5.4
+  transport:
+    kind: pi
+    session:
+      compaction: false
+      retry: false
+      maxRetries: 0
+      thinkingLevel: medium
+  retry:
+    maxAttempts: 3
+    initialDelayMs: 2000
+    backoffMultiplier: 2
+    maxDelayMs: 15000
+    jitterMs: 250
+  profile:
+    id: semantic-judge-v1
+    version: 1.0.0
+    description: Corpus-assisted semantic answer judge that evaluates the candidate answer against the benchmark question.
+    toolSetName: read_grep_glob
+    promptTemplateId: judge-answer-v1
+    promptTemplateVersion: v1
+    responseSchemaVersion: judge-verdict.v1
+paths:
+  dataset: benchmark/dataset/swiftui-docs-chatbot-benchmark.v1.json
+  toolSets: benchmark/tool-sets/tool-sets.v1.json
+  rubric: benchmark/rubric/rubric.v1.json
+  promptTemplates:
+    benchmark-answer-v1: benchmark/prompts/benchmark-answer-rag-force-read-minimal.md
+    judge-answer-v1: benchmark/prompts/judge-answer-v1.md
+corpus:
+  snapshotId: swift-docs-2026-04-10
+  rootDir: corpus/swift-docs-2026-04-10/swiftui-macos-corpus
+  manifestPath: corpus/swift-docs-2026-04-10/manifest.json
+  manifestSha256: d71285e0
+swiftDocs:
+  repoRoot: /Users/daniel/Developer/Swift Docs
+  dbPath: /Users/daniel/Developer/Swift Docs/swiftui-macos-corpus/sqlite/swiftui-macos-docs.db
+  configPath: /Users/daniel/Developer/Swift Docs/swift-docs.yaml
+execution:
+  resume: true
+  stopOnError: false
+  maxParseRetries: 0
+  answerCollectionMode: lazy_text
+  questionConcurrency: 2
+  questionStartSpacingMs: 500
+  collectRetry:
+    maxAttempts: 1
+    initialDelayMs: 5000
+    backoffMultiplier: 2
+    maxDelayMs: 45000
+    jitterMs: 1000
+batch:
+  size: 10
+  number: all
+systemPrompts:
+  collect: "First use swift_docs_search, then read, then answer."
+  judge: "You are a benchmark judge. Follow the response schema exactly."
+modes:
+  open_book: swift_docs_search_read
+questions: all

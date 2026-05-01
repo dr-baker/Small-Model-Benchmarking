@@ -24,6 +24,7 @@ import { createToolsForToolSet } from "./tool-sets.js";
 import { runLlmClient } from "../shared/llm-client.js";
 import { buildAnswerResponseFormat } from "../shared/response-schemas.js";
 import { resolveModelApiKey } from "../shared/api-key.js";
+import { runSpoonfedRagCollect } from "./spoonfed-rag.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -336,20 +337,34 @@ export async function runCollect(input: CollectRunInput): Promise<CollectRunOutp
       payload: { attempt, maxParseRetries },
     });
 
-    llmResult = await runLlmClient({
-      model: input.model,
-      transport: input.transport,
-      messages: promptMessages,
-      tools,
-      ...(answerCollectionMode === "structured_json" ? { responseFormat: buildAnswerResponseFormat() } : {}),
-      apiKey,
-      cwd: corpusRoot,
-    });
+    if (input.toolSet.name === "spoonfed_rag") {
+      const spoonfed = await runSpoonfedRagCollect(input, corpusRoot);
+      llmResult = spoonfed.finalResult;
+      events.push(...spoonfed.events);
+      toolInvocations.push(...spoonfed.toolInvocations);
+      totalPromptTokens += spoonfed.usage.promptTokens;
+      totalCompletionTokens += spoonfed.usage.completionTokens;
+      totalTokens += spoonfed.usage.totalTokens;
+      if (typeof spoonfed.costUsd === "number") {
+        totalCostUsd += spoonfed.costUsd;
+        hasTrackedCost = true;
+      }
+    } else {
+      llmResult = await runLlmClient({
+        model: input.model,
+        transport: input.transport,
+        messages: promptMessages,
+        tools,
+        ...(answerCollectionMode === "structured_json" ? { responseFormat: buildAnswerResponseFormat() } : {}),
+        apiKey,
+        cwd: corpusRoot,
+      });
 
-    events.push(...llmResult.events);
-    toolInvocations.push(...llmResult.toolInvocations);
+      events.push(...llmResult.events);
+      toolInvocations.push(...llmResult.toolInvocations);
+    }
 
-    const usageTotals = toUsageTotals(llmResult.usage);
+    const usageTotals = input.toolSet.name === "spoonfed_rag" ? undefined : toUsageTotals(llmResult.usage);
     if (usageTotals) {
       totalPromptTokens += usageTotals.promptTokens;
       totalCompletionTokens += usageTotals.completionTokens;

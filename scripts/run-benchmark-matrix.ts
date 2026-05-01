@@ -109,6 +109,10 @@ interface AggregateRunRecord {
     collectHadError?: boolean;
     judgeHadError?: boolean;
   };
+  artifactPaths?: {
+    trace?: string;
+    judge?: string;
+  };
 }
 
 interface EntryPhaseStats {
@@ -124,6 +128,7 @@ interface EntryPhaseStats {
   answerParseErrorCount: number;
   noFinalTextCount: number;
   otherCollectErrorCount: number;
+  errorSamples: string[];
 }
 
 interface PhaseValidationResult {
@@ -406,7 +411,7 @@ async function loadAggregateRunRecords(executionDirectory: string): Promise<Aggr
     .map((line) => JSON.parse(line) as AggregateRunRecord);
 }
 
-function summarizeEntryPhase(success: RunEntrySuccess, records: AggregateRunRecord[]): EntryPhaseStats {
+async function summarizeEntryPhase(success: RunEntrySuccess, records: AggregateRunRecord[]): Promise<EntryPhaseStats> {
   const wantedQuestions = new Set(success.snapshot.questionIds);
   const relevantRecords = wantedQuestions.size === 0
     ? records
@@ -422,6 +427,8 @@ function summarizeEntryPhase(success: RunEntrySuccess, records: AggregateRunReco
   const anyErrorCount = relevantRecords.filter((record) => record.errors?.collectHadError === true || record.errors?.judgeHadError === true).length;
   const otherCollectErrorCount = relevantRecords.filter((record) => record.errors?.collectHadError === true && !(typeof record.answer?.parseError === "string" && record.answer.parseError.length > 0)).length;
 
+  const errorSamples = await collectErrorSamples(relevantRecords);
+
   return {
     key: success.key,
     runId: success.runId,
@@ -435,7 +442,44 @@ function summarizeEntryPhase(success: RunEntrySuccess, records: AggregateRunReco
     answerParseErrorCount,
     noFinalTextCount,
     otherCollectErrorCount,
+    errorSamples,
   };
+}
+
+async function collectErrorSamples(records: AggregateRunRecord[]): Promise<string[]> {
+  const counts = new Map<string, number>();
+  for (const record of records) {
+    if (record.errors?.collectHadError === true) {
+      const message = await readTraceErrorMessage(record.artifactPaths?.trace) ?? record.answer?.parseError ?? "collect error";
+      incrementCount(counts, `collect: ${summarizeErrorMessage(message)}`);
+    }
+    if (record.errors?.judgeHadError === true) {
+      incrementCount(counts, "judge error");
+    }
+  }
+
+  return Array.from(counts.entries())
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, 3)
+    .map(([message, count]) => `${count}× ${message}`);
+}
+
+async function readTraceErrorMessage(tracePath: string | undefined): Promise<string | undefined> {
+  if (!tracePath) return undefined;
+  try {
+    const trace = await readJsonFile<{ error?: { message?: string } }>(tracePath);
+    return trace.error?.message;
+  } catch {
+    return undefined;
+  }
+}
+
+function incrementCount(counts: Map<string, number>, key: string): void {
+  counts.set(key, (counts.get(key) ?? 0) + 1);
+}
+
+function summarizeErrorMessage(message: string): string {
+  return message.replace(/\s+/g, " ").slice(0, 220);
 }
 
 function shouldApplyStructuredFallback(stats: EntryPhaseStats, config: StructuredFallbackConfig | undefined): boolean {
@@ -486,7 +530,7 @@ async function validatePhase(params: {
   for (const success of params.successes) {
     try {
       const records = await loadAggregateRunRecords(success.executionDirectory);
-      const entryStats = summarizeEntryPhase(success, records);
+      const entryStats = await summarizeEntryPhase(success, records);
       stats.push(entryStats);
 
       if (entryStats.totalRuns === 0) {
@@ -599,8 +643,9 @@ async function main() {
         const collectErrorRate = stats.totalRuns === 0 ? 0 : stats.collectErrorCount / stats.totalRuns;
         const judgeErrorRate = stats.totalRuns === 0 ? 0 : stats.judgeErrorCount / stats.totalRuns;
         const answerParseErrorRate = stats.totalRuns === 0 ? 0 : stats.answerParseErrorCount / stats.totalRuns;
+        const sampleSuffix = stats.errorSamples.length > 0 ? ` | samples: ${stats.errorSamples.join("; ")}` : "";
         console.log(
-          `- ${stats.runId}: runs=${stats.totalRuns}, anyError=${formatRate(anyErrorRate)}, collectError=${formatRate(collectErrorRate)}, judgeError=${formatRate(judgeErrorRate)}, answerParseError=${formatRate(answerParseErrorRate)}`,
+          `- ${stats.runId}: runs=${stats.totalRuns}, anyError=${formatRate(anyErrorRate)}, collectError=${formatRate(collectErrorRate)}, judgeError=${formatRate(judgeErrorRate)}, answerParseError=${formatRate(answerParseErrorRate)}${sampleSuffix}`,
         );
       }
     }

@@ -6,7 +6,7 @@ export const JUDGE_VERDICT_SCHEMA_VERSION = "judge-verdict.v1" as const;
 
 export type BenchmarkMode = "closed_book" | "open_book";
 export type AnswerCollectionMode = "structured_json" | "lazy_text";
-export type ToolSetName = "none" | "read_only" | "read_grep" | "read_grep_glob" | "swift_docs_hybrid" | "swift_docs_search_read";
+export type ToolSetName = "none" | "read_only" | "read_grep" | "read_grep_glob" | "swift_docs_hybrid" | "swift_docs_search_read" | "spoonfed_rag";
 export type PromptTemplateId = "benchmark-answer-v1";
 export type JudgePromptTemplateId = "judge-answer-v1";
 export type JudgeVerdictLabel = "correct" | "partially_correct" | "incorrect";
