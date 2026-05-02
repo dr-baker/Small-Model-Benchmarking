@@ -1289,8 +1289,6 @@ summary::marker { content: ''; }
 
 .score-row:hover { background: var(--panel-soft); }
 
-.score-row.is-best { background: var(--accent-soft); }
-
 .score-row.has-error { box-shadow: inset 2px 0 0 var(--danger); }
 
 .score-detail-row td {
@@ -1860,6 +1858,22 @@ summary::marker { content: ''; }
 }
 
 /* ---------- execution labels + search story ---------- */
+
+.execution-label-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.execution-label-inline > strong {
+  flex: 0 1 auto;
+}
+
+.execution-label-inline .execution-chip-line {
+  flex: 0 1 auto;
+}
 
 .execution-chip-line {
   display: flex;
@@ -3149,10 +3163,25 @@ summary::marker { content: ''; }
 
 /* ---------- Clean summary card extras ---------- */
 
+[data-visualizer-version="clean"] .masthead h2 {
+  font-size: clamp(1.8rem, 3vw, 2.7rem);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+
+[data-visualizer-version="clean"] .decision-summary {
+  padding: clamp(18px, 3vw, 28px);
+}
+
+[data-visualizer-version="clean"] .summary-card-copy {
+  gap: 14px;
+}
+
 [data-visualizer-version="clean"] .summary-card-copy p {
   margin: 0;
-  font-size: 0.98rem;
-  line-height: 1.6;
+  max-width: 82ch;
+  font-size: clamp(1rem, 1.2vw, 1.08rem);
+  line-height: 1.68;
 }
 
 [data-visualizer-version="clean"] .summary-card-copy a {
@@ -3284,6 +3313,36 @@ summary::marker { content: ''; }
   margin: 0;
   font-size: 0.96rem;
   line-height: 1.55;
+}
+
+[data-visualizer-version="clean"] .decision-kpi-card strong,
+[data-visualizer-version="clean"] .decision-kpi-card em {
+  white-space: normal;
+}
+
+[data-visualizer-version="clean"] .decision-kpi-card strong {
+  line-height: 1.2;
+}
+
+@media (max-width: 960px) {
+  [data-visualizer-version="clean"] .workspace-shell {
+    grid-template-columns: 1fr;
+  }
+
+  [data-visualizer-version="clean"] .desk-sidebar {
+    width: 288px;
+  }
+
+  [data-visualizer-version="clean"] .sidebar-toggle {
+    left: 288px;
+  }
+}
+
+@media (max-width: 720px) {
+  [data-visualizer-version="clean"] .summary-card-callout {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
 }
 
 @keyframes finding-pop {

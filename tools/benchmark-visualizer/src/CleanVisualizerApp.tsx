@@ -9,7 +9,6 @@ import {
 } from 'react';
 import {
   EMPTY_QUESTION_BANK,
-  EMPTY_RECENT_RUNS_BUNDLE,
   buildQuestionList,
   dedupeExecutions,
   loadBundledSnapshot,
@@ -57,6 +56,7 @@ interface ScatterAxis {
   value: (execution: LoadedExecution) => number | undefined;
   format: (value: number | undefined) => string;
   higherIsBetter: boolean;
+  domainMax?: number;
 }
 
 interface LedgerColumn {
@@ -156,7 +156,6 @@ function CleanVisualizerApp() {
   const folderInputRef = useRef<HTMLInputElement>(null);
   const questionBank = bundledSnapshot?.questionBank ?? EMPTY_QUESTION_BANK;
   const questionList = bundledSnapshot?.questionList ?? buildQuestionList(questionBank);
-  const recentRunsBundle = bundledSnapshot?.recentRunsBundle ?? EMPTY_RECENT_RUNS_BUNDLE;
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -431,16 +430,6 @@ function CleanVisualizerApp() {
     return sortAnswerRows(selectedGroup.answers, answerSortMode);
   }, [answerSortMode, selectedGroup]);
 
-  const selectedBestJudgeRun = useMemo(() => {
-    return selectedAnswerRows
-      .map(({ run }) => run)
-      .filter((run): run is EnrichedRun => hasJudgeSignal(run))
-      .reduce<EnrichedRun | null>((best, run) => {
-        if (!best || compareJudgePriority(run, best) > 0) return run;
-        return best;
-      }, null);
-  }, [selectedAnswerRows]);
-
   async function handleFiles(fileList: FileList | null) {
     if (!fileList) return;
     if (!bundledSnapshot) {
@@ -462,25 +451,6 @@ function CleanVisualizerApp() {
     } else {
       setMessages((current) => [...errors, ...current].slice(0, 6));
     }
-  }
-
-  function clearAll() {
-    setExecutions([]);
-    setMessages([]);
-    setExecutionOrder([]);
-    setHiddenModelNames([]);
-    setOpenAnswerRows({});
-  }
-
-  function restoreRecentRuns() {
-    if (!bundledSnapshot) return;
-    const bundledExecutions = [...bundledSnapshot.bundledExecutions].sort((left, right) =>
-      left.label.localeCompare(right.label),
-    );
-    setExecutions(bundledExecutions);
-    setExecutionOrder(bundledExecutions.map((execution) => execution.id));
-    setHiddenModelNames([]);
-    setOpenAnswerRows({});
   }
 
   function toggleModelVisibility(modelName: string) {
@@ -675,80 +645,19 @@ function CleanVisualizerApp() {
             </div>
           </div>
           <section className="summary-card decision-summary">
-            <div className="decision-kpi-grid">
-              <div className={`decision-kpi-card tone-${scoreTone(bestToolsetSummary?.correctnessScore)}`}>
-                <span className="decision-kpi-label">
-                  Best toolset
-                  <KpiTip text="Toolset with the highest mean correctness score across all visible runs. Closed-book is excluded so this answers &ldquo;which set of tools helps most?&rdquo;" />
-                </span>
-                <strong>{bestToolsetSummary?.label ?? '—'}</strong>
-                <em>{formatNumber(bestToolsetSummary?.correctnessScore, 2)} score</em>
-              </div>
-              <div className={`decision-kpi-card tone-${scoreTone(strongestExecution ? getJudgeCorrectnessScore(strongestExecution.summary) : undefined)}`}>
-                <span className="decision-kpi-label">
-                  Strongest run
-                  <KpiTip text="Run with the highest correctness score among visible runs, across any toolset." />
-                </span>
-                <strong>{strongestExecution?.display.primaryLabel ?? '—'}</strong>
-                <em className="decision-kpi-em-with-icon">
-                  {strongestExecution ? (
-                    <>
-                      <span>{formatNumber(getJudgeCorrectnessScore(strongestExecution.summary), 2)} score ·</span>
-                      <span>{strongestExecution.display.toolSetLabel}</span>
-                    </>
-                  ) : (
-                    'no visible run'
-                  )}
-                </em>
-              </div>
-              <div className="decision-kpi-card">
-                <span className="decision-kpi-label">
-                  Cheapest reliable
-                  <KpiTip text="Cheapest run (mean USD per question) among runs that clear the reliability bar — correctness score &ge; 0." />
-                </span>
-                <strong>{cheapestReliableExecution?.display.primaryLabel ?? '—'}</strong>
-                <em className="decision-kpi-em-with-icon">
-                  {cheapestReliableExecution ? (
-                    <>
-                      <span>{formatUsd(cheapestReliableExecution.summary.cost?.meanTotalCostUsdPerRun, 4)} / q ·</span>
-                      <span>{cheapestReliableExecution.display.toolSetLabel}</span>
-                    </>
-                  ) : (
-                    'no run cleared the reliability bar'
-                  )}
-                </em>
-              </div>
-              <div className="decision-kpi-card">
-                <span className="decision-kpi-label">
-                  Fastest reliable
-                  <KpiTip text="Fastest run (mean wall-clock per question) among runs that clear the reliability bar — correctness score &ge; 0." />
-                </span>
-                <strong>{fastestReliableExecution?.display.primaryLabel ?? '—'}</strong>
-                <em className="decision-kpi-em-with-icon">
-                  {fastestReliableExecution ? (
-                    <>
-                      <span>{formatDuration(fastestReliableExecution.summary.timing?.meanCollectMsPerRun)} / q ·</span>
-                      <span>{fastestReliableExecution.display.toolSetLabel}</span>
-                    </>
-                  ) : (
-                    'no run cleared the reliability bar'
-                  )}
-                </em>
-              </div>
-            </div>
             <div className="summary-card-copy">
               <p>
-                Most models struggle to write modern, performant Swift - largely a function of stale training cutoffs and
-                the relative scarcity of high-quality Swift in their training data. Paul Hudson has {' '}
+                Most models struggle to write modern, performant Swift — largely a function of stale training cutoffs and
+                the relative scarcity of high-quality Swift in their training data. Paul Hudson has{' '}
                 <a
                   href="https://www.hackingwithswift.com/articles/281/what-to-fix-in-ai-generated-swift-code"
                   target="_blank"
                   rel="noreferrer"
                 >
                   several great articles
-                </a>
-                that catalog the pitfalls frontier models fall into when writing Swift. His agent skill throws it all in a couple markdown
-                files, and is probably the easiest fix for most devs. That said, this information sounds like a gold mine for comparing models.
+                </a>{' '}
+                cataloging the pitfalls frontier models fall into when writing Swift. His agent skill puts those notes into a couple of Markdown
+                files, and is probably the easiest fix for most devs. That said, this information also makes a great model comparison target.
               </p>
               <p>
                 <b>This benchmark sets out to test search tools, but equally evaluates Swift knowledge.</b>
@@ -758,7 +667,7 @@ function CleanVisualizerApp() {
               <aside className="summary-card-callout">
                 <span className="summary-card-callout-tag">Finding 1</span>
                 <p>
-                  <strong>Grok 4.1 Fast + vector search</strong> hit a really nice spot on quality, cost, and time. Grok with simple read + grep was top of the line. Giving it a semantic search tool kept accuracy with signficant improvements to speed.
+                  <strong>Grok 4.1 Fast + vector search</strong> hit a really nice spot on quality, cost, and time. Grok with simple read + grep was top of the line. Giving it a semantic search tool preserved accuracy while significantly improving speed.
                 </p>
               </aside>
 
@@ -771,7 +680,7 @@ function CleanVisualizerApp() {
               </aside>
 
               <p>
-                Grok shows what good tool use can do; Gemma sidetsteps many of the common issues.
+                See below for results, methodology, or to take a look at the questions.
               </p>
             </div>
           </section>
@@ -812,10 +721,71 @@ function CleanVisualizerApp() {
             <section id="pareto-frontier" className="panel section-panel">
               <div className="section-heading metric-desk-heading">
                 <div>
-                  <h3>Quality vs cost &amp; time</h3>
+                  <h3>Results</h3>
                   <p>
                     Each dot is one execution. Models on the frontier line are best at their cost/time point. Anything inside the curve is dominated by another run that wins on both axes.
                   </p>
+                </div>
+              </div>
+              <div className="decision-kpi-grid">
+                <div className={`decision-kpi-card tone-${scoreTone(bestToolsetSummary?.correctnessScore)}`}>
+                  <span className="decision-kpi-label">
+                    Best toolset
+                    <KpiTip text="Toolset with the highest mean correctness score across all visible runs. Closed-book is excluded so this answers &ldquo;which set of tools helps most?&rdquo;" />
+                  </span>
+                  <strong>{bestToolsetSummary?.label ?? '—'}</strong>
+                  <em>{formatNumber(bestToolsetSummary?.correctnessScore, 2)} score</em>
+                </div>
+                <div className={`decision-kpi-card tone-${scoreTone(strongestExecution ? getJudgeCorrectnessScore(strongestExecution.summary) : undefined)}`}>
+                  <span className="decision-kpi-label">
+                    Strongest run
+                    <KpiTip text="Run with the highest correctness score among visible runs, across any toolset." />
+                  </span>
+                  <strong>{strongestExecution?.display.primaryLabel ?? '—'}</strong>
+                  <em className="decision-kpi-em-with-icon">
+                    {strongestExecution ? (
+                      <>
+                        <span>{formatNumber(getJudgeCorrectnessScore(strongestExecution.summary), 2)} score ·</span>
+                        <span>{strongestExecution.display.toolSetLabel}</span>
+                      </>
+                    ) : (
+                      'no visible run'
+                    )}
+                  </em>
+                </div>
+                <div className="decision-kpi-card">
+                  <span className="decision-kpi-label">
+                    Cheapest reliable
+                    <KpiTip text="Cheapest run (mean USD per question) among runs that clear the reliability bar — correctness score &ge; 0." />
+                  </span>
+                  <strong>{cheapestReliableExecution?.display.primaryLabel ?? '—'}</strong>
+                  <em className="decision-kpi-em-with-icon">
+                    {cheapestReliableExecution ? (
+                      <>
+                        <span>{formatUsd(cheapestReliableExecution.summary.cost?.meanTotalCostUsdPerRun, 4)} / q ·</span>
+                        <span>{cheapestReliableExecution.display.toolSetLabel}</span>
+                      </>
+                    ) : (
+                      'no run cleared the reliability bar'
+                    )}
+                  </em>
+                </div>
+                <div className="decision-kpi-card">
+                  <span className="decision-kpi-label">
+                    Fastest reliable
+                    <KpiTip text="Fastest run (mean wall-clock per question) among runs that clear the reliability bar — correctness score &ge; 0." />
+                  </span>
+                  <strong>{fastestReliableExecution?.display.primaryLabel ?? '—'}</strong>
+                  <em className="decision-kpi-em-with-icon">
+                    {fastestReliableExecution ? (
+                      <>
+                        <span>{formatDuration(fastestReliableExecution.summary.timing?.meanCollectMsPerRun)} / q ·</span>
+                        <span>{fastestReliableExecution.display.toolSetLabel}</span>
+                      </>
+                    ) : (
+                      'no run cleared the reliability bar'
+                    )}
+                  </em>
                 </div>
               </div>
               <div className="metric-desk-scatters">
@@ -840,6 +810,7 @@ function CleanVisualizerApp() {
                     value: (execution) => execution.summary.timing?.meanCollectMsPerRun,
                     format: (value) => formatDuration(value),
                     higherIsBetter: false,
+                    domainMax: 40_000,
                   }}
                   yAxis={chartScoreAxis}
                   activeId={scatterHoveredId ?? scatterPinnedId}
@@ -860,62 +831,62 @@ function CleanVisualizerApp() {
               </details>
             </section>
 
-        <section id="methodology" className="panel section-panel">
-          <div className="section-heading">
-            <h3>Methodology</h3>
-            <p>How the benchmark is administered and how we arrive at the final scores.</p>
-          </div>
-          <dl className="summary-card-method">
-            <div className="summary-card-method-row">
-              <dt>Model selection</dt>
-              <dd>High-throughput, relatively cheap models available on OpenRouter.</dd>
-            </div>
-            <div className="summary-card-method-row">
-              <dt>Administration</dt>
-              <dd>
-                Each model answers the same fixed question bank under every tool set, then a separate judge model scores
-                each answer for correctness, completeness, and whether the cited evidence holds up.
-              </dd>
-            </div>
-            <div className="summary-card-method-row">
-              <dt>Questions</dt>
-              <dd>Generated based on Paul&rsquo;s research and cross-reviewed against available SwiftUI docs.</dd>
-            </div>
-            <div className="summary-card-method-row">
-              <dt>Metrics</dt>
-              <dd>
-                <ul className="summary-card-toolsets-list">
-                  <li><span>Correctness score</span><em>mean signed score: +1 for a correct answer, -1 for falling into a pitfall, and 0 for partial/unclear answers; &ge; 0 is the &ldquo;reliable&rdquo; cutoff</em></li>
-                  <li><span>Completeness</span><em>judge score for how fully the answer covers the reference requirements, on a 0–1 scale</em></li>
-                  <li><span>Cost / time per question</span><em>mean spend and wall-clock to collect a single answer (judge cost reported separately)</em></li>
-                </ul>
-              </dd>
-            </div>
-            <div className="summary-card-method-row summary-card-method-row-toolsets">
-              <dt>Retrieval toolsets</dt>
-              <dd>
-                <ul className="summary-card-toolsets-list">
-                  <li><span>No tools</span><em>closed book -- training data only, no retrieval</em></li>
-                  <li><span>Read</span><em>model can open files in the docs corpus by path</em></li>
-                  <li><span>Read + grep</span><em>plus regex search across the corpus</em></li>
-                  <li><span>Read + grep + glob</span><em>plus file-pattern enumeration</em></li>
-                  <li>
-                    <span>Vector search</span>
-                    <em>model emits several related queries; semantic search returns matching chunks; model collates the answer</em>
-                  </li>
-                  <li>
-                    <span>Vector search + read</span>
-                    <em>same as vector search, but the model also gets a read tool to follow up on retrieved chunks</em>
-                  </li>
-                  <li>
-                    <span>No-tools vector search</span>
-                    <em>the pipeline runs vector search first and feeds the chunks into the prompt without exposing tool calls</em>
-                  </li>
-                </ul>
-              </dd>
-            </div>
-          </dl>
-        </section>
+            <section id="methodology" className="panel section-panel">
+              <div className="section-heading">
+                <h3>Methodology</h3>
+                <p>How the benchmark is administered and how we arrive at the final scores.</p>
+              </div>
+              <dl className="summary-card-method">
+                <div className="summary-card-method-row">
+                  <dt>Model selection</dt>
+                  <dd>High-throughput, relatively cheap models available on OpenRouter.</dd>
+                </div>
+                <div className="summary-card-method-row">
+                  <dt>Administration</dt>
+                  <dd>
+                    Each model answers the same fixed question bank under every tool set, then a separate judge model scores
+                    each answer for correctness, completeness, and whether the cited evidence holds up.
+                  </dd>
+                </div>
+                <div className="summary-card-method-row">
+                  <dt>Questions</dt>
+                  <dd>Generated based on Paul&rsquo;s research and cross-reviewed against available SwiftUI docs.</dd>
+                </div>
+                <div className="summary-card-method-row">
+                  <dt>Metrics</dt>
+                  <dd>
+                    <ul className="summary-card-toolsets-list">
+                      <li><span>Correctness score</span><em>mean signed score: +1 for a correct answer, -1 for falling into a pitfall, and 0 for partial/unclear answers; &ge; 0 is the &ldquo;reliable&rdquo; cutoff</em></li>
+                      <li><span>Completeness</span><em>judge score for how fully the answer covers the reference requirements, on a 0–1 scale</em></li>
+                      <li><span>Cost / time per question</span><em>mean spend and wall-clock to collect a single answer (judge cost reported separately)</em></li>
+                    </ul>
+                  </dd>
+                </div>
+                <div className="summary-card-method-row summary-card-method-row-toolsets">
+                  <dt>Retrieval toolsets</dt>
+                  <dd>
+                    <ul className="summary-card-toolsets-list">
+                      <li><span>No tools</span><em>closed book — training data only, no retrieval</em></li>
+                      <li><span>Read</span><em>model can open files in the docs corpus by path</em></li>
+                      <li><span>Read + grep</span><em>plus regex search across the corpus</em></li>
+                      <li><span>Read + grep + glob</span><em>plus file-pattern enumeration</em></li>
+                      <li>
+                        <span>Vector search</span>
+                        <em>model emits several related queries; semantic search returns matching chunks; model collates the answer</em>
+                      </li>
+                      <li>
+                        <span>Vector search + read</span>
+                        <em>same as vector search, but the model also gets a read tool to follow up on retrieved chunks</em>
+                      </li>
+                      <li>
+                        <span>No-tools vector search</span>
+                        <em>the pipeline runs vector search first and feeds the chunks into the prompt without exposing tool calls</em>
+                      </li>
+                    </ul>
+                  </dd>
+                </div>
+              </dl>
+            </section>
 
             <section id="overview" className="panel section-panel">
               <div className="section-heading overview-heading">
@@ -1317,14 +1288,9 @@ function CleanVisualizerApp() {
                               {selectedAnswerRows.map(({ execution, run }) => {
                                 const key = makeAnswerRowKey(selectedGroup.meta.id, execution.id);
                                 const isOpen = openAnswerRows[key] ?? false;
-                                const isBest =
-                                  run != null &&
-                                  selectedBestJudgeRun != null &&
-                                  compareJudgePriority(run, selectedBestJudgeRun) === 0;
                                 const hasError = Boolean(run?.errors?.collectHadError || run?.errors?.judgeHadError);
                                 const rowClassName = [
                                   'score-row',
-                                  isBest ? 'is-best' : '',
                                   hasError ? 'has-error' : '',
                                 ].filter(Boolean).join(' ');
 
@@ -1347,7 +1313,13 @@ function CleanVisualizerApp() {
                                           </Badge>
                                         ) : '—'}
                                       </td>
-                                      <td>{formatJudgeAxis(run?.judge?.completeness)}</td>
+                                      <td>
+                                        {run?.judge?.completeness != null ? (
+                                          <Badge tone={judgeAxisTone(run.judge.completeness)}>
+                                            {formatJudgeAxis(run.judge.completeness)}
+                                          </Badge>
+                                        ) : '—'}
+                                      </td>
                                       <td>{formatUsd(run?.cost?.totalUsd, 4)}</td>
                                       <td>
                                         <span className={`disclosure ${isOpen ? 'is-open' : ''}`} aria-hidden />
@@ -1527,7 +1499,23 @@ function ExecutionLabel({
   const isClosedBook = execution.display.modeKey === 'closed_book';
   const toolsetIconKey = isClosedBook ? 'closed_book' : execution.display.toolSetKey;
   const toolsetLabel = isClosedBook ? 'Closed book' : execution.display.toolSetLabel;
-  void compact;
+
+  if (compact) {
+    return (
+      <span className="execution-label-inline">
+        {showModelName ? <strong>{execution.display.primaryLabel}</strong> : null}
+        <span className={`execution-chip-line ${showModelName ? '' : 'is-grouped'}`}>
+          <span className="execution-chip execution-chip-tool">
+            <ToolsetIcon toolSetKey={toolsetIconKey} label={toolsetLabel} />
+            <span>{toolsetLabel}</span>
+          </span>
+          {extraChips.map((chip) => (
+            <span key={`${execution.id}-${chip}`} className="execution-chip">{chip}</span>
+          ))}
+        </span>
+      </span>
+    );
+  }
 
   return (
     <>
@@ -1665,7 +1653,7 @@ function KpiTip({ text }: { text: string }) {
   );
 }
 
-function ResultsMatrix({
+export function ResultsMatrix({
   executions,
   questionGroups,
   onCellSelect,
@@ -1916,14 +1904,22 @@ function MetricDeskScatter({
     );
   }
 
-  const xValues = points.map((point) => point.x);
-  const yValues = points.map((point) => point.y);
+  const chartPoints = xAxis.domainMax == null
+    ? points
+    : points.filter((point) => point.x <= xAxis.domainMax!);
+  const plottedPoints = chartPoints.length > 0 ? chartPoints : points;
+  const outlierCount = points.length - chartPoints.length;
+
+  const xValues = plottedPoints.map((point) => point.x);
+  const yValues = plottedPoints.map((point) => point.y);
   const xDataMin = Math.min(...xValues);
   const xDataMax = Math.max(...xValues);
   const yDataMin = Math.min(...yValues);
   const yDataMax = Math.max(...yValues);
 
-  const xDomain = niceDomain(xDataMin, xDataMax, xAxis.higherIsBetter);
+  const xDomain = xAxis.domainMax == null
+    ? niceDomain(xDataMin, xDataMax, xAxis.higherIsBetter)
+    : { min: 0, max: xAxis.domainMax };
   const yDomain = niceDomain(yDataMin, yDataMax, yAxis.higherIsBetter);
 
   const width = 420;
@@ -1944,15 +1940,18 @@ function MetricDeskScatter({
   const xTicks = makeTicks(xDomain.min, xDomain.max, 5);
   const yTicks = makeTicks(yDomain.min, yDomain.max, 5);
 
-  const frontier = computeParetoFrontier(points, xAxis.higherIsBetter, yAxis.higherIsBetter);
-  const activePoint = activeId ? points.find((point) => point.execution.id === activeId) : undefined;
+  const frontier = computeParetoFrontier(plottedPoints, xAxis.higherIsBetter, yAxis.higherIsBetter);
+  const activePoint = activeId ? plottedPoints.find((point) => point.execution.id === activeId) : undefined;
   const hasActive = activePoint != null;
 
   return (
     <div className="metric-card scatter-card">
       <div className="metric-card-head">
         <strong>{yAxis.label} vs {xAxis.label}</strong>
-        <span>{paretoCornerLabel(xAxis.higherIsBetter, yAxis.higherIsBetter)} is best</span>
+        <span>
+          {paretoCornerLabel(xAxis.higherIsBetter, yAxis.higherIsBetter)} is best
+          {outlierCount > 0 ? ` · ${outlierCount} over ${xAxis.format(xAxis.domainMax)} hidden` : ''}
+        </span>
       </div>
       <svg className="scatter-plot" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${yAxis.label} vs ${xAxis.label}`}>
         <rect
@@ -2005,7 +2004,7 @@ function MetricDeskScatter({
               .join(' ')}
           />
         ) : null}
-        {points.map((point) => {
+        {plottedPoints.map((point) => {
           const isFrontier = frontier.some((frontierPoint) => frontierPoint.execution.id === point.execution.id);
           const isActive = activeId === point.execution.id;
           const isPinned = pinnedId === point.execution.id;
@@ -2637,16 +2636,6 @@ function formatCompactCount(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-function formatTimestamp(value: string | undefined): string {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date);
-}
-
 function copyLedgerAsTsv(executions: LoadedExecution[]): void {
   if (typeof navigator === 'undefined' || !navigator.clipboard) return;
   const header = ['Model', 'Tools', 'Correctness score', 'Completeness', 'Total cost', 'Judge cost', 'Total time', 'Coverage', 'Errors'];
@@ -2682,31 +2671,17 @@ function writeUrlList(params: URLSearchParams, key: string, values: string[]): v
   params.set(key, values.map((value) => encodeURIComponent(value)).join(','));
 }
 
-function formatRelativeTime(value: string | undefined): string {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  const diffMs = Date.now() - date.getTime();
-  const diffMinutes = Math.round(diffMs / 60_000);
-  if (diffMinutes < 1) return 'just now';
-  if (diffMinutes < 60) return `${diffMinutes} min ago`;
-  const diffHours = Math.round(diffMinutes / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.round(diffHours / 24);
-  if (diffDays < 7) return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
-  const diffWeeks = Math.round(diffDays / 7);
-  if (diffWeeks < 5) return `${diffWeeks} week${diffWeeks === 1 ? '' : 's'} ago`;
-  const diffMonths = Math.round(diffDays / 30);
-  if (diffMonths < 12) return `${diffMonths} month${diffMonths === 1 ? '' : 's'} ago`;
-  const diffYears = Math.round(diffDays / 365);
-  return `${diffYears} year${diffYears === 1 ? '' : 's'} ago`;
-}
-
 function verdictTone(verdict: string): Tone {
   if (verdict === 'correct') return 'success';
   if (verdict === 'partially_correct') return 'warn';
   if (verdict === 'incorrect') return 'danger';
   return 'neutral';
+}
+
+function judgeAxisTone(value: number): Tone {
+  if (value > 0) return 'success';
+  if (value < 0) return 'danger';
+  return 'warn';
 }
 
 function scoreTone(score: number | null | undefined): Tone {
