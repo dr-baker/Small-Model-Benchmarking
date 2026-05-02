@@ -1,5 +1,5 @@
-import { loadBenchmarkConfig } from "../src/shared/config.js";
-import { createSwiftDocsSearchTool } from "../src/collect/swift-docs-tool.js";
+import { loadBenchmarkConfig } from "../../src/core/config.js";
+import { createSwiftDocsSearchTool } from "../../src/pipeline/collect/swift-docs-tool.js";
 
 interface CliArgs {
   query?: string;

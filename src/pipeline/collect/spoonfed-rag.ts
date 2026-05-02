@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { CollectRunInput, ModelRef, ToolInvocationTrace, TraceEventRecord } from "../shared/contracts.js";
-import type { JsonValue } from "../shared/json.js";
-import { runLlmClient, type LlmClientResult } from "../shared/llm-client.js";
-import { resolveModelApiKey } from "../shared/api-key.js";
+import type { CollectRunInput, ModelRef, ToolInvocationTrace, TraceEventRecord } from "../../core/contracts.js";
+import type { JsonValue } from "../../core/json.js";
+import { runLlmClient, type LlmClientResult } from "../../llm/llm-client.js";
+import { resolveModelApiKey } from "../../llm/api-key.js";
 import { createSwiftDocsSearchTool } from "./swift-docs-tool.js";
 
 interface SpoonfedRagResult {

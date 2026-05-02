@@ -1,6 +1,6 @@
 import { AuthStorage } from "@mariozechner/pi-coding-agent";
 import { applyEnvApiKeyOverrides } from "./env-api-keys.js";
-import type { ModelRef } from "./contracts.js";
+import type { ModelRef } from "../core/contracts.js";
 
 /**
  * Resolve an API key using pi SDK AuthStorage (covers ~/.pi/agent/auth.json,

@@ -1,13 +1,13 @@
 import process from "node:process";
 import { resolve } from "node:path";
-import type { JsonValue } from "../src/shared/json.js";
-import { runLlmClient } from "../src/shared/llm-client.js";
-import { resolveModelApiKey } from "../src/shared/api-key.js";
-import { parseModelRefFromString, loadBenchmarkConfigWithMeta } from "../src/shared/config.js";
-import type { ModelTransportConfig, OpenRouterProviderRoutingConfig, ToolSetName } from "../src/shared/contracts.js";
-import { loadToolSetDefinition, createToolsForToolSet } from "../src/collect/tool-sets.js";
+import type { JsonValue } from "../../src/core/json.js";
+import { runLlmClient } from "../../src/llm/llm-client.js";
+import { resolveModelApiKey } from "../../src/llm/api-key.js";
+import { parseModelRefFromString, loadBenchmarkConfigWithMeta } from "../../src/core/config.js";
+import type { ModelTransportConfig, OpenRouterProviderRoutingConfig, ToolSetName } from "../../src/core/contracts.js";
+import { loadToolSetDefinition, createToolsForToolSet } from "../../src/pipeline/collect/tool-sets.js";
 
-const REPO_ROOT = resolve(import.meta.dirname ?? ".", "..");
+const REPO_ROOT = resolve(import.meta.dirname ?? ".", "../..");
 
 interface CliArgs {
   model: string;

@@ -1,9 +1,9 @@
 import process from "node:process";
-import type { JsonValue } from "../src/shared/json.js";
-import { runLlmClient } from "../src/shared/llm-client.js";
-import { resolveModelApiKey } from "../src/shared/api-key.js";
-import { parseModelRefFromString } from "../src/shared/config.js";
-import type { ModelTransportConfig, OpenRouterProviderRoutingConfig } from "../src/shared/contracts.js";
+import type { JsonValue } from "../../src/core/json.js";
+import { runLlmClient } from "../../src/llm/llm-client.js";
+import { resolveModelApiKey } from "../../src/llm/api-key.js";
+import { parseModelRefFromString } from "../../src/core/config.js";
+import type { ModelTransportConfig, OpenRouterProviderRoutingConfig } from "../../src/core/contracts.js";
 
 interface CliArgs {
   model: string;

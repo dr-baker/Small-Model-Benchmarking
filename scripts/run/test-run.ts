@@ -2,17 +2,17 @@ import { constants as fsConstants } from "node:fs";
 import { access } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { stringify as stringifyYaml } from "yaml";
-import { aggregateRuns, listAggregateReadyRunDirectories } from "../src/aggregate/run.js";
-import { runCollect } from "../src/collect/run.js";
-import { loadToolSetCatalog } from "../src/collect/tool-sets.js";
-import { gradeRun } from "../src/grade/run.js";
-import { judgeRun } from "../src/judge/run.js";
-import type { AnswerCollectionMode, DatasetQuestion, ModelRef, RetryPolicyConfig, ToolSetName } from "../src/shared/contracts.js";
-import { loadBenchmarkConfigWithMeta, getCandidateModelRefs, getJudgeModelRef, getJudgeTransportConfig, getPromptTemplatePath, parseModelRefFromString, type BenchmarkBatchNumber, type BenchmarkConfig, type BenchmarkConfigPaths } from "../src/shared/config.js";
-import { loadProjectEnvVars } from "../src/shared/env-api-keys.js";
-import { readJsonFile, writeJsonFile, writeTextFile } from "../src/shared/io.js";
+import { aggregateRuns, listAggregateReadyRunDirectories } from "../../src/pipeline/aggregate/run.js";
+import { runCollect } from "../../src/pipeline/collect/run.js";
+import { loadToolSetCatalog } from "../../src/pipeline/collect/tool-sets.js";
+import { gradeRun } from "../../src/pipeline/grade/run.js";
+import { judgeRun } from "../../src/pipeline/judge/run.js";
+import type { AnswerCollectionMode, DatasetQuestion, ModelRef, RetryPolicyConfig, ToolSetName } from "../../src/core/contracts.js";
+import { loadBenchmarkConfigWithMeta, getCandidateModelRefs, getJudgeModelRef, getJudgeTransportConfig, getPromptTemplatePath, parseModelRefFromString, type BenchmarkBatchNumber, type BenchmarkConfig, type BenchmarkConfigPaths } from "../../src/core/config.js";
+import { loadProjectEnvVars } from "../../src/llm/env-api-keys.js";
+import { readJsonFile, writeJsonFile, writeTextFile } from "../../src/core/io.js";
 
-const REPO_ROOT = resolve(import.meta.dirname ?? ".", "..");
+const REPO_ROOT = resolve(import.meta.dirname ?? ".", "../..");
 
 interface CliArgs {
   model?: string;

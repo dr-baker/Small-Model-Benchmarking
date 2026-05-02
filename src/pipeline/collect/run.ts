@@ -15,20 +15,20 @@ import {
   type PromptSnapshot,
   type RunManifest,
   type StructuredBenchmarkAnswerResponse,
-} from "../shared/contracts.js";
-import { serializeJson, writeJsonFile } from "../shared/io.js";
-import { extractJsonObject } from "../shared/json.js";
-import { normalizeCitationFilePath } from "../shared/corpus-paths.js";
+} from "../../core/contracts.js";
+import { serializeJson, writeJsonFile } from "../../core/io.js";
+import { extractJsonObject } from "../../core/json.js";
+import { normalizeCitationFilePath } from "../../core/corpus-paths.js";
 import { renderPrompt, renderPromptMessages } from "./prompt-template.js";
 import { createToolsForToolSet } from "./tool-sets.js";
-import { runLlmClient } from "../shared/llm-client.js";
-import { buildAnswerResponseFormat } from "../shared/response-schemas.js";
-import { resolveModelApiKey } from "../shared/api-key.js";
+import { runLlmClient } from "../../llm/llm-client.js";
+import { buildAnswerResponseFormat } from "../../llm/response-schemas.js";
+import { resolveModelApiKey } from "../../llm/api-key.js";
 import { runSpoonfedRagCollect } from "./spoonfed-rag.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const REPO_ROOT = resolve(__dirname, "../..");
+const REPO_ROOT = resolve(__dirname, "../../..");
 
 export interface CollectRunOutput {
   runDirectory: string;

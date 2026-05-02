@@ -10,10 +10,10 @@ import type {
   RubricStrength,
   RunManifest,
   ToolInvocationTrace,
-} from "../shared/contracts.js";
-import { readJsonFile, writeJsonFile } from "../shared/io.js";
-import { inferEvidenceBasis, normalizeCorpusRelativePath } from "../shared/corpus-paths.js";
-import { collectSwiftDocsRetrievedPaths, isSwiftDocsSearchToolName, parseSwiftDocsHybridToolResult } from "../shared/swift-docs-search.js";
+} from "../../core/contracts.js";
+import { readJsonFile, writeJsonFile } from "../../core/io.js";
+import { inferEvidenceBasis, normalizeCorpusRelativePath } from "../../core/corpus-paths.js";
+import { collectSwiftDocsRetrievedPaths, isSwiftDocsSearchToolName, parseSwiftDocsHybridToolResult } from "../../core/swift-docs-search.js";
 
 interface GradeRunOptions {
   runDirectory: string;

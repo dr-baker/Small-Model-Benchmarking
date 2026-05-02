@@ -1,14 +1,14 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { createSwiftDocsSearchTool } from "../src/collect/swift-docs-tool.js";
-import { runLlmClient } from "../src/shared/llm-client.js";
-import { loadBenchmarkConfigWithMeta, parseModelRefFromString } from "../src/shared/config.js";
-import { loadProjectEnvVars } from "../src/shared/env-api-keys.js";
-import { readJsonFile } from "../src/shared/io.js";
-import { resolveModelApiKey } from "../src/shared/api-key.js";
-import type { DatasetQuestion } from "../src/shared/contracts.js";
+import { createSwiftDocsSearchTool } from "../../src/pipeline/collect/swift-docs-tool.js";
+import { runLlmClient } from "../../src/llm/llm-client.js";
+import { loadBenchmarkConfigWithMeta, parseModelRefFromString } from "../../src/core/config.js";
+import { loadProjectEnvVars } from "../../src/llm/env-api-keys.js";
+import { readJsonFile } from "../../src/core/io.js";
+import { resolveModelApiKey } from "../../src/llm/api-key.js";
+import type { DatasetQuestion } from "../../src/core/contracts.js";
 
-const REPO_ROOT = resolve(import.meta.dirname ?? ".", "..");
+const REPO_ROOT = resolve(import.meta.dirname ?? ".", "../..");
 
 function parseCsv(value: string | undefined): string[] {
   return (value ?? "").split(",").map((item) => item.trim()).filter(Boolean);

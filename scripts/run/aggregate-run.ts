@@ -1,9 +1,9 @@
 import { join, resolve } from "node:path";
-import { aggregateRuns, listAggregateReadyRunDirectories } from "../src/aggregate/run.js";
-import type { RunManifest } from "../src/shared/contracts.js";
-import { readJsonFile } from "../src/shared/io.js";
+import { aggregateRuns, listAggregateReadyRunDirectories } from "../../src/pipeline/aggregate/run.js";
+import type { RunManifest } from "../../src/core/contracts.js";
+import { readJsonFile } from "../../src/core/io.js";
 
-const REPO_ROOT = resolve(import.meta.dirname ?? ".", "..");
+const REPO_ROOT = resolve(import.meta.dirname ?? ".", "../..");
 
 interface CliArgs {
   executionDir?: string;

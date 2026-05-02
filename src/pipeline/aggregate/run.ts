@@ -20,8 +20,8 @@ import type {
   JudgeArtifact,
   RunManifest,
   ToolSetDefinition,
-} from "../shared/contracts.js";
-import { readJsonFile, writeJsonFile, writeTextFile } from "../shared/io.js";
+} from "../../core/contracts.js";
+import { readJsonFile, writeJsonFile, writeTextFile } from "../../core/io.js";
 
 export interface AggregateRunOptions {
   runDirectories: string[];

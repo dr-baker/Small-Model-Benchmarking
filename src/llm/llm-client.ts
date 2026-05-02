@@ -1,7 +1,7 @@
-import type { ModelRef, ModelTransportConfig, PromptMessageSnapshot, ToolInvocationTrace, TraceEventRecord } from "./contracts.js";
-import type { JsonValue } from "./json.js";
+import type { ModelRef, ModelTransportConfig, PromptMessageSnapshot, ToolInvocationTrace, TraceEventRecord } from "../core/contracts.js";
+import type { JsonValue } from "../core/json.js";
 import type { OpenRouterResponseFormat } from "./response-schemas.js";
-import { toJsonValue } from "./json.js";
+import { toJsonValue } from "../core/json.js";
 import { getModel } from "@mariozechner/pi-ai";
 import {
   AuthStorage,

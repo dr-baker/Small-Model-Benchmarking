@@ -3,11 +3,11 @@ import { extname, join } from "node:path";
 
 const RULES = [
   {
-    directory: "src/grade",
+    directory: "src/pipeline/grade",
     forbidden: ["@mariozechner/pi-coding-agent", "@mariozechner/pi-ai", "createAgentSession", "ModelRegistry", "SessionManager", "AuthStorage"],
   },
   {
-    directory: "src/aggregate",
+    directory: "src/pipeline/aggregate",
     forbidden: ["@mariozechner/pi-coding-agent", "@mariozechner/pi-ai", "createAgentSession", "ModelRegistry", "SessionManager", "AuthStorage"],
   },
 ];

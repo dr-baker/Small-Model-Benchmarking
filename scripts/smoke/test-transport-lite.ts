@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { runLlmClient } from "../src/shared/llm-client.js";
+import { runLlmClient } from "../../src/llm/llm-client.js";
 
 async function testOpenRouterTransport(): Promise<void> {
   const requests: Array<{ url: string; body: Record<string, unknown> }> = [];

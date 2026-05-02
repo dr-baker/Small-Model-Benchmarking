@@ -5,7 +5,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
+const REPO_ROOT = path.resolve(SCRIPT_DIR, '../..');
 const DEFAULT_SOURCE_RELATIVE = 'benchmark/dataset/source/final-qa-bank.md';
 const DEFAULT_SOURCE = path.join(REPO_ROOT, DEFAULT_SOURCE_RELATIVE);
 const DEFAULT_OUTPUT = path.join(REPO_ROOT, 'benchmark', 'dataset', 'swiftui-docs-chatbot-benchmark.v1.json');
@@ -257,7 +257,7 @@ async function main() {
   if (args.check) {
     const existing = await readFile(args.out, 'utf8');
     if (existing !== output) {
-      throw new Error(`${path.relative(REPO_ROOT, args.out)} is out of date. Re-run scripts/build-dataset.mjs.`);
+      throw new Error(`${path.relative(REPO_ROOT, args.out)} is out of date. Re-run scripts/dataset/build-dataset.mjs.`);
     }
     console.log(`Validated ${dataset.questions.length} questions in ${path.relative(REPO_ROOT, args.out)}`);
     return;

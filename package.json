@@ -5,17 +5,17 @@
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "check:architecture": "node scripts/check-architecture.mjs",
-    "dataset:build": "node scripts/build-dataset.mjs",
-    "dataset:validate": "node scripts/build-dataset.mjs --check",
-    "test:run": "tsx scripts/test-run.ts",
-    "aggregate:run": "tsx scripts/aggregate-run.ts",
-    "test:transport-lite": "tsx scripts/test-transport-lite.ts",
-    "test:tools:smoke": "tsx scripts/test-openrouter-tools-smoke.ts",
-    "test:tools:read-grep": "tsx scripts/test-openrouter-read-grep.ts",
-    "test:tools:swift-docs-search": "tsx scripts/test-swift-docs-search.ts",
-    "test:matrix": "tsx scripts/run-benchmark-matrix.ts",
-    "models:watch": "node scripts/watch-new-model-sweep.mjs"
+    "check:architecture": "node scripts/checks/check-architecture.mjs",
+    "dataset:build": "node scripts/dataset/build-dataset.mjs",
+    "dataset:validate": "node scripts/dataset/build-dataset.mjs --check",
+    "test:run": "tsx scripts/run/test-run.ts",
+    "aggregate:run": "tsx scripts/run/aggregate-run.ts",
+    "test:transport-lite": "tsx scripts/smoke/test-transport-lite.ts",
+    "test:tools:smoke": "tsx scripts/smoke/test-openrouter-tools-smoke.ts",
+    "test:tools:read-grep": "tsx scripts/smoke/test-openrouter-read-grep.ts",
+    "test:tools:swift-docs-search": "tsx scripts/smoke/test-swift-docs-search.ts",
+    "test:matrix": "tsx scripts/run/run-benchmark-matrix.ts",
+    "models:watch": "node scripts/models/watch-new-model-sweep.mjs"
   },
   "dependencies": {
     "@mariozechner/pi-coding-agent": "0.65.2",

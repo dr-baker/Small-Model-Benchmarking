@@ -17,16 +17,16 @@ import {
   type RetryPolicyConfig,
   type RunManifest,
   type ToolInvocationTrace,
-} from "../shared/contracts.js";
-import { serializeJson, readJsonFile, writeJsonFile } from "../shared/io.js";
-import { toJsonValue, extractJsonObject } from "../shared/json.js";
+} from "../../core/contracts.js";
+import { serializeJson, readJsonFile, writeJsonFile } from "../../core/io.js";
+import { toJsonValue, extractJsonObject } from "../../core/json.js";
 import { createToolsForToolSet, loadToolSetDefinition } from "../collect/tool-sets.js";
-import { runLlmClient } from "../shared/llm-client.js";
-import { buildJudgeVerdictResponseFormat } from "../shared/response-schemas.js";
-import { resolveModelApiKey } from "../shared/api-key.js";
-import { isSwiftDocsSearchToolName, parseSwiftDocsHybridToolResult } from "../shared/swift-docs-search.js";
+import { runLlmClient } from "../../llm/llm-client.js";
+import { buildJudgeVerdictResponseFormat } from "../../llm/response-schemas.js";
+import { resolveModelApiKey } from "../../llm/api-key.js";
+import { isSwiftDocsSearchToolName, parseSwiftDocsHybridToolResult } from "../../core/swift-docs-search.js";
 
-const REPO_ROOT = resolve(import.meta.dirname ?? ".", "../..");
+const REPO_ROOT = resolve(import.meta.dirname ?? ".", "../../..");
 
 interface ParsedJudgeResponse {
   correctness: JudgeAxisScore;

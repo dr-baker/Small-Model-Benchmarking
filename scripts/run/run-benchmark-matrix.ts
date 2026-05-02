@@ -4,11 +4,11 @@ import { basename, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
-import type { AnswerCollectionMode, ModelTransportConfig, ToolSetName } from "../src/shared/contracts.js";
-import { loadBenchmarkConfigWithMeta, parseModelRefFromString, type BenchmarkBatchNumber, type BenchmarkConfig } from "../src/shared/config.js";
-import { readJsonFile } from "../src/shared/io.js";
+import type { AnswerCollectionMode, ModelTransportConfig, ToolSetName } from "../../src/core/contracts.js";
+import { loadBenchmarkConfigWithMeta, parseModelRefFromString, type BenchmarkBatchNumber, type BenchmarkConfig } from "../../src/core/config.js";
+import { readJsonFile } from "../../src/core/io.js";
 
-const REPO_ROOT = resolve(import.meta.dirname ?? ".", "..");
+const REPO_ROOT = resolve(import.meta.dirname ?? ".", "../..");
 const LOG_ROOT = resolve(REPO_ROOT, ".tmp", "benchmark-matrix-logs");
 
 type MatrixValidationRate = number;

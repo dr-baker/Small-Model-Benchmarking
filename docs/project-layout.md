@@ -15,11 +15,21 @@ Very short map of the repo.
 
 ## Pipeline code
 
-- `src/collect/` — model execution and trace capture
-- `src/judge/` — LLM judge stage
-- `src/grade/` — deterministic grading over saved traces
-- `src/aggregate/` — execution-level summaries and comparisons
-- `src/shared/` — contracts, config loading, and helpers
+- `src/pipeline/collect/` — model execution and trace capture
+- `src/pipeline/judge/` — LLM judge stage
+- `src/pipeline/grade/` — deterministic grading over saved traces
+- `src/pipeline/aggregate/` — execution-level summaries and comparisons
+- `src/core/` — contracts, config loading, JSON, IO, corpus paths, and pure helpers
+- `src/llm/` — provider auth, response schemas, and the LLM client
+
+## Scripts
+
+- `scripts/run/` — main run and aggregation entrypoints
+- `scripts/dataset/` — dataset build and validation scripts
+- `scripts/checks/` — architecture checks
+- `scripts/smoke/` — focused smoke tests
+- `scripts/models/` — model watching helpers
+- `scripts/matrices/` — benchmark matrix definitions
 
 ## Outputs and supporting docs
 

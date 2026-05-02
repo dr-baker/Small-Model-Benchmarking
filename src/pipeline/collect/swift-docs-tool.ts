@@ -5,12 +5,12 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stringify as stringifyYaml } from "yaml";
-import type { SwiftDocsToolConfig } from "../shared/contracts.js";
-import { loadProjectEnvVars } from "../shared/env-api-keys.js";
+import type { SwiftDocsToolConfig } from "../../core/contracts.js";
+import { loadProjectEnvVars } from "../../llm/env-api-keys.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const REPO_ROOT = resolve(__dirname, "../..");
+const REPO_ROOT = resolve(__dirname, "../../..");
 const documentPathCache = new Map<string, Map<string, string>>();
 const documentUrlCache = new Map<string, Map<string, { doc_id?: string; normalized_md_path: string; title?: string; url: string }>>();
 

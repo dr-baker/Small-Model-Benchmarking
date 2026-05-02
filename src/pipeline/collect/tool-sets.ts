@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { createFindTool, createGrepTool, createLsTool, createReadTool } from "@mariozechner/pi-coding-agent";
-import type { SwiftDocsToolConfig, ToolSetDefinition, ToolSetName } from "../shared/contracts.js";
-import { resolvePathWithinCorpus } from "../shared/corpus-paths.js";
+import type { SwiftDocsToolConfig, ToolSetDefinition, ToolSetName } from "../../core/contracts.js";
+import { resolvePathWithinCorpus } from "../../core/corpus-paths.js";
 import { createSwiftDocsSearchHybridTool, createSwiftDocsSearchTool } from "./swift-docs-tool.js";
 
 interface ToolSetCatalogFile {

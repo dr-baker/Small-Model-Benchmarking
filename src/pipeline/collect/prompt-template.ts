@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import type { BenchmarkMode, DatasetQuestion, PromptMessageSnapshot } from "../shared/contracts.js";
+import type { BenchmarkMode, DatasetQuestion, PromptMessageSnapshot } from "../../core/contracts.js";
 
 export async function loadPromptTemplate(path: string): Promise<string> {
   return readFile(path, "utf8");
