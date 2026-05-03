@@ -19,6 +19,7 @@
     "visualizer:generate": "npm --prefix apps/visualizer run generate",
     "visualizer:dev": "npm --prefix apps/visualizer run dev",
     "visualizer:build": "npm --prefix apps/visualizer run build",
+    "visualizer:build:static": "npm --prefix apps/visualizer run build:static",
     "visualizer:preview": "npm --prefix apps/visualizer run preview"
   },
   "dependencies": {

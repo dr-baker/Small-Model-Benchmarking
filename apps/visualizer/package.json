@@ -9,6 +9,7 @@
     "generate": "npm run generate:question-bank && npm run generate:recent-runs",
     "dev": "npm run generate && vite",
     "build": "npm run generate && tsc --noEmit && vite build",
+    "build:static": "tsc --noEmit && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
