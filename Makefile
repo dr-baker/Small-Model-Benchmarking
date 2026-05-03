@@ -14,7 +14,7 @@ viz: ## Freshly start the visualizer and open the version-picker site.
 		kill $$existing_pids 2>/dev/null || true; \
 		sleep 1; \
 	fi; \
-	cd tools/benchmark-visualizer && \
+	cd apps/visualizer && \
 		BENCHMARK_RESULTS_ROOT="$(BENCHMARK_RESULTS_ROOT)" npm run generate && \
 		BENCHMARK_RESULTS_ROOT="$(BENCHMARK_RESULTS_ROOT)" npm run dev -- --host $(VISUALIZER_HOST) --port $(VISUALIZER_PORT) --strictPort & \
 	server_pid=$$!; \

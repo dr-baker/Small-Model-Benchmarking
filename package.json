@@ -15,7 +15,11 @@
     "test:tools:read-grep": "tsx scripts/smoke/test-openrouter-read-grep.ts",
     "test:tools:swift-docs-search": "tsx scripts/smoke/test-swift-docs-search.ts",
     "test:matrix": "tsx scripts/run/run-benchmark-matrix.ts",
-    "models:watch": "node scripts/models/watch-new-model-sweep.mjs"
+    "models:watch": "node scripts/models/watch-new-model-sweep.mjs",
+    "visualizer:generate": "npm --prefix apps/visualizer run generate",
+    "visualizer:dev": "npm --prefix apps/visualizer run dev",
+    "visualizer:build": "npm --prefix apps/visualizer run build",
+    "visualizer:preview": "npm --prefix apps/visualizer run preview"
   },
   "dependencies": {
     "@mariozechner/pi-coding-agent": "0.65.2",

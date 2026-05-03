@@ -1,18 +1,20 @@
 # Small Model Benchmarking
 
-A benchmark for testing how well small language models answer real SwiftUI docs questions.
+A benchmark for testing how well small language models can search a corpus to avoid falling into common training-data pitfalls. 
 
-The goal is simple: run the same questions against different models, keep the full traces, and score the results in a way that can be repeated later. The current dataset has 83 SwiftUI QA tasks and supports closed-book runs, corpus-backed runs, and optional local Swift Docs search.
+The current dataset has 83 SwiftUI QA tasks and supports closed-book runs, corpus-backed runs, and several tool sets.
 
-```text
-collect → judge → grade → aggregate
+View results and more information here: https://small-model-benchmarking.vercel.app/
+
+Run the first-class local visualizer with:
+
+```bash
+npm run visualizer:dev
 ```
 
-Only `collect` and `judge` call models. `grade` and `aggregate` work from saved traces, so old runs can be re-graded without collecting answers again.
+The visualizer lives in `apps/visualizer` and bundles existing data from `benchmark-results/`.
 
 ## What it shows
-
-This repo is useful for questions like:
 
 - Which small models know modern SwiftUI?
 - Does retrieval help, or does it make the answer worse?
